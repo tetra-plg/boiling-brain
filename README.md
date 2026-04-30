@@ -95,6 +95,7 @@ This lets agents (and you, via `/query`) navigate the wiki without paying the fu
 | `/lint [domain]` | Detect contradictions, orphans, missing cross-references, gaps. |
 | `/evolve-agent <domain>` | Curated update to a domain expert's prompt, fed by accumulated `.suggestions.md`. |
 | `/sync-repos [names]` *(optional)* | Snapshot GitHub repos by SHA into `raw/tracked-repos/` (or any `dest` declared per source). |
+| `/update-vault` | Cherry-pick improvements from the upstream template into your vault instance. |
 
 ## Workflow loop
 

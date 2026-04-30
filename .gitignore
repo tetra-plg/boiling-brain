@@ -1,5 +1,6 @@
 cache/
 raw/
+!raw/**/.gitkeep
 Clippings/
 __pycache__/
 *.pyc

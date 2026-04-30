@@ -113,24 +113,23 @@ Construis le JSON dynamiquement :
 
 ### Q4 — Projets en cours
 
-Free-text :
+Free-text (prose naturelle, format libre) :
 
 ```
-2 à 3 projets actifs en ce moment, un par ligne, format:
-slug | description en 1 phrase
+Décris tes 2-3 projets actifs en ce moment (1 ligne par projet, en langage naturel).
 
-Exemple:
-kill-tilt-masterclass | suivre la masterclass poker MTT 2026
-factory-v6 | refonte du plugin Factory en architecture multi-agents
+Exemple :
+Je suis une masterclass poker MTT pour améliorer mon jeu de tournoi
+Je refonds mon plugin Factory en architecture multi-agents
+
+(Laisse vide si aucun projet actif pour l'instant.)
 ```
 
-**Parsing :**
+**Parsing automatique** :
+- Pour chaque ligne non-vide, extrais un `slug` en kebab-case (2-4 mots-clés condensés depuis la phrase) et garde la phrase complète comme `description`.
+- Exemple : `"Je suis une masterclass poker MTT pour 2026"` → `{slug: "masterclass-poker-mtt", description: "masterclass poker MTT 2026"}`.
+- Si la ligne est trop courte pour extraire un slug significatif → `projet-1`, `projet-2`, etc.
 - `projects = [{slug, description}, ...]`. Liste vide acceptée (utiliseras `« (à compléter) »` plus tard).
-
-**Parsing tolérant** :
-- Si la ligne contient `|` → split sur le premier `|` uniquement (slug à gauche, description à droite).
-- Si pas de `|` mais ligne ressemble à un slug suivi d'espaces et texte → essaie de splitter sur le 1er espace après le slug (slug = continu sans espace).
-- Si ambigu → re-pose la question avec exemple explicite.
 
 ### Q5 — Types de sources
 
@@ -316,6 +315,26 @@ Sur « ✏️ Ajuste » :
 2. Pour chaque propriété cochée seulement, prompt texte ciblé avec la valeur courante affichée et demande la nouvelle.
 3. Re-affiche le bloc récap édité, redemande validation.
 
+**Une fois le domaine validé (✅ ou après ajustement)**, pose immédiatement :
+
+```json
+{
+  "questions": [{
+    "question": "Quelle couleur pour «{{domain_slug}}» dans le graph Obsidian ?",
+    "header": "Couleur graph",
+    "multiSelect": false,
+    "options": [
+      {"label": "🔵 Turquoise", "description": "#2BC7D3 — IA, tech, numérique. rgb=2869203"},
+      {"label": "🟢 Vert", "description": "#51C463 — sciences, santé, nature. rgb=5358691"},
+      {"label": "🟠 Orange", "description": "#E07B39 — management, sport, compétition. rgb=14711609"},
+      {"label": "🔴 Rouge", "description": "#E05252 — poker, jeu, intensité. rgb=14701138"}
+    ]
+  }]
+}
+```
+
+→ Stocke `domain_color_rgb = <valeur rgb de l'option choisie>` pour ce domaine (utilisé en Section 5 pour générer `.obsidian/graph.json`). Si l'utilisateur choisit « Other » et entre un hex `#RRGGBB`, convertis via `R*65536 + G*256 + B`.
+
 ### 4.2 Validation globale
 
 Une fois tous les domaines validés individuellement, affiche un récap complet :
@@ -457,7 +476,70 @@ mv BOOTSTRAP.md wiki/decisions/bootstrap-prompt.md
 mv PLACEHOLDERS.md wiki/decisions/placeholders-reference.md
 ```
 
-### 5.8 Reset git + commit initial
+### 5.8 Répertoires conditionnels (raw/ et cache/)
+
+Les sous-dossiers de base `raw/notes/`, `raw/transcripts/`, `raw/videos-meta/`, `raw/frames/` existent déjà dans le template via `.gitkeep`. Crée uniquement les sous-dossiers **conditionnels** :
+
+```bash
+# Si "PDFs" coché en Q5 :
+mkdir -p raw/pdfs && touch raw/pdfs/.gitkeep
+
+# Si "Clippings web" coché en Q5 :
+mkdir -p raw/articles && touch raw/articles/.gitkeep
+
+# Si "Docs officielles" coché en Q5 :
+mkdir -p raw/docs && touch raw/docs/.gitkeep
+
+# Toujours (structure cache/) :
+mkdir -p cache/frames && touch cache/frames/.gitkeep
+
+# Si ingest_video_enabled = true :
+mkdir -p cache/videos/inbox cache/audio && touch cache/videos/inbox/.gitkeep cache/audio/.gitkeep
+
+# Si has_tracked_repos = true :
+mkdir -p cache/sync-repos && touch cache/sync-repos/.gitkeep
+```
+
+### 5.9 Génération de `.obsidian/graph.json`
+
+Crée le dossier `.obsidian/` et écris le fichier `graph.json` à partir des couleurs collectées en Section 4.1 :
+
+```json
+{
+  "search": "-path:\"raw\" path:\"wiki\" -path:\"wiki/sources\" -path:\"wiki/log\"",
+  "showTags": false,
+  "showAttachments": false,
+  "hideUnresolved": true,
+  "showOrphans": false,
+  "colorGroups": [
+    // Pour chaque domain_slug (dans l'ordre déclaré en Q2) :
+    {
+      "query": "[\"domains\":{{domain_slug}}]",
+      "color": {
+        "a": 1,
+        "rgb": {{domain_color_rgb}}
+      }
+    }
+  ],
+  "collapse-filter": false,
+  "collapse-color-groups": true,
+  "collapse-display": false,
+  "collapse-forces": true,
+  "showArrow": false,
+  "close": true
+}
+```
+
+Crée aussi `.obsidian/app.json` minimal :
+
+```json
+{
+  "legacyEditor": false,
+  "livePreview": true
+}
+```
+
+### 5.10 Reset git + commit initial
 
 ```bash
 rm -rf .git/
@@ -514,13 +596,15 @@ Affiche un message texte propre :
 
 Identité : {{name}} — {{role}}
 Domaines actifs ({{N}}) : {{ domain_1, domain_2, ... }}
-Pipeline disponible : /ingest, /query, /save, /lint, /evolve-agent{{ ", /ingest-video" if ingest_video_enabled }}{{ ", /sync-repos" if has_tracked_repos }}
+Pipeline disponible : /ingest, /query, /save, /lint, /evolve-agent{{ ", /ingest-video" if ingest_video_enabled }}{{ ", /sync-repos" if has_tracked_repos }}, /update-vault
 
 Trois prochaines actions guidées :
 
 1. Dépose ta première source dans `raw/notes/<YYYY-MM-DD-sujet>.md` (ou `raw/transcripts/`, `raw/pdfs/`, etc. selon le format).
 2. Lance `/ingest` — Claude proposera l'agent expert correspondant et tu valideras via AskUserQuestion.
 3. Édite `wiki/overview.md` pour étoffer ton portrait : parcours, activités, intentions. Le draft généré n'est qu'un point de départ.
+
+Pour mettre à jour ton vault quand le template évolue : `/update-vault`.
 
 Trace du bootstrap : wiki/decisions/bootstrap-prompt.md (ce que tu viens de lancer) + wiki/decisions/placeholders-reference.md (mapping détaillé).
 
@@ -538,13 +622,16 @@ Bon ingest.
 - Pour chaque domaine : `wiki/domains/<slug>.md` + `.claude/agents/<slug>-expert.md` + `.claude/agent-memory/<slug>/MEMORY.md`
 - `wiki/decisions/bootstrap-prompt.md`, `wiki/decisions/placeholders-reference.md`, `wiki/decisions/tiered-loading-wiki.md` (déjà présent)
 - Conditionnels : `tracked-repos.config.json`, `wiki/decisions/tracked-repos-immutable-snapshots.md`, `wiki/decisions/extraction-frames-induction-runbook.md`, `wiki/decisions/ingest-video-modes-a-b-generalisation.md`
+- Structure `raw/` : `notes/`, `transcripts/`, `videos-meta/`, `frames/` (pré-existants via .gitkeep) + conditionnels (`pdfs/`, `articles/`, `docs/`)
+- Structure `cache/` : `frames/` + conditionnels (`videos/inbox/`, `audio/`, `sync-repos/`)
+- `.obsidian/graph.json` (filtres graph + colorGroups par domaine) + `.obsidian/app.json`
 - `.git/` neuf, premier commit posé.
 
 ### B. Fichiers à NE PAS toucher
 
 - `LICENSE`, `.gitignore`, `README.md` (le README peut être mis à jour par l'utilisateur lui-même plus tard pour son instance — ne le réécris pas pendant le bootstrap).
 - `scripts/scan-raw.sh`, `scripts/backfill-summaries.py`, `scripts/enrich-hub.py` (génériques, restent tels quels).
-- Les slash-commands non-conditionnels : `/ingest`, `/query`, `/save`, `/lint`, `/evolve-agent`.
+- Les slash-commands non-conditionnels : `/ingest`, `/query`, `/save`, `/lint`, `/evolve-agent`, `/update-vault`.
 
 ### C. En cas de blocage
 
