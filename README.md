@@ -172,6 +172,21 @@ Drop them in `.claude/commands/` (slash-commands) or `scripts/` (utilities). The
 
 **Concrete example:** in one of the early instances of this template, the user added `/extract-range-grid` — a poker-specific OCR pipeline for range matrices — alongside the core pipeline. The slash-command (`.claude/commands/extract-range-grid.md`) and the Python script (`scripts/extract-range-grid.py`) live in their vault, not here. Yours can do the same for whatever your domains need: a LaTeX renderer, a k8s manifest validator, a financial-statement parser — anything that's a natural extension of one of your domains.
 
+### How do I clip a web page into the vault?
+
+The recommended flow uses the **[Obsidian Web Clipper](https://obsidian.md/clipper)** browser extension (Chrome/Firefox/Safari):
+
+1. **Clip** — click the extension on any article, Reddit post, or documentation page. It saves a markdown file (with YAML frontmatter: `title`, `source`, `published`, `author`, `tags`) into your vault's `Clippings/` folder by default.
+2. **Move to `raw/`** — drag the file from `Clippings/` into the right sub-folder of `raw/`:
+   - `raw/notes/` for personal takes, Reddit threads, short reads
+   - `raw/articles/` for long-form articles and documentation pages (create the folder if it doesn't exist yet)
+   - `raw/pdfs/` if you clipped a PDF-backed page (keep the PDF there too)
+3. **Ingest** — run `/ingest raw/notes/your-clip.md` (or just `/ingest` to sweep all new files). The main context scans the file, proposes a domain expert, and you confirm before the agent writes the wiki pages.
+
+The `Clippings/` folder is gitignored — it's a staging area, not part of the vault. `raw/` is your immutable archive once a file lands there.
+
+> **Tip:** if you use multiple devices, keep `Clippings/` synced via Obsidian Sync or iCloud, then move files to `raw/` only when you're at your main workstation where Claude Code runs.
+
 ### What about secrets / credentials?
 
 Don't commit them. Use the `.gitignore` (already excludes `cache/`, `raw/`, `Clippings/`). For repo-syncing via `/sync-repos`, authentication relies on `gh auth login` — no tokens stored in the vault.
