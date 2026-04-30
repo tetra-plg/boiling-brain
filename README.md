@@ -26,11 +26,27 @@ This repo is the **scaffolding**, not a usable instance. It contains:
 
 This template is not meant to be cloned and edited by hand. Each placeholder has dependencies on others (e.g. domain count drives how many agent files exist; the hub-pivot domain gets a special marker; `/sync-factory-docs` is included only if you declare GitHub repos to track).
 
-A **bootstrap prompt** (portable across LLM clients — Claude.ai, ChatGPT, Gemini) walks you through a structured interview, generates the resolved files, and writes them to your machine. That prompt lives separately and is published as a Gist.
+A **bootstrap prompt** (`BOOTSTRAP.md`, shipped at the root of this repo) walks you through a structured interview, generates the resolved files, and writes them to your machine.
 
-> **Pointer to the bootstrap prompt:** `<TODO: insert Gist URL after Phase 4>`
+## How to bootstrap
 
-If you really want to clone manually, read every `*.tpl` file, fill placeholders by hand, and rename to drop `.tpl`. You will probably forget the cross-file consistency checks the bootstrap prompt enforces.
+```bash
+gh repo clone tetra-plg/llm-wiki-template ~/my-vault
+cd ~/my-vault
+claude
+```
+
+Then in Claude Code:
+
+```
+Lis BOOTSTRAP.md et exécute le prompt.
+```
+
+The interview takes 5-10 minutes. At the end, your vault is personalized, the template repo is cleaned (fresh `.git/`, optional remote pushed via `gh repo create`), and you can run your first `/ingest`.
+
+`BOOTSTRAP.md` and `PLACEHOLDERS.md` are then moved into `wiki/decisions/` as ADR traces — you can re-read them later to understand how your vault was generated.
+
+If you really want to clone manually and skip the bootstrap, read every `*.tpl` file, fill placeholders by hand, and rename to drop `.tpl`. You will probably forget the cross-file consistency checks the bootstrap prompt enforces.
 
 ## Architecture in 60 seconds
 
