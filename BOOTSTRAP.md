@@ -47,33 +47,19 @@ Pose les questions **séquentiellement**. Stocke chaque réponse dans une variab
 
 ### Q1 — Identité
 
-Pose un seul `AskUserQuestion` avec deux questions free-text :
+Pose 2 questions en texte simple, séquentielles, pas via `AskUserQuestion` :
 
-```json
-{
-  "questions": [
-    {
-      "question": "Quel est ton nom complet ?",
-      "header": "Identité — nom",
-      "multiSelect": false,
-      "options": [{"label": "Pierre Le Guern", "description": "Format libre, ex: Maria Dupont, Jean-Marc Lefebvre."}]
-    },
-    {
-      "question": "Quel est ton rôle pro court (1 ligne) ?",
-      "header": "Identité — rôle",
-      "multiSelect": false,
-      "options": [{"label": "VP Engineering chez Merim", "description": "Format libre, ex: Chercheure post-doc en génomique au CNRS."}]
-    }
-  ]
-}
-```
+1. « Quel est ton nom complet ? (ex. *Pierre Le Guern*, *Maria Dupont*) »
+   → Stocke comme `name`. Extrais le **prénom** (1er token avant l'espace) lowercased pour calculer `vault_name = <prenom>-vault`.
+   → Pour les prénoms composés avec tiret (« Jean-Marc »), splitte sur **espaces uniquement** : `vault_name = jean-marc-vault`.
 
-> Note : `AskUserQuestion` n'a pas de mode free-text strict — pose la question via les `options` en montrant un exemple, et accepte une réponse libre dans le champ "other" de la modale Claude Code. Si la version courante ne le permet pas, tombe en fallback : pose la question en texte simple à l'utilisateur, attends sa réponse.
+2. « Quel est ton rôle pro court (1 ligne) ? (ex. *VP Engineering chez Merim*, *Chercheure post-doc en génomique au CNRS*) »
+   → Stocke comme `role`.
 
 **Parsing :**
 - `name` = réponse Q1.1 brute (ex. `"Maria Dupont"`).
 - `role` = réponse Q1.2 brute.
-- `vault_name` = `<premier_token_lowercase>-vault` (ex. `"Maria Dupont"` → `maria-vault`, `"Jean-Marc Lefebvre"` → `jean-marc-vault` si l'utilisateur écrit avec tiret, sinon `jean-vault`). Confirme silencieusement, pas de question dédiée.
+- `vault_name` = `<premier_token_lowercase>-vault`. Le « premier token » est obtenu par split sur **espaces uniquement** (pas sur tirets). Donc `"Maria Dupont"` → `maria-vault`, `"Jean-Marc Lefebvre"` → `jean-marc-vault`. Confirme silencieusement, pas de question dédiée.
 
 ### Q2 — Domaines de connaissance
 
@@ -91,9 +77,18 @@ Conseil: regroupe plutôt que d'éclater quand c'est naturel. Pas de plafond —
 - Si 0 domaine → re-pose la question en disant qu'il en faut au moins 1.
 - Pour chaque slug, déduis un `domain_label` par titre-cassing humain (ex. `astro-physics` → `Astronomie & Physique`, `ia` → `IA`). Présenteras au moment de la validation.
 
+**Mapping slug → label humain (titre du domaine)** :
+- Slug en kebab-case ASCII (ex. `marche`, `paleo-dna`).
+- Le label humain est dérivé pour affichage : capitalize + accents si pertinent (ex. `marche` → `Marché`, `paleo-dna` → `Paleo-DNA`).
+- En cas d'ambiguïté (ex. slug `cs` → `Computer Science` ou `Customer Success` ?), demande à l'utilisateur de confirmer le label humain.
+
 ### Q3 — Hub pivot
 
-Single-select dynamique avec une option par domaine + « aucun ». Construis le JSON dynamiquement :
+Single-select dynamique avec une option par domaine + « aucun ». **Avant de poser la question**, affiche cette consigne courte en texte :
+
+> « Si tu hésites, choisis « aucun » — tu pourras désigner un hub plus tard via `/evolve-agent`. »
+
+Construis le JSON dynamiquement :
 
 ```json
 {
@@ -131,6 +126,11 @@ factory-v6 | refonte du plugin Factory en architecture multi-agents
 
 **Parsing :**
 - `projects = [{slug, description}, ...]`. Liste vide acceptée (utiliseras `« (à compléter) »` plus tard).
+
+**Parsing tolérant** :
+- Si la ligne contient `|` → split sur le premier `|` uniquement (slug à gauche, description à droite).
+- Si pas de `|` mais ligne ressemble à un slug suivi d'espaces et texte → essaie de splitter sur le 1er espace après le slug (slug = continu sans espace).
+- Si ambigu → re-pose la question avec exemple explicite.
 
 ### Q5 — Types de sources
 
@@ -239,9 +239,28 @@ Table de décision :
 | `cadence = "high"` ET pas réflexif pur | `sonnet` | `high` | `60` |
 | Sinon (default) | `haiku` | `medium` | `60` |
 
+**Priorité en cas de conflit** :
+1. `is_hub_pivot = true` → toujours `sonnet/high/80`.
+2. Sinon, `deliverables` contient `cheatsheets` → `sonnet/high/60` (densité technique justifie le coût même en cadence basse).
+3. Sinon, `cadence = high (>3/sem)` → `sonnet/high/60` (volume justifie qualité).
+4. Default → `haiku/medium/60`.
+
 ### B5 — `is_hub_pivot`
 
 Trivial : `is_hub_pivot = (domain_slug == hub_pivot)`.
+
+### B6 — frames_visual_formats (4-6 formats de transcription markdown)
+
+Pour chaque domaine, déduis 4-6 formats utiles pour transcrire les frames vidéo en markdown structuré.
+
+Patterns par type de domaine :
+- **Données / chiffres / matrices** (poker, finance, sport stats) : « tableau Markdown », « table avec colonnes profondeur × position », « grille 13×13 », « palmarès chiffré ».
+- **Schémas / architectures / flux** (ia, factory, devops) : « diagramme Mermaid », « flowchart », « graph LR », « sequenceDiagram ».
+- **Formules / équations / démonstrations** (physique, math, biostat) : « bloc LaTeX », « équation inline », « table de variables », « démonstration pas-à-pas ».
+- **Interfaces / outils / captures** (devtool, UX) : « description d'UI », « table de raccourcis clavier », « bullet de boutons cliqués ».
+- **Réflexif / management / qualitatif** (metier, leadership) : « table 2D framework × axes », « bullet list de patterns », « citation marquante encadrée ».
+
+L'utilisateur peut éditer en validation domaine.
 
 ### Autres déductions accessoires
 
@@ -291,7 +310,11 @@ Puis :
 }
 ```
 
-Si « ✏️ Ajuste » → boucle d'édition par propriété : 5 free-text successifs (triggers, deliverables, co_ingest, model+effort+maxTurns, is_hub_pivot). À chaque édition, l'utilisateur peut taper « skip » pour conserver. Re-affiche le bloc édité, redemande validation.
+Sur « ✏️ Ajuste » :
+
+1. Affiche un `AskUserQuestion` **multiSelect** : « Quelles propriétés veux-tu éditer ? » avec 5 options (B1 trigger_examples, B2 deliverables, B3 co_ingest_partners, B4 model/effort/maxTurns, B5 frames_visual_formats).
+2. Pour chaque propriété cochée seulement, prompt texte ciblé avec la valeur courante affichée et demande la nouvelle.
+3. Re-affiche le bloc récap édité, redemande validation.
 
 ### 4.2 Validation globale
 
@@ -341,14 +364,16 @@ Exécute dans **cet ordre exact**. Utilise `Edit replace_all=true` ou `sed` pour
 
 ### 5.1 Substitution des 28 placeholders (référence : `PLACEHOLDERS.md` à la racine)
 
-Pour chaque fichier `.tpl` du repo (CLAUDE.md.tpl, tracked-repos.config.json.tpl, wiki/index.md.tpl, wiki/log.md.tpl, wiki/overview.md.tpl, wiki/radar.md.tpl, wiki/domains/domain.md.tpl, .claude/agents/domain-expert.md.tpl, .claude/agent-memory/domain-memory.md.tpl) :
+Pour chaque fichier `.tpl` du repo (CLAUDE.md.tpl, wiki/index.md.tpl, wiki/log.md.tpl, wiki/overview.md.tpl, wiki/radar.md.tpl, wiki/domains/domain.md.tpl, .claude/agents/domain-expert.md.tpl, .claude/agent-memory/domain-memory.md.tpl) :
 
 - Charge le contenu.
 - Substitue tous les placeholders **globaux** : `{{name}}`, `{{vault_name}}`, `{{role}}`, `{{parcours_short}}`, `{{bootstrap_date}}`, `{{has_tracked_repos}}` (et ses sections conditionnelles : `{{slash_commands_extras}}`, `{{tracked_repos_arborescence}}`, `{{tracked_repos_cache}}`, `{{tracked_repos_scripts_extras}}`, `{{sync_repos_section}}`).
 - Substitue les placeholders **cross-domain** calculés : `{{domains_section}}`, `{{domains_index_section}}`, `{{domains_links}}`, `{{projects_links}}`, `{{agents_section}}`.
 
+**Note** : `tracked-repos.config.json.tpl` ne contient aucun placeholder, skipper la substitution. Le renommage final sera géré en Section 5.6.
+
 > Pour `{{has_tracked_repos}} = false`, les 5 placeholders conditionnels deviennent des chaînes vides (cf. table dans `PLACEHOLDERS.md`).
-> Pour `{{has_tracked_repos}} = true`, copie le bloc complet `### SYNC-REPOS` depuis la doc de référence (cf. la doc inline du template).
+> Pour `{{has_tracked_repos}} = true`, copie le bloc complet `### SYNC-REPOS` fourni en **Annexe D** ci-dessous (verbatim, à la place du placeholder `{{sync_repos_section}}`).
 
 ### 5.2 Duplication par domaine — agents
 
@@ -472,6 +497,12 @@ Selon réponse :
 - Bascule en manuel.
 - Affiche : « `gh` indisponible. Pour ajouter un remote plus tard : `gh auth login` puis `gh repo create {{vault_name}} --private --source=. --push`. »
 
+**Gestion des erreurs `gh repo create`** :
+
+- **Nom déjà pris** (« repository already exists ») : re-pose la question « Le nom `{{vault_name}}` est déjà pris. Quel autre nom utiliser ? (ou laisse vide pour skip le push) ».
+- **Authentification expirée** (« HTTP 401 ») : afficher « `gh auth login` requis. Bascule en mode manuel : voici les commandes à lancer plus tard : `gh repo create <name> --private --source=. --push`. » et continue le bootstrap sans le remote.
+- **Autre erreur** : afficher l'erreur brute + bascule en manuel comme ci-dessus.
+
 ---
 
 ## Section 7 — Étape 6, Récap onboarding final
@@ -524,6 +555,45 @@ Si une étape de la Section 5 échoue (ex. un placeholder oublié dans un fichie
 3. Le `.git/` original existe encore tant que 5.8 n'a pas été lancé — tu peux toujours `git diff` pour comparer à l'état initial.
 
 Une fois le `git init` neuf fait, l'historique du template est perdu. C'est volontaire (clean start, cf. arbitrage Pierre 2026-04-30).
+
+### D. Bloc SYNC-REPOS à injecter dans CLAUDE.md
+
+Quand `has_tracked_repos = true`, copier ce bloc verbatim à la place du placeholder `{{sync_repos_section}}` dans CLAUDE.md.
+
+````markdown
+### SYNC-REPOS (`/sync-repos [noms]`)
+
+Synchronise la doc de repos GitHub externes (frameworks, outils, projets que tu suis) vers `raw/`, en respectant strictement l'immutabilité.
+
+**Manifest** : `tracked-repos.config.json` à la racine du vault. Champs par source :
+- `name` (slug, clé d'invocation), `repo` (`owner/name` GitHub, ex. `vercel/next.js`, `nf-core/sarek`, `your-org/your-repo`), `branch` (typiquement `main`)
+- `dest` (chemin relatif au vault, sans le `<shortsha>/`) — libre, à toi de définir l'arborescence
+- `paths` (optionnel, défaut `default_paths` du manifest) — uniquement ces chemins sont copiés depuis le clone
+- `exclude_paths` (optionnel, défaut `default_exclude_paths` du manifest) — chemins supprimés du snapshot **après** copie. `rm -rf` tolérant : un chemin absent est ignoré silencieusement.
+
+Défauts au niveau racine : `default_paths` et `default_exclude_paths`. Ces défauts s'appliquent à toute source qui n'override pas explicitement.
+
+**Principe snapshot par SHA.** Chaque sync crée `<dest>/<shortsha>/` (shortsha = 7 premiers chars du SHA du HEAD de `branch`). Si ce dossier existe déjà → skip. Un merge sur `main` côté GitHub = un nouveau SHA = un nouveau snapshot à côté de l'ancien. Les anciens snapshots ne sont **jamais** modifiés ni supprimés.
+
+**Résolution de la cible** (main context) :
+- aucun argument → multiSelect interactif (`AskUserQuestion`) sur les sources du manifest, pour éviter un « tout sync » involontaire.
+- noms explicites (`next sarek`) → ces sources.
+
+**Mécanique** (`scripts/sync-repos.sh`) :
+1. `gh api repos/<repo>/commits/<branch>` → SHA du HEAD.
+2. Si `<dest>/<shortsha>/` existe → `SKIPPED`.
+3. Sinon : `gh repo clone --depth=1 -b <branch>` dans `cache/sync-repos/<name>/`, copie des `paths` listés vers `<dest>/<shortsha>/`, écriture de `.sync-meta.json` (repo, branch, sha, synced_at, paths), cleanup du clone.
+
+**Chaînage sur `/ingest`.** Pour chaque ligne `CREATED <path>` remontée par le script : enchaîner `/ingest <path>` séquentiellement.
+
+**Journalisation.** Entrée dans `wiki/log.md` :
+```
+## [YYYY-MM-DD] sync-repos | N snapshots créés
+<liste>
+```
+
+**Ajouter un nouveau repo** : éditer `tracked-repos.config.json`, puis `/sync-repos <nouveau-name>`.
+````
 
 ---
 
