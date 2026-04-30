@@ -1,0 +1,7 @@
+cache/
+raw/
+Clippings/
+__pycache__/
+*.pyc
+debug-*.png
+debug_*.png
