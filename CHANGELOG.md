@@ -10,6 +10,40 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 
 Nothing yet.
 
+## [v1.0.1] — hotfix
+
+### Fixed
+
+- **`/update-vault` inutilisable après bootstrap** : le bootstrap réinitialise l'historique git (`rm -rf .git/ && git init`), laissant le vault sans ancêtre commun avec le template. `git log HEAD..template-upstream/main` retournait alors tout l'historique du template, et `git cherry-pick` échouait sur les fichiers `.tpl` consommés au bootstrap.
+
+- **`BOOTSTRAP.md` section 5.10** : enregistre désormais le SHA du template dans `.template-bootstrap-sha` avant de supprimer le `.git/`. Ce fichier sert de baseline pour les futures mises à jour via `/update-vault`.
+
+- **`/update-vault`** : remplace `cherry-pick` par une approche fichier par fichier (`git show template-upstream/main:<fichier> > <fichier>`), indépendante de l'historique git. Exclut automatiquement les fichiers consommés au bootstrap (`*.tpl`, `BOOTSTRAP.md`, `PLACEHOLDERS.md`, etc.).
+
+### Migration depuis v1.0.0
+
+**Option A — automatique (recommandée) :**
+
+```bash
+git remote add template-upstream https://github.com/tetra-plg/boiling-brain.git 2>/dev/null; true
+git fetch template-upstream --tags
+git show template-upstream/main:.claude/commands/update-vault.md \
+  > .claude/commands/update-vault.md
+git add .claude/commands/update-vault.md
+git commit -m "fix: update-vault retrocompat v1.0.0"
+```
+
+Puis lance `/update-vault` — le fallback détecte l'absence de `.template-bootstrap-sha` et utilise le tag `v1.0.0` comme baseline automatiquement.
+
+**Option B — manuelle :**
+
+```bash
+git fetch template-upstream --tags
+git rev-list -n 1 v1.0.0 > .template-bootstrap-sha
+git add .template-bootstrap-sha
+git commit -m "fix: add template bootstrap sha (retrocompat v1.0.0)"
+```
+
 ## [v1.0.0] — 2026-04-30 (first public release)
 
 ### Repository
