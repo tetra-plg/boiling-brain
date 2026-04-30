@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 # Usage:
-#   scripts/sync-factory-docs.sh                 # toutes les sources du manifest
-#   scripts/sync-factory-docs.sh name1 name2     # seulement ces sources
-#   scripts/sync-factory-docs.sh --kind=core     # filtre par kind (core|project)
+#   scripts/sync-repos.sh                 # toutes les sources du manifest
+#   scripts/sync-repos.sh name1 name2     # seulement ces sources
 #
 # Pour chaque source :
 #   - récupère le SHA du HEAD de la branche via `gh api`
-#   - si raw/<dest>/<shortsha>/ existe déjà → SKIPPED
+#   - si <dest>/<shortsha>/ existe déjà → SKIPPED
 #   - sinon → clone --depth=1, copie les paths listés, écrit .sync-meta.json
 #
-# Sortie stdout (consommée par le slash command) :
+# Sortie stdout (consommée par le slash command /sync-repos) :
 #   CREATED <abs-path>
 #   SKIPPED <name> (sha <shortsha> already snapshotted)
 #   ERROR <name> <message>
@@ -19,33 +18,30 @@ set -euo pipefail
 VAULT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$VAULT_ROOT"
 
-MANIFEST="$VAULT_ROOT/factory-docs.config.json"
-[[ -f "$MANIFEST" ]] || { echo "ERROR _manifest factory-docs.config.json introuvable" >&2; exit 1; }
+MANIFEST="$VAULT_ROOT/tracked-repos.config.json"
+[[ -f "$MANIFEST" ]] || { echo "ERROR _manifest tracked-repos.config.json introuvable" >&2; exit 1; }
 command -v jq >/dev/null || { echo "ERROR _prereq jq non installé (brew install jq)" >&2; exit 1; }
 command -v gh >/dev/null || { echo "ERROR _prereq gh CLI non installé" >&2; exit 1; }
 gh auth status >/dev/null 2>&1 || { echo "ERROR _prereq gh non authentifié (gh auth login)" >&2; exit 1; }
 
 # --- Parse args ---
-KIND_FILTER=""
 NAMES=()
 for arg in "$@"; do
   case "$arg" in
-    --kind=*) KIND_FILTER="${arg#--kind=}" ;;
     --*)      echo "ERROR _args flag inconnu: $arg" >&2; exit 1 ;;
     *)        NAMES+=("$arg") ;;
   esac
 done
 
 # --- Résolution des sources à traiter ---
-DEFAULT_PATHS_JSON="$(jq -c '.default_paths // ["README.md","docs/","CHANGELOG.md"]' "$MANIFEST")"
+DEFAULT_PATHS_JSON="$(jq -c '.default_paths // ["docs/","README.md","CHANGELOG.md"]' "$MANIFEST")"
 DEFAULT_EXCLUDES_JSON="$(jq -c '.default_exclude_paths // []' "$MANIFEST")"
 
-# Stream "name\trepo\tbranch\tkind\tdest\tpaths_json\texcludes_json" filtré
+# Stream "name\trepo\tbranch\tdest\tpaths_json\texcludes_json"
 SOURCES="$(
-  jq -r --arg kind "$KIND_FILTER" --argjson defp "$DEFAULT_PATHS_JSON" --argjson defx "$DEFAULT_EXCLUDES_JSON" '
+  jq -r --argjson defp "$DEFAULT_PATHS_JSON" --argjson defx "$DEFAULT_EXCLUDES_JSON" '
     .sources[]
-    | select($kind == "" or .kind == $kind)
-    | [.name, .repo, .branch, .kind, .dest,
+    | [.name, .repo, .branch, .dest,
        ((.paths // $defp) | tostring),
        ((.exclude_paths // $defx) | tostring)]
     | @tsv
@@ -56,7 +52,7 @@ if [[ ${#NAMES[@]} -gt 0 ]]; then
   FILTERED=""
   for name in "${NAMES[@]}"; do
     line="$(echo "$SOURCES" | awk -F'\t' -v n="$name" '$1 == n')"
-    [[ -z "$line" ]] && { echo "ERROR $name introuvable dans le manifest (ou filtré par --kind)" >&2; exit 1; }
+    [[ -z "$line" ]] && { echo "ERROR $name introuvable dans le manifest" >&2; exit 1; }
     FILTERED+="$line"$'\n'
   done
   SOURCES="${FILTERED%$'\n'}"
@@ -64,12 +60,12 @@ fi
 
 [[ -z "$SOURCES" ]] && { echo "ERROR _selection aucune source sélectionnée" >&2; exit 1; }
 
-mkdir -p "$VAULT_ROOT/cache/factory-repos"
+mkdir -p "$VAULT_ROOT/cache/sync-repos"
 
 # --- Traitement ---
 SYNCED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-while IFS=$'\t' read -r name repo branch kind dest paths_json excludes_json; do
+while IFS=$'\t' read -r name repo branch dest paths_json excludes_json; do
   [[ -z "$name" ]] && continue
 
   sha="$(gh api "repos/$repo/commits/$branch" --jq '.sha' 2>/dev/null)" || {
@@ -84,7 +80,7 @@ while IFS=$'\t' read -r name repo branch kind dest paths_json excludes_json; do
     continue
   fi
 
-  clone_dir="$VAULT_ROOT/cache/factory-repos/$name"
+  clone_dir="$VAULT_ROOT/cache/sync-repos/$name"
   rm -rf "$clone_dir"
 
   if ! gh repo clone "$repo" "$clone_dir" -- --depth=1 --branch "$branch" --quiet 2>/dev/null; then
@@ -131,7 +127,6 @@ while IFS=$'\t' read -r name repo branch kind dest paths_json excludes_json; do
   "name": "$name",
   "repo": "$repo",
   "branch": "$branch",
-  "kind": "$kind",
   "sha": "$sha",
   "shortsha": "$shortsha",
   "synced_at": "$SYNCED_AT",
@@ -145,4 +140,4 @@ EOF
 done <<< "$SOURCES"
 
 # Cleanup cache dir si vide
-rmdir "$VAULT_ROOT/cache/factory-repos" 2>/dev/null || true
+rmdir "$VAULT_ROOT/cache/sync-repos" 2>/dev/null || true

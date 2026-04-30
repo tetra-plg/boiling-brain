@@ -15,18 +15,19 @@ Ce vault est un **LLM Wiki** : un écosystème de connaissances maintenu par LLM
   agent-memory/  # mémoires inter-sessions par agent (état du domaine, patterns en attente)
   commands/      # slash commands (/ingest, /ingest-video, /query, /save, /lint, /evolve-agent{{slash_commands_extras}})
 
+
 raw/                 # sources brutes IMMUTABLES — ce qui est référencé par le wiki.
   notes/             # retours d'expérience perso (texte)
   transcripts/       # transcripts de vidéos/audios (YYYY-MM-DD-slug.md + timestamps)
   videos-meta/       # pointeurs/metadata des vidéos (YYYY-MM-DD-slug.meta.md : URL, durée, hash, emplacement)
   frames/            # frames extraites effectivement utilisées par le wiki (promues depuis cache)
-{{factory_docs_arborescence}}  # + articles/, pdfs/, clippings/... selon besoin
+{{tracked_repos_arborescence}}  # + articles/, pdfs/, clippings/... selon besoin
 
 cache/                 # artefacts TRANSITOIRES — jamais référencés par le wiki, purgeables à tout moment.
   videos/              # vidéos téléchargées/déposées, supprimées après transcription
   audio/               # audio extrait, supprimé après transcription
   frames/              # frames candidates, promues vers raw/frames/ si utilisées
-{{factory_repos_cache}}
+{{tracked_repos_cache}}
 wiki/          # pages générées par le LLM. Tu possèdes cette couche.
   index.md     # portail humain minimal (overview, radar, log, domaines)
   log.md       # journal chronologique (ingest, query, lint, evolve)
@@ -41,7 +42,7 @@ wiki/          # pages générées par le LLM. Tu possèdes cette couche.
   cheatsheets/ # tableaux synthétiques, paliers, matrices
   diagrams/    # diagrammes Mermaid / ASCII
 
-scripts/       # utilitaires (extraction audio, transcription, sampling de frames, image-diff, backfill summaries, hub enrichment{{factory_scripts_extras}})
+scripts/       # utilitaires (extraction audio, transcription, sampling de frames, image-diff, backfill summaries, hub enrichment{{tracked_repos_scripts_extras}})
 ```
 
 ### Principe raw vs cache
@@ -209,7 +210,7 @@ L'agent expert ne déclare pas le bloc `## Frame requests` au moment de l'ingest
 - **Référencement** : `![Label](../../../raw/frames/YYYY-MM-DD-source-slug-slug.png)`
 - **Frontmatter** des pages source : `frames: [raw/frames/...]` (optionnel)
 - **Transcription markdown** : chaque frame promue doit être transcrite en markdown structuré (table, Mermaid, code, liste KPIs, description sémantique, etc.) dans la page wiki qui la consomme. C'est non-optionnel — sans transcription, les `/query` doivent ré-analyser l'image à chaque appel. Le format adéquat selon le type de visuel est documenté dans la section `## Frames visuelles` du prompt de chaque agent et dans l'Étape 9 du runbook.
-{{sync_factory_docs_section}}
+{{sync_repos_section}}
 ### RADAR (« montre le radar » / « qu'est-ce qu'il y a à faire aujourd'hui »)
 Quand l'utilisateur demande le radar ou la liste des choses à faire :
 1. Lire `wiki/radar.md` — présenter les entrées non cochées, groupées par catégorie.

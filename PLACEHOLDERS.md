@@ -11,19 +11,19 @@ This file documents every `{{placeholder}}` used in the `*.tpl` files of this te
 | `{{role}}` | string | Interview Q (current role / title) | `CLAUDE.md.tpl`, `overview.md.tpl` |
 | `{{parcours_short}}` | markdown bullet list, 2-4 lines | Interview Q (career, in 2-3 bullets) | `overview.md.tpl` |
 | `{{bootstrap_date}}` | YYYY-MM-DD | `date +%Y-%m-%d` at bootstrap time | `overview.md.tpl`, `index.md.tpl`, `radar.md.tpl`, `domain.md.tpl` (per-domain) |
-| `{{has_factory_repos}}` | boolean | Interview Q (do you want to track GitHub repos via `/sync-factory-docs`?) | Conditional: keeps or removes `factory-docs.config.json.tpl`, `scripts/sync-factory-docs.sh`, `.claude/commands/sync-factory-docs.md`, `wiki/decisions/factory-docs-immutable-snapshots.md`, and several blocks inside `CLAUDE.md.tpl` |
+| `{{has_tracked_repos}}` | boolean | Interview Q (do you want to track GitHub repos via `/sync-repos`?) | Conditional: keeps or removes `tracked-repos.config.json.tpl`, `scripts/sync-repos.sh`, `.claude/commands/sync-repos.md`, `wiki/decisions/tracked-repos-immutable-snapshots.md`, and several blocks inside `CLAUDE.md.tpl` |
 
 ### Conditional sections in `CLAUDE.md.tpl`
 
-These are filled or removed based on `{{has_factory_repos}}` and other flags:
+These are filled or removed based on `{{has_tracked_repos}}` and other flags:
 
 | Placeholder | When `false` | When `true` |
 |---|---|---|
-| `{{slash_commands_extras}}` | `` (empty) | `, /sync-factory-docs` |
-| `{{factory_docs_arborescence}}` | `` | `  factory-docs/      # snapshots par SHA des composants core (<composant>/<shortsha>/)\n  factory-projects/  # snapshots par SHA des projets générés (<projet>/<shortsha>/)\n` |
-| `{{factory_repos_cache}}` | `` | `  factory-repos/       # clones --depth=1 temporaires utilisés par /sync-factory-docs, purgés en fin de sync\n\n` |
-| `{{factory_scripts_extras}}` | `` | `, sync-factory-docs` |
-| `{{sync_factory_docs_section}}` | `\n` | full `### SYNC-FACTORY-DOCS` section copied from the reference instance |
+| `{{slash_commands_extras}}` | `` (empty) | `, /sync-repos` |
+| `{{tracked_repos_arborescence}}` | `` | `  tracked-repos/     # snapshots par SHA des repos GitHub suivis (<repo>/<shortsha>/)\n` |
+| `{{tracked_repos_cache}}` | `` | `  sync-repos/          # clones --depth=1 temporaires utilisés par /sync-repos, purgés en fin de sync\n\n` |
+| `{{tracked_repos_scripts_extras}}` | `` | `, sync-repos` |
+| `{{sync_repos_section}}` | `\n` | full `### SYNC-REPOS` section copied from the reference doc |
 
 ## Domain-driven placeholders (one set per declared domain)
 
@@ -82,10 +82,10 @@ The bootstrap prompt's job is to:
 2. Compute the cross-domain placeholders from the collected data.
 3. For each `*.tpl` file, substitute placeholders and write to the final path (renaming to drop the `.tpl` suffix).
 4. Loop over the domain-driven templates, instantiating one file per declared domain.
-5. Apply the conditional removal of factory-docs files if `{{has_factory_repos}} = false`.
+5. Apply the conditional removal of tracked-repos files if `{{has_tracked_repos}} = false`.
 
 ## Notes for the Phase 4 prompt author
 
 - The unified `domain-expert.md.tpl` was fused from 5 reference instance prompts (poker, ia, metier, tech, astro-physique). The structural skeleton is shared; what varies is the domain-specific observation section, frame triggers, frame formats, deliverable signature, and a few conditional blocks (authority table, co-ingest, confidentiality).
-- The factory-related artifacts are conditional, NOT a sixth domain. The factory-expert in the reference instance was deliberately excluded — the "evolving framework documentation" pattern was deemed too instance-specific to standardize.
+- The tracked-repos artifacts are conditional, NOT a sixth domain. The "evolving framework documentation" pattern is deliberately kept as an opt-in slash command rather than a domain expert — too instance-specific to standardize as a domain.
 - The bootstrap interview should ideally take 5-10 minutes for someone who has thought about their domains, longer otherwise. Don't over-engineer the interview — it's better to ship something opinionated and let the user evolve it via `/evolve-agent` after a few real ingestions.

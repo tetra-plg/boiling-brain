@@ -4,7 +4,7 @@
 # Usage:
 #   scripts/scan-raw.sh                   → scanne tout raw/
 #   scripts/scan-raw.sh raw/notes/foo.md  → fichier unique
-#   scripts/scan-raw.sh raw/factory-docs/ → sous-arbre
+#   scripts/scan-raw.sh raw/tracked-repos/ → sous-arbre
 #
 # Sortie par ligne :
 #   NEW      <rel-path>

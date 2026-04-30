@@ -14,7 +14,7 @@ Un **LLM Wiki** est un wiki personnel maintenu par LLM :
 
 - L'humain dépose des sources brutes (notes, transcripts vidéo, PDFs, clippings, docs officielles, snapshots de repos) dans `raw/` — **immutable**.
 - Des **agents experts par domaine** (un par domaine déclaré) ingèrent ces sources, écrivent dans `wiki/sources/`, `wiki/concepts/`, `wiki/entities/`, et leur livrable signature (`cheatsheets/`, `syntheses/`, `diagrams/`).
-- Des **slash-commands** orchestrent : `/ingest`, `/query`, `/save`, `/lint`, `/evolve-agent`, et conditionnellement `/ingest-video`, `/sync-factory-docs`.
+- Des **slash-commands** orchestrent : `/ingest`, `/query`, `/save`, `/lint`, `/evolve-agent`, et conditionnellement `/ingest-video`, `/sync-repos`.
 - Le wiki est **toujours dérivable** de `raw/`. Pas de connaissance orpheline. Pas de lien inventé.
 
 ### 1.2 Rôles
@@ -148,7 +148,7 @@ Multi-select 6 options :
       {"label": "PDFs", "description": "Papers, ebooks, slides."},
       {"label": "Clippings web", "description": "Articles de blog, threads, posts."},
       {"label": "Docs officielles", "description": "SDK, API, frameworks."},
-      {"label": "Repos GitHub", "description": "Suivi de projets en évolution. Active /sync-factory-docs."}
+      {"label": "Repos GitHub", "description": "Suivi de projets en évolution. Active /sync-repos."}
     ]
   }]
 }
@@ -157,7 +157,7 @@ Multi-select 6 options :
 **Parsing :**
 - `source_types = [labels...]`.
 - `ingest_video_enabled = "Transcripts vidéo" in source_types` (booléen).
-- `has_factory_repos = "Repos GitHub" in source_types` (booléen).
+- `has_tracked_repos = "Repos GitHub" in source_types` (booléen).
 
 ### Q6 — Cadence d'ingestion
 
@@ -341,14 +341,14 @@ Exécute dans **cet ordre exact**. Utilise `Edit replace_all=true` ou `sed` pour
 
 ### 5.1 Substitution des 28 placeholders (référence : `PLACEHOLDERS.md` à la racine)
 
-Pour chaque fichier `.tpl` du repo (CLAUDE.md.tpl, factory-docs.config.json.tpl, wiki/index.md.tpl, wiki/log.md.tpl, wiki/overview.md.tpl, wiki/radar.md.tpl, wiki/domains/domain.md.tpl, .claude/agents/domain-expert.md.tpl, .claude/agent-memory/domain-memory.md.tpl) :
+Pour chaque fichier `.tpl` du repo (CLAUDE.md.tpl, tracked-repos.config.json.tpl, wiki/index.md.tpl, wiki/log.md.tpl, wiki/overview.md.tpl, wiki/radar.md.tpl, wiki/domains/domain.md.tpl, .claude/agents/domain-expert.md.tpl, .claude/agent-memory/domain-memory.md.tpl) :
 
 - Charge le contenu.
-- Substitue tous les placeholders **globaux** : `{{name}}`, `{{vault_name}}`, `{{role}}`, `{{parcours_short}}`, `{{bootstrap_date}}`, `{{has_factory_repos}}` (et ses sections conditionnelles : `{{slash_commands_extras}}`, `{{factory_docs_arborescence}}`, `{{factory_repos_cache}}`, `{{factory_scripts_extras}}`, `{{sync_factory_docs_section}}`).
+- Substitue tous les placeholders **globaux** : `{{name}}`, `{{vault_name}}`, `{{role}}`, `{{parcours_short}}`, `{{bootstrap_date}}`, `{{has_tracked_repos}}` (et ses sections conditionnelles : `{{slash_commands_extras}}`, `{{tracked_repos_arborescence}}`, `{{tracked_repos_cache}}`, `{{tracked_repos_scripts_extras}}`, `{{sync_repos_section}}`).
 - Substitue les placeholders **cross-domain** calculés : `{{domains_section}}`, `{{domains_index_section}}`, `{{domains_links}}`, `{{projects_links}}`, `{{agents_section}}`.
 
-> Pour `{{has_factory_repos}} = false`, les 5 placeholders conditionnels deviennent des chaînes vides (cf. table dans `PLACEHOLDERS.md`).
-> Pour `{{has_factory_repos}} = true`, copie le bloc complet `### SYNC-FACTORY-DOCS` depuis l'instance de référence (cf. CLAUDE.md de BoilingBrain ou la doc inline du template).
+> Pour `{{has_tracked_repos}} = false`, les 5 placeholders conditionnels deviennent des chaînes vides (cf. table dans `PLACEHOLDERS.md`).
+> Pour `{{has_tracked_repos}} = true`, copie le bloc complet `### SYNC-REPOS` depuis la doc de référence (cf. la doc inline du template).
 
 ### 5.2 Duplication par domaine — agents
 
@@ -392,13 +392,13 @@ rm wiki/decisions/extraction-frames-induction-runbook.md
 rm wiki/decisions/ingest-video-modes-a-b-generalisation.md
 ```
 
-**Si `has_factory_repos = false`** :
+**Si `has_tracked_repos = false`** :
 
 ```bash
-rm .claude/commands/sync-factory-docs.md
-rm scripts/sync-factory-docs.sh
-rm factory-docs.config.json.tpl    # ou son rendu si déjà substitué
-rm wiki/decisions/factory-docs-immutable-snapshots.md
+rm .claude/commands/sync-repos.md
+rm scripts/sync-repos.sh
+rm tracked-repos.config.json.tpl    # ou son rendu si déjà substitué
+rm wiki/decisions/tracked-repos-immutable-snapshots.md
 ```
 
 ### 5.6 Renommage des `.tpl` substitués vers leur nom final
@@ -411,8 +411,8 @@ mv wiki/index.md.tpl wiki/index.md
 mv wiki/log.md.tpl wiki/log.md
 mv wiki/overview.md.tpl wiki/overview.md
 mv wiki/radar.md.tpl wiki/radar.md
-# Si has_factory_repos = true :
-mv factory-docs.config.json.tpl factory-docs.config.json
+# Si has_tracked_repos = true :
+mv tracked-repos.config.json.tpl tracked-repos.config.json
 ```
 
 Supprime les `.tpl` originaux qui ont été dupliqués (ils ont fait leur job) :
@@ -483,7 +483,7 @@ Affiche un message texte propre :
 
 Identité : {{name}} — {{role}}
 Domaines actifs ({{N}}) : {{ domain_1, domain_2, ... }}
-Pipeline disponible : /ingest, /query, /save, /lint, /evolve-agent{{ ", /ingest-video" if ingest_video_enabled }}{{ ", /sync-factory-docs" if has_factory_repos }}
+Pipeline disponible : /ingest, /query, /save, /lint, /evolve-agent{{ ", /ingest-video" if ingest_video_enabled }}{{ ", /sync-repos" if has_tracked_repos }}
 
 Trois prochaines actions guidées :
 
@@ -506,7 +506,7 @@ Bon ingest.
 - `wiki/index.md`, `wiki/log.md`, `wiki/overview.md`, `wiki/radar.md`
 - Pour chaque domaine : `wiki/domains/<slug>.md` + `.claude/agents/<slug>-expert.md` + `.claude/agent-memory/<slug>/MEMORY.md`
 - `wiki/decisions/bootstrap-prompt.md`, `wiki/decisions/placeholders-reference.md`, `wiki/decisions/tiered-loading-wiki.md` (déjà présent)
-- Conditionnels : `factory-docs.config.json`, `wiki/decisions/factory-docs-immutable-snapshots.md`, `wiki/decisions/extraction-frames-induction-runbook.md`, `wiki/decisions/ingest-video-modes-a-b-generalisation.md`
+- Conditionnels : `tracked-repos.config.json`, `wiki/decisions/tracked-repos-immutable-snapshots.md`, `wiki/decisions/extraction-frames-induction-runbook.md`, `wiki/decisions/ingest-video-modes-a-b-generalisation.md`
 - `.git/` neuf, premier commit posé.
 
 ### B. Fichiers à NE PAS toucher

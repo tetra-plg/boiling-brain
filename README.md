@@ -17,16 +17,18 @@ The pattern follows Karpathy's "knowledge compilation" idea: keep the source of 
 
 This repo is the **scaffolding**, not a usable instance. It contains:
 
-- Generic slash commands (`/ingest`, `/ingest-video`, `/query`, `/save`, `/lint`, `/evolve-agent`, optional `/sync-factory-docs`).
-- Generic scripts (`scan-raw.sh`, `transcribe.sh`, `sample-frames.sh`, `diff-frames.py`, `extract-frames.sh`, `backfill-summaries.py`, `enrich-hub.py`, optional `sync-factory-docs.sh`).
+- Generic slash commands (`/ingest`, `/ingest-video`, `/query`, `/save`, `/lint`, `/evolve-agent`, optional `/sync-repos`).
+- Generic scripts (`scan-raw.sh`, `transcribe.sh`, `sample-frames.sh`, `diff-frames.py`, `extract-frames.sh`, `backfill-summaries.py`, `enrich-hub.py`, optional `sync-repos.sh`).
 - Templated files (`*.tpl`) with `{{placeholder}}` markers that need to be filled with **your** name, role, domains, and projects.
 - A unified `domain-expert.md.tpl` that gets instantiated **once per domain** you declare at bootstrap time, with domain-specific deliverables, observation triggers and frame-visual formats.
 
 ## Do NOT clone this repo directly
 
-This template is not meant to be cloned and edited by hand. Each placeholder has dependencies on others (e.g. domain count drives how many agent files exist; the hub-pivot domain gets a special marker; `/sync-factory-docs` is included only if you declare GitHub repos to track).
+This template is not meant to be cloned and edited by hand. Each placeholder has dependencies on others (e.g. domain count drives how many agent files exist; the hub-pivot domain gets a special marker; `/sync-repos` is included only if you declare GitHub repos to track).
 
 A **bootstrap prompt** (`BOOTSTRAP.md`, shipped at the root of this repo) walks you through a structured interview, generates the resolved files, and writes them to your machine.
+
+Among other questions, the bootstrap asks whether you want to track GitHub repos (i.e. snapshot their docs by SHA into `raw/`); if yes, `/sync-repos` is included. Otherwise it's removed.
 
 ## How to bootstrap
 
@@ -70,7 +72,7 @@ wiki/            # the LLM-maintained layer.
 scripts/         # utilities (transcription, frame extraction, image-diff, summary backfill, hub enrichment, ...)
 
 CLAUDE.md        # project-wide LLM instructions (architecture, conventions, workflows)
-factory-docs.config.json   # OPTIONAL: list of GitHub repos to snapshot via /sync-factory-docs
+tracked-repos.config.json  # OPTIONAL: list of GitHub repos to snapshot via /sync-repos
 ```
 
 ## Tiered loading
@@ -92,7 +94,7 @@ This lets agents (and you, via `/query`) navigate the wiki without paying the fu
 | `/save <slug>` | Archive the current synthesis into `wiki/syntheses/<slug>.md`. |
 | `/lint [domain]` | Detect contradictions, orphans, missing cross-references, gaps. |
 | `/evolve-agent <domain>` | Curated update to a domain expert's prompt, fed by accumulated `.suggestions.md`. |
-| `/sync-factory-docs [names]` *(optional)* | Snapshot GitHub repos by SHA into `raw/factory-docs/` or `raw/factory-projects/`. |
+| `/sync-repos [names]` *(optional)* | Snapshot GitHub repos by SHA into `raw/tracked-repos/` (or any `dest` declared per source). |
 
 ## Workflow loop
 
@@ -132,7 +134,7 @@ Drop them in `.claude/commands/` (slash-commands) or `scripts/` (utilities). The
 
 ### What about secrets / credentials?
 
-Don't commit them. Use the `.gitignore` (already excludes `cache/`, `raw/`, `Clippings/`). For repo-syncing via `/sync-factory-docs`, authentication relies on `gh auth login` — no tokens stored in the vault.
+Don't commit them. Use the `.gitignore` (already excludes `cache/`, `raw/`, `Clippings/`). For repo-syncing via `/sync-repos`, authentication relies on `gh auth login` — no tokens stored in the vault.
 
 ## License
 
