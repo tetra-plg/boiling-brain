@@ -164,7 +164,7 @@ def main():
     p.add_argument("--all", action="store_true",
                    help="Tous les hubs wiki/domains/*.md")
     p.add_argument("domains", nargs="*",
-                   help="Domain slugs (e.g. poker ia)")
+                   help="Domain slugs (e.g. data-science ml-ops)")
     args = p.parse_args()
 
     if args.all:

@@ -12,7 +12,7 @@ summary_l1: |
 
 ## Le problème
 
-Les agents experts (poker-expert, ia-expert, etc.) doivent **maîtriser** la base de connaissance de leur domaine — pas seulement savoir y écrire. À chaque invocation, l'agent se base essentiellement sur `wiki/domains/<d>.md` pour découvrir ce qui existe ; au-delà il doit lister/lire au cas par cas.
+Les agents experts (un par domaine déclaré, ex. `<slug>-expert`) doivent **maîtriser** la base de connaissance de leur domaine — pas seulement savoir y écrire. À chaque invocation, l'agent se base essentiellement sur `wiki/domains/<d>.md` pour découvrir ce qui existe ; au-delà il doit lister/lire au cas par cas.
 
 Deux limites apparaissent :
 

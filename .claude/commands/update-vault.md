@@ -1,6 +1,6 @@
 # /update-vault
 
-Met à jour ce vault depuis le template `tetra-plg/llm-wiki-template` en amont.
+Met à jour ce vault depuis le template `tetra-plg/boiling-brain` en amont.
 
 Utilise ce workflow pour récupérer les nouveaux scripts, slash-commands, décisions d'architecture, ou améliorations publiées dans le template après ton bootstrap.
 
@@ -9,7 +9,7 @@ Utilise ce workflow pour récupérer les nouveaux scripts, slash-commands, déci
 ### 1. Configure le remote template-upstream (une seule fois)
 
 ```bash
-git remote add template-upstream https://github.com/tetra-plg/llm-wiki-template.git 2>/dev/null \
+git remote add template-upstream https://github.com/tetra-plg/boiling-brain.git 2>/dev/null \
   && echo "remote template-upstream ajouté" \
   || echo "remote template-upstream déjà configuré"
 git fetch template-upstream

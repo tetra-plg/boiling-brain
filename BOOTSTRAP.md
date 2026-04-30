@@ -1,6 +1,6 @@
 # BOOTSTRAP.md — prompt portable de personnalisation du LLM Wiki
 
-> Tu (Claude) lis ce fichier dans un clone fraîchement récupéré de `tetra-plg/llm-wiki-template`. Ta mission : conduire l'utilisateur en interview, déduire son architecture, scaffolder son instance LLM Wiki personnalisée, puis nettoyer.
+> Tu (Claude) lis ce fichier dans un clone fraîchement récupéré de `tetra-plg/boiling-brain`. Ta mission : conduire l'utilisateur en interview, déduire son architecture, scaffolder son instance LLM Wiki personnalisée, puis nettoyer.
 >
 > Tout au long du prompt, langue d'interaction = **français**. Sois direct, pas de prose. Les `AskUserQuestion` doivent être posés tels que spécifiés.
 
@@ -49,11 +49,11 @@ Pose les questions **séquentiellement**. Stocke chaque réponse dans une variab
 
 Pose 2 questions en texte simple, séquentielles, pas via `AskUserQuestion` :
 
-1. « Quel est ton nom complet ? (ex. *Pierre Le Guern*, *Maria Dupont*) »
+1. « Quel est ton nom complet ? (ex. *Maria Dupont*, *Carlos Silva*) »
    → Stocke comme `name`. Extrais le **prénom** (1er token avant l'espace) lowercased pour calculer `vault_name = <prenom>-vault`.
    → Pour les prénoms composés avec tiret (« Jean-Marc »), splitte sur **espaces uniquement** : `vault_name = jean-marc-vault`.
 
-2. « Quel est ton rôle pro court (1 ligne) ? (ex. *VP Engineering chez Merim*, *Chercheure post-doc en génomique au CNRS*) »
+2. « Quel est ton rôle pro court (1 ligne) ? (ex. *Lead data engineer chez Acme Corp*, *Chercheure post-doc en génomique au CNRS*) »
    → Stocke comme `role`.
 
 **Parsing :**
@@ -68,7 +68,7 @@ Pose en free-text simple (pas d'`AskUserQuestion` — la liste est ouverte) :
 ```
 Liste les domaines de connaissance que tu veux maintenir.
 Format: slugs en kebab-case, séparés par des virgules.
-Exemple Pierre: poker, ia, factory, metier, tech, astro
+Exemple : data-science, ml-ops, devops, leadership, ecriture
 Conseil: regroupe plutôt que d'éclater quand c'est naturel. Pas de plafond — déclare autant de domaines que pertinent.
 ```
 
@@ -641,7 +641,7 @@ Si une étape de la Section 5 échoue (ex. un placeholder oublié dans un fichie
 2. Affiche l'erreur précise à l'utilisateur, propose un fix manuel ou un retry de l'étape.
 3. Le `.git/` original existe encore tant que 5.8 n'a pas été lancé — tu peux toujours `git diff` pour comparer à l'état initial.
 
-Une fois le `git init` neuf fait, l'historique du template est perdu. C'est volontaire (clean start, cf. arbitrage Pierre 2026-04-30).
+Une fois le `git init` neuf fait, l'historique du template est perdu. C'est volontaire (clean start — l'utilisateur démarre avec un repo vierge, sans le bruit du template).
 
 ### D. Bloc SYNC-REPOS à injecter dans CLAUDE.md
 

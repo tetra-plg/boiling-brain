@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in `llm-wiki-template`. This project is opinionated — the opinions come from real usage in a personal vault — but generic improvements are welcome.
+Thanks for your interest in BoilingBrain. This project is opinionated — the opinions come from real usage in a personal vault — but generic improvements are welcome.
 
 ## What belongs here
 
@@ -24,7 +24,7 @@ Thanks for your interest in `llm-wiki-template`. This project is opinionated —
 
 The most consequential file is `BOOTSTRAP.md`. To test a change:
 
-1. Clone the template into a scratch directory: `gh repo clone tetra-plg/llm-wiki-template ~/scratch-vault`.
+1. Clone the template into a scratch directory: `gh repo clone tetra-plg/boiling-brain ~/scratch-vault`.
 2. Open Claude Code in that directory.
 3. Run `Lis BOOTSTRAP.md et exécute le prompt.` (FR) or `Read BOOTSTRAP.md and execute the prompt.` (EN).
 4. Walk through the interview and verify the scaffolded output.

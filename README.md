@@ -1,4 +1,4 @@
-# llm-wiki-template
+# BoilingBrain
 
 ![status: experimental](https://img.shields.io/badge/status-experimental-orange) ![license: MIT](https://img.shields.io/badge/license-MIT-blue) ![claude code](https://img.shields.io/badge/built%20for-Claude%20Code-purple)
 
@@ -11,7 +11,7 @@ Early-stage. The template works end-to-end and has been used to scaffold real va
 ## Quick start
 
 ```bash
-gh repo clone tetra-plg/llm-wiki-template ~/my-vault
+gh repo clone tetra-plg/boiling-brain ~/my-vault
 cd ~/my-vault
 claude
 ```
@@ -34,6 +34,23 @@ A vault where:
 - The wiki is **always derivable from `raw/`** — no orphan knowledge, no hallucinated links.
 
 The pattern follows Karpathy's "knowledge compilation" idea: keep the source of truth compact, hash-addressed and immutable; let LLMs maintain a queryable layer on top.
+
+## How does this differ from Karpathy's LLM Wiki?
+
+Karpathy's LLM Wiki is a **concept**: notes maintained by an LLM, with the LLM filling cross-references and refactoring on demand. BoilingBrain is an **opinionated, runnable implementation** of that concept — with concrete trade-offs you can either accept or fork. Specifically :
+
+| Dimension | Karpathy's sketch | BoilingBrain |
+|---|---|---|
+| **Source of truth** | Notes in a folder, LLM rewrites freely | `raw/` is immutable, hash-addressed (`source_sha256`); the wiki layer is always derivable |
+| **Agent topology** | One LLM doing everything | One **expert agent per domain**, declared at bootstrap, with deliverable signatures (cheatsheets, syntheses, diagrams) and per-domain prompts that evolve over time via `/evolve-agent` |
+| **Idempotence** | Manual | `/ingest` is hash-based and idempotent — re-running doesn't duplicate; `--force` re-applies new agent reflexes to existing sources |
+| **Multimodal** | Text-only typically | First-class video pipeline (`/ingest-video`): download → transcribe → frame extraction (mode A declarative or mode B image-diff induction) → markdown transcription of visuals (tables, Mermaid, LaTeX) so queries don't re-OCR each time |
+| **Queries at scale** | Load and read | **Tiered loading**: every page carries `summary_l0` (≤140 chars) + `summary_l1` (~50-150 words). Agents scan a domain via TOC L0, descend to L1 then L2 only when relevant — sublinear in body size |
+| **External code/docs** | Out of scope | `/sync-repos` snapshots GitHub repos by SHA into `raw/tracked-repos/<sha>/`, immutable, never overwritten |
+| **Self-improvement** | Implicit, ad-hoc | Explicit human-curated loop: each agent appends `Evolution suggestions` per ingest, `/evolve-agent <domain>` reviews + applies the diff, archives integrated suggestions |
+| **Architectural decisions** | Mixed into notes | ADR-lite in `wiki/decisions/` with a fixed structure (Problem → Options → Decision → Why → Open questions) |
+
+Said otherwise: Karpathy says "let LLMs maintain a wiki." BoilingBrain says "*here's what the wiki layout, the agent contract, the ingest protocol and the evolution loop need to look like for that to actually scale past a few weeks of use.*" The opinions come from real usage — fork them if they don't fit.
 
 ## Why a template?
 
