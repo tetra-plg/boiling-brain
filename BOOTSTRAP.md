@@ -2,7 +2,7 @@
 
 > Tu (Claude) lis ce fichier dans un clone fraîchement récupéré de `tetra-plg/boiling-brain`. Ta mission : conduire l'utilisateur en interview, déduire son architecture, scaffolder son instance LLM Wiki personnalisée, puis nettoyer.
 >
-> Tout au long du prompt, langue d'interaction = **français**. Sois direct, pas de prose. Les `AskUserQuestion` doivent être posés tels que spécifiés.
+> **Langue** : détecte la langue de l'utilisateur depuis ses premiers messages (ou depuis la locale système si tu peux l'inférer) et conduis toute l'interview, génère tous les fichiers et rédige tous les commentaires dans cette langue. Si tu n'es pas sûr, pose la question en anglais avant de continuer. Ne maintiens pas plusieurs versions du prompt — adapte à la volée. Sois direct, pas de prose. Les `AskUserQuestion` doivent être posés tels que spécifiés.
 
 ---
 
@@ -620,7 +620,7 @@ Bon ingest.
 - `CLAUDE.md` (à la racine)
 - `wiki/index.md`, `wiki/log.md`, `wiki/overview.md`, `wiki/radar.md`
 - Pour chaque domaine : `wiki/domains/<slug>.md` + `.claude/agents/<slug>-expert.md` + `.claude/agent-memory/<slug>/MEMORY.md`
-- `wiki/decisions/bootstrap-prompt.md`, `wiki/decisions/placeholders-reference.md`, `wiki/decisions/tiered-loading-wiki.md` (déjà présent)
+- `wiki/decisions/bootstrap-prompt.md`, `wiki/decisions/placeholders-reference.md`
 - Conditionnels : `tracked-repos.config.json`, `wiki/decisions/tracked-repos-immutable-snapshots.md`, `wiki/decisions/extraction-frames-induction-runbook.md`, `wiki/decisions/ingest-video-modes-a-b-generalisation.md`
 - Structure `raw/` : `notes/`, `transcripts/`, `videos-meta/`, `frames/` (pré-existants via .gitkeep) + conditionnels (`pdfs/`, `articles/`, `docs/`)
 - Structure `cache/` : `frames/` + conditionnels (`videos/inbox/`, `audio/`, `sync-repos/`)

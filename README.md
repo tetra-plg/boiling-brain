@@ -123,7 +123,7 @@ Every wiki page carries two extra frontmatter fields:
 - `summary_l0` — single line, ≤140 chars. Telegraphic. Used as TOC entry when an agent scans an entire domain.
 - `summary_l1` — 2-5 sentences (~50-150 words). Used when the agent decides whether to load the full body.
 
-This lets agents (and you, via `/query`) navigate the wiki without paying the full body cost on every page they consider. See `wiki/decisions/tiered-loading-wiki.md` for the rationale.
+This lets agents (and you, via `/query`) navigate the wiki without paying the full body cost on every page they consider.
 
 ## Slash commands shipped
 

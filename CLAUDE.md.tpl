@@ -74,7 +74,7 @@ Chaque domaine a une page dans `wiki/domains/` qui sert de hub.
     Description multi-lignes du contenu.
   ---
   ```
-  Les champs `summary_l0` et `summary_l1` alimentent le **tiered loading** des oracles par domaine — cf. [[decisions/tiered-loading-wiki]]. Un agent peut scanner un domaine entier via les `summary_l0` (TOC L0) sans charger les bodies, puis descendre en L1 (preview) ou L2 (full body) seulement quand pertinent.
+  Les champs `summary_l0` et `summary_l1` alimentent le **tiered loading** des oracles par domaine. Un agent peut scanner un domaine entier via les `summary_l0` (TOC L0) sans charger les bodies, puis descendre en L1 (preview) ou L2 (full body) seulement quand pertinent.
 - Sources : `wiki/sources/YYYY-MM-DD-slug.md`. Inclure : résumé, key claims, entités mentionnées, concepts abordés, citations marquantes, lien vers `raw/...`.
 - Contradictions : `> [!warning] Contradiction` + explication.
 - Incertitudes : `> [!question]`.
