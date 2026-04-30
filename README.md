@@ -1,6 +1,28 @@
 # llm-wiki-template
 
+![status: experimental](https://img.shields.io/badge/status-experimental-orange) ![license: MIT](https://img.shields.io/badge/license-MIT-blue) ![claude code](https://img.shields.io/badge/built%20for-Claude%20Code-purple)
+
 > Bootstrap template for an **LLM Wiki** — a personal knowledge base curated by you and maintained by LLM agents.
+
+## Status
+
+Early-stage. The template works end-to-end and has been used to scaffold real vaults, but expect breaking changes to `BOOTSTRAP.md` and `*.tpl` files before a v1.0.0. See [CHANGELOG.md](./CHANGELOG.md) for milestones. Bug reports and generic-improvement PRs welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+## Quick start
+
+```bash
+gh repo clone tetra-plg/llm-wiki-template ~/my-vault
+cd ~/my-vault
+claude
+```
+
+Then in Claude Code:
+
+```
+Lis BOOTSTRAP.md et exécute le prompt.
+```
+
+The interview takes 5-10 minutes. At the end your vault is personalized, the template's git history is reset, and you can run your first `/ingest`. Detailed flow → [How to bootstrap](#how-to-bootstrap) below.
 
 ## What is an LLM Wiki?
 
@@ -32,21 +54,11 @@ Among other questions, the bootstrap asks whether you want to track GitHub repos
 
 ## How to bootstrap
 
-```bash
-gh repo clone tetra-plg/llm-wiki-template ~/my-vault
-cd ~/my-vault
-claude
-```
+See [Quick start](#quick-start) above for the commands. A few details on what happens during and after the bootstrap:
 
-Then in Claude Code:
-
-```
-Lis BOOTSTRAP.md et exécute le prompt.
-```
-
-The interview takes 5-10 minutes. At the end, your vault is personalized, the template repo is cleaned (fresh `.git/`, optional remote pushed via `gh repo create`), and you can run your first `/ingest`.
-
-`BOOTSTRAP.md` and `PLACEHOLDERS.md` are then moved into `wiki/decisions/` as ADR traces — you can re-read them later to understand how your vault was generated.
+- `BOOTSTRAP.md` and `PLACEHOLDERS.md` are moved into `wiki/decisions/` as ADR traces — you can re-read them later to understand how your vault was generated.
+- The template's `.git/` is replaced by a fresh history (clean start, no leftover template commits).
+- An optional GitHub remote is created via `gh repo create` if you confirm during the interview.
 
 If you really want to clone manually and skip the bootstrap, read every `*.tpl` file, fill placeholders by hand, and rename to drop `.tpl`. You will probably forget the cross-file consistency checks the bootstrap prompt enforces.
 
