@@ -71,13 +71,15 @@ This repo is the **scaffolding**, not a usable instance. It contains:
 - Templated files (`*.tpl`) with `{{placeholder}}` markers that need to be filled with **your** name, role, domains, and projects.
 - A unified `domain-expert.md.tpl` that gets instantiated **once per domain** you declare at bootstrap time, with domain-specific deliverables, observation triggers and frame-visual formats.
 
-## Do NOT clone this repo directly
+## Do NOT push on this repo directly
 
 This template is not meant to be cloned and edited by hand. Each placeholder has dependencies on others (e.g. domain count drives how many agent files exist; the hub-pivot domain gets a special marker; `/sync-repos` is included only if you declare GitHub repos to track).
 
 A **bootstrap prompt** (`BOOTSTRAP.md`, shipped at the root of this repo) walks you through a structured interview, generates the resolved files, and writes them to your machine.
 
 Among other questions, the bootstrap asks whether you want to track GitHub repos (i.e. snapshot their docs by SHA into `raw/`); if yes, `/sync-repos` is included. Otherwise it's removed.
+
+At the end of the interview, the `.git` will be removed or replace by your own git remote.
 
 ## How to bootstrap
 
