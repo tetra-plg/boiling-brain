@@ -2,7 +2,7 @@
 
 All notable changes to this template are documented here. Format inspired by [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-The template is in **early-stage** state — versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` or `*.tpl` are expected before a v1.0.0.
+Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` or `*.tpl` are flagged in the release notes.
 
 ---
 
@@ -10,7 +10,24 @@ The template is in **early-stage** state — versions are milestones, not strict
 
 Nothing yet.
 
-## [v0.2.0] — 2026-04-30 (Phase 5c — feedback réel)
+## [v1.0.0] — 2026-04-30 (first public release)
+
+### Repository
+
+- Renamed from `tetra-plg/llm-wiki-template` to `tetra-plg/boiling-brain` and made public.
+- All references in `BOOTSTRAP.md`, `README.md`, `CONTRIBUTING.md`, and `/update-vault` updated.
+- All examples in `BOOTSTRAP.md` anonymized (Maria Dupont / Carlos Silva / Acme Corp / `data-science, ml-ops, devops, leadership, ecriture`).
+
+### Added
+
+- README section "How does this differ from Karpathy's LLM Wiki?" — comparative table covering source-of-truth, agent topology, idempotence, multimodal, queries, external code, self-improvement, decisions.
+- `RELEASE_NOTES.md` — body for `gh release create` plus maintainer instructions.
+
+### Bundled from prior phases (now first-shipped publicly)
+
+Everything from the v0.2.0 phase below is part of v1.0.0. Listed for clarity.
+
+## [v0.2.0] — 2026-04-30 (Phase 5c — feedback réel, internal)
 
 ### Added
 

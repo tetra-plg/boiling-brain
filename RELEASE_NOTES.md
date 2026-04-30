@@ -4,11 +4,11 @@
 
 ---
 
-## v0.2.0 — First public release
+## v1.0.0 — First public release
 
 **BoilingBrain** is an opinionated, runnable template for an **LLM Wiki**: a personal knowledge base where you curate the sources and a team of domain expert agents maintain the wiki layer on top. Built for Claude Code, written to be cloned, interviewed, and personalized in 5–10 minutes.
 
-This is the first public release. The template has been used to scaffold real vaults during development (Phases 0 → 5c), but expect breaking changes to `BOOTSTRAP.md` and `*.tpl` files before v1.0.0.
+This is the first public release. The template has been used to scaffold real vaults during development (Phases 0 → 5c) and is considered stable for the documented flow. Future releases will iterate on the bootstrap interview, agent prompts, and domain-deduction heuristics based on community feedback.
 
 ### Why you might care
 
@@ -74,17 +74,17 @@ When publishing :
 
 ```bash
 # tag the current main
-git -C ~/Workspace/llm-wiki-template tag -a v0.2.0 -m "v0.2.0 — first public release"
-git -C ~/Workspace/llm-wiki-template push origin v0.2.0
+git -C ~/Workspace/llm-wiki-template tag -a v1.0.0 -m "v1.0.0 — first public release"
+git -C ~/Workspace/llm-wiki-template push origin v1.0.0
 
 # make the repo public
 gh repo edit tetra-plg/boiling-brain --visibility public --accept-visibility-change-consequences
 
 # create the release using the body above (everything before the horizontal rule)
-gh release create v0.2.0 \
+gh release create v1.0.0 \
   --repo tetra-plg/boiling-brain \
-  --title "v0.2.0 — First public release" \
-  --notes-file <(sed -n '/^## v0.2.0/,/^---$/p' RELEASE_NOTES.md | sed '$d')
+  --title "v1.0.0 — First public release" \
+  --notes-file <(sed -n '/^## v1.0.0/,/^---$/p' RELEASE_NOTES.md | sed '$d')
 ```
 
 Sanity-check before going public :
