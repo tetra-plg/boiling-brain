@@ -8,7 +8,9 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 
 ## [Unreleased]
 
-Nothing yet.
+### Removed
+
+- **`RELEASE_NOTES.md`** : fichier supprimé. Il dupliquait le `CHANGELOG.md` et le body des releases GitHub, ce qui créait du drift à chaque release. La source unique pour les notes de release est désormais `CHANGELOG.md`. Le body GitHub est rédigé directement via `gh release create --notes-file <(extrait du CHANGELOG)` ou édité depuis l'interface.
 
 ## [v1.0.1] — hotfix
 

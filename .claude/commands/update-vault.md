@@ -50,7 +50,6 @@ git diff --name-only ${BOOTSTRAP_SHA} template-upstream/main \
   | grep -v '\.tpl$' \
   | grep -v '^BOOTSTRAP\.md$' \
   | grep -v '^PLACEHOLDERS\.md$' \
-  | grep -v '^RELEASE_NOTES\.md$' \
   | grep -v '^CONTRIBUTING\.md$' \
   | while read f; do [ -e "$f" ] && echo "$f"; done
 ```
@@ -84,7 +83,7 @@ git commit -m "chore: update-vault depuis template-upstream ($(date +%Y-%m-%d))"
 ## Notes
 
 **Fichiers jamais mis à jour (consommés au bootstrap) :**
-`*.tpl`, `BOOTSTRAP.md`, `PLACEHOLDERS.md`, `RELEASE_NOTES.md`, `CONTRIBUTING.md`.
+`*.tpl`, `BOOTSTRAP.md`, `PLACEHOLDERS.md`, `CONTRIBUTING.md`.
 Ces fichiers ont été utilisés pour générer ton vault et n'existent plus (ou ont été déplacés). Ils sont exclus automatiquement.
 
 **Fichiers propres à ton instance (jamais dans le template) :**
