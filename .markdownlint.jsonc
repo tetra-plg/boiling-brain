@@ -1,0 +1,10 @@
+{
+  // Sensible defaults for a documentation-heavy repo.
+  // See https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+  "default": true,
+  "MD013": false,           // line length — disabled, prose can be long
+  "MD024": { "siblings_only": true }, // duplicate headings ok if not siblings
+  "MD033": false,           // allow inline HTML (used in templates)
+  "MD041": false,           // first line doesn't have to be a top-level heading
+  "MD046": { "style": "fenced" }
+}
