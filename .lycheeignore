@@ -1,0 +1,4 @@
+# Files generated at bootstrap time inside a vault — not present in the template repo.
+# Keep this list minimal and document each entry.
+file:.*/CLAUDE\.md$
+file:.*/tracked-repos\.config\.json$
