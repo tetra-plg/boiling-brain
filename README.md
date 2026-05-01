@@ -137,6 +137,21 @@ This lets agents (and you, via `/query`) navigate the wiki without paying the fu
 | `/evolve-agent <domain>` | Curated update to a domain expert's prompt, fed by accumulated `.suggestions.md`. |
 | `/sync-repos [names]` *(optional)* | Snapshot GitHub repos by SHA into `raw/tracked-repos/` (or any `dest` declared per source). |
 | `/update-vault` | Cherry-pick improvements from the upstream template into your vault instance. |
+| `/compress-bb` | Save the current session journal to `raw/notes/sessions/` for later ingestion. |
+
+## MCP server (optional, v1.1+)
+
+Run `bash scripts/setup-mcp.sh` once after bootstrap to register the `boiling-brain-wiki` MCP server in `~/.claude/settings.json`. Once active, Claude Code can query your wiki from **any project** — not just inside the vault directory.
+
+Five tools are exposed:
+
+| Tool | Purpose |
+|---|---|
+| `scan_domain(domain)` | L0 index of a domain (one-line summaries, up to 80 pages) |
+| `preview_page(page_path)` | Frontmatter + summary_l1 of a single page |
+| `read_page(page_path)` | Full body of a page |
+| `search_wiki(query)` | Full-text search across `wiki/` |
+| `drop_to_raw(subfolder, filename, content)` | Write a file to `raw/` and signal it for ingestion |
 
 ## Workflow loop
 
