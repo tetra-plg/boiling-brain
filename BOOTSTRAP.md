@@ -542,6 +542,10 @@ Crée aussi `.obsidian/app.json` minimal :
 ### 5.10 Reset git + commit initial
 
 ```bash
+# Enregistrer le SHA du template avant de supprimer son historique.
+# Utilisé par /update-vault pour savoir à partir d'où lister les nouveaux commits.
+git rev-parse HEAD > .template-bootstrap-sha
+
 rm -rf .git/
 git init
 git add -A
