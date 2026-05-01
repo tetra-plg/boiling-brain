@@ -6,11 +6,48 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 
 ---
 
-## [Unreleased]
+## [Unreleased] — v1.0.2
+
+### Added
+
+- **`.claude/rules/`** : trois conventions transverses formalisées (frontmatter, pages-wiki, raw-vs-cache) avec frontmatter `paths:` qui permet l'auto-chargement par Claude Code quand un agent travaille sur un path matchant. Pattern documenté par Anthropic (Boris Cherny, 24 mars 2026). Propagé par `/update-vault` aux vaults existants.
+- **`.claude/template-version`** : fichier de versionning explicite du template (format `template-version: X.Y.Z` + `template-sha:` + `last-updated:`). Source de vérité unique pour la machine de migration de `/update-vault`. Créé au bootstrap (BOOTSTRAP 5.10), mis à jour à chaque `/update-vault` réussi.
+- **`scripts/migrations/`** : nouveau dossier pour les migrations breaking entre versions du template. Pattern `v<X.Y.Z>-<description>.md` (slash-commands Claude Code interactifs). Premier exemple : `v1.0.2-claude-md-slim.md`. Invoqués par `/update-vault` dans la chaîne entre version locale et cible.
+
+### Changed
+
+- **`CLAUDE.md.tpl` réduit à 111 lignes** (depuis 268, soit −59 %), conformément à la recommandation Anthropic « < 200 lignes » pour préserver l'adhérence aux instructions. Les sections Workflows détaillés (~143 lignes) sont remplacées par une table compacte qui pointe vers `.claude/commands/*.md`. La section Conventions (22 lignes) devient un pointeur vers `.claude/rules/`. Les sections instance-specific (Domaines, Agents experts, Architecture) restent inchangées.
+- **`/update-vault` refactoré en machine de migration versionnée** : lit `.claude/template-version` (avec fallback rétrocompat sur `.template-bootstrap-sha` pour v1.0.1 et sur le tag `v1.0.0` pour v1.0.0), compare avec la version cible upstream, propage les fichiers nouveaux (incluant `.claude/rules/**` et `scripts/migrations/**`), exécute la chaîne de migrations applicables, bumpe `.claude/template-version` à la fin si toutes les migrations sont acceptées.
+- **`BOOTSTRAP.md` section 5.10** : enrichit `.claude/template-version` avec le SHA et la date du bootstrap (en plus de `.template-bootstrap-sha` historique conservé pour rétrocompat).
+
+### Fixed
+
+- **Trou de propagation des conventions vers les vaults existants** : avant v1.0.2, toute évolution de convention (frontmatter, immutabilité `raw/`, etc.) vivait dans `CLAUDE.md.tpl` consommé au bootstrap, sans mécanisme de propagation. Cas concret : 18 pages du vault de référence ont eu `source_sha256` rempli avec un placeholder par les agents experts (batch 2026-04-29) — non corrigeable sans patch manuel par vault. Avec v1.0.2, la règle « `source_sha256` toujours via `shasum -a 256` » vit dans `.claude/rules/frontmatter.md` et est propagée automatiquement par `/update-vault`.
 
 ### Removed
 
 - **`RELEASE_NOTES.md`** : fichier supprimé. Il dupliquait le `CHANGELOG.md` et le body des releases GitHub, ce qui créait du drift à chaque release. La source unique pour les notes de release est désormais `CHANGELOG.md`. Le body GitHub est rédigé directement via `gh release create --notes-file <(extrait du CHANGELOG)` ou édité depuis l'interface.
+
+### Migration depuis v1.0.x
+
+La migration vers v1.0.2 est **gérée par `/update-vault`** :
+
+```bash
+# Dans ton vault bootstrappé :
+/update-vault
+```
+
+`/update-vault` détecte automatiquement la version locale (via `.claude/template-version`, ou via fallback rétrocompat sur `.template-bootstrap-sha` pour v1.0.1, ou tag `v1.0.0` pour v1.0.0), propage les fichiers nouveaux (`.claude/rules/`, `scripts/migrations/`, `.claude/template-version`), puis invoque la migration `v1.0.2-claude-md-slim` qui :
+
+1. Lit le `CLAUDE.md` actuel.
+2. Identifie les sections à compacter (Workflows détaillés dupliqués, Conventions verbeuses).
+3. **Préserve les customizations utilisateur** (sections ajoutées hors template).
+4. Propose un diff via `AskUserQuestion` (3 options : appliquer / éditer manuellement / skip).
+5. Si appliqué : commit dédié `chore: migrate CLAUDE.md to v1.0.2 slim structure`.
+
+`CLAUDE.md` n'est jamais réécrit silencieusement — il est user-owned.
+
+Si tu préfères migrer manuellement, lis [scripts/migrations/v1.0.2-claude-md-slim.md](scripts/migrations/v1.0.2-claude-md-slim.md) qui décrit exactement quoi modifier.
 
 ## [v1.0.1] — hotfix
 

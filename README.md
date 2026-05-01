@@ -98,6 +98,8 @@ If you really want to clone manually and skip the bootstrap, read every `*.tpl` 
   agents/        # one <domain>-expert.md per domain you declared
   agent-memory/  # one MEMORY.md per agent (state of the domain)
   commands/      # slash commands (generic, no per-instance customization)
+  rules/         # transverse conventions auto-loaded by Claude Code via `paths` frontmatter
+  template-version  # which template version this vault is aligned with (used by /update-vault)
 
 raw/             # IMMUTABLE source files. Never modified after first write.
 cache/           # transient artifacts (downloaded videos, audio, frames). gitignored.
@@ -112,9 +114,21 @@ wiki/            # the LLM-maintained layer.
 
 scripts/         # utilities (transcription, frame extraction, image-diff, summary backfill, hub enrichment, ...)
 
-CLAUDE.md        # project-wide LLM instructions (architecture, conventions, workflows)
+CLAUDE.md        # project-wide LLM instructions (slim ≤200 lines, points to .claude/rules/ and .claude/commands/)
 tracked-repos.config.json  # OPTIONAL: list of GitHub repos to snapshot via /sync-repos
 ```
+
+## `.claude/rules/` — transverse conventions
+
+Conventions that apply across the wiki (frontmatter format, slug rules, raw immutability) live in `.claude/rules/*.md`. Each rule has a `paths:` field in its frontmatter — Claude Code auto-loads the rule when the current working file matches one of those paths. This mirrors the [Anthropic-recommended pattern](https://www.anthropic.com/) (Boris Cherny, "CLAUDE.md best practices", 24 March 2026).
+
+Three rules ship by default:
+
+- `frontmatter.md` (paths: `wiki/sources/**`, `wiki/concepts/**`, `wiki/syntheses/**`, `wiki/decisions/**`, `wiki/entities/**`, `wiki/cheatsheets/**`, `wiki/diagrams/**`, `wiki/domains/**`) — frontmatter YAML rules, including the hard rule that `source_sha256` must always be computed via `shasum -a 256 <file>` (never a placeholder).
+- `pages-wiki.md` (paths: `wiki/**`) — kebab-case slugs, `[[wikilinks]]`, `[!warning]` / `[!question]` callouts, page sizing.
+- `raw-vs-cache.md` (paths: `raw/**`, `cache/**`) — strict immutability of `raw/`, transient nature of `cache/`.
+
+`.claude/rules/` is **upstream-tracked** — `/update-vault` propagates new and updated rules to existing vaults automatically.
 
 ## Tiered loading
 
