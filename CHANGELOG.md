@@ -20,6 +20,20 @@ Nothing yet.
 
 - **`/update-vault`** : remplace `cherry-pick` par une approche fichier par fichier (`git show template-upstream/main:<fichier> > <fichier>`), indépendante de l'historique git. Exclut automatiquement les fichiers consommés au bootstrap (`*.tpl`, `BOOTSTRAP.md`, `PLACEHOLDERS.md`, etc.).
 
+### Changed
+
+- **`BOOTSTRAP.md` language-adaptive** : le bootstrap n'est plus hardcodé en français. Détection automatique de la langue via les premiers messages utilisateur, génération de tous les fichiers (`CLAUDE.md`, `wiki/index.md`, `wiki/log.md`, agents, hubs…) dans la langue détectée.
+
+### Removed
+
+- **`wiki/decisions/tiered-loading-wiki.md`** : la décision a été remplacée par l'implémentation directe dans `query.md` et les frontmatters `summary_l0` / `summary_l1`. La décision n'avait plus lieu d'exister en tant que document séparé.
+
+### Documentation
+
+- **README — section Prerequisites** : Claude Code, Obsidian (avec lien vers la graph view), gh CLI listés explicitement.
+- **README — FAQ Web Clipper** : workflow Obsidian Web Clipper → `raw/clippings/` → `/ingest` documenté.
+- **README — usage guidelines** : précisions sur la manière dont le repo est destiné à être utilisé (template, pas projet à cloner).
+
 ### Migration depuis v1.0.0
 
 **Option A — automatique (recommandée) :**
