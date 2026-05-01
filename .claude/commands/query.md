@@ -16,8 +16,11 @@ Lire le moins possible pour répondre avec précision. Descendre les niveaux dan
 ## Étapes
 
 1. Identifier le ou les domaines de la question (poker, ia, factory, metier, tech, astro, ou transversal).
-2. Lire `wiki/index.md` → extraire la liste des pages candidates.
-3. **L0** : lire les `summary_l0` des candidates (en-têtes frontmatter uniquement si les pages sont longues).
+2. Construire la liste des pages candidates :
+   - Par domaine identifié : `grep -rl "domains:.*<domaine>" wiki/`
+   - Si plusieurs domaines : lancer un grep par domaine et dédupliquer (`sort -u`)
+   - Ne pas dépendre de `wiki/index.md` : il peut être incomplet.
+3. **L0** : lire les `summary_l0` des candidates (frontmatter uniquement).
    - Si la réponse est claire depuis L0 → répondre directement avec citations.
    - Sinon : sélectionner les pages nécessitant un approfondissement.
 4. **L1** : lire le `summary_l1` des pages sélectionnées. Si suffisant → répondre. Sinon → L2.
