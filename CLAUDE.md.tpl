@@ -88,12 +88,22 @@ Les workflows détaillés vivent dans `.claude/commands/`. Tableau récapitulati
 | `/evolve-agent <domain>` | Évolution curée du prompt d'un agent depuis ses suggestions accumulées |
 | `/update-vault` | Récupère les améliorations upstream du template (machine de migration versionnée) |
 | `/create-issue [type]` | Crée une issue sanitizée sur le repo template upstream à partir du contexte courant |
+| `/compress-bb [slug]` | Sauvegarde le journal de la session courante dans `raw/notes/sessions/YYYY-MM-DD-<slug>.md` |
 
 Pour le radar : « montre le radar » / « qu'est-ce qu'il y a à faire aujourd'hui » → lecture de `wiki/radar.md` + extraction des suggestions accumulées des agents (≥2 occurrences ou jugées structurantes). **Si une entrée du radar concerne l'environnement template** (bug ou manque touchant `scripts/`, `.claude/commands/`, `BOOTSTRAP.md`, ou tout fichier propagé par `/update-vault`), proposer à l'utilisateur de la remonter via `/create-issue <type>` — sans créer l'issue tout seul, juste suggérer la commande.
 
 ## Décisions d'architecture
 
 Les choix structurants sur le vault (workflows, conventions, outillage — pas les domaines de connaissance) vont dans `wiki/decisions/` au format ADR-lite : Problème → Options écartées → Décision retenue → Pourquoi → Questions ouvertes. Pas de numérotation, slug descriptif. Si une décision est révisée, créer une nouvelle qui cite et remplace l'ancienne.
+
+## Démarrage de session (signaux `cache/`)
+
+Au démarrage de chaque session, vérifier les signaux laissés dans `cache/` :
+
+- **`cache/.pending-ingest`** : un ou plusieurs chemins en attente d'ingestion (déposés via le MCP `drop_to_raw` ou par un autre vault). Proposer `/ingest <chemin>` pour chaque entrée. Ne pas supprimer le fichier — attendre la confirmation utilisateur.
+- **`cache/.session-pending`** : la session précédente avait des changements non journalisés (commits + fichiers modifiés détectés par le hook `Stop`). Proposer `/compress-bb <slug>` pour archiver le journal dans `raw/notes/sessions/`. Supprimer le fichier après proposition.
+
+Ces vérifications sont silencieuses si les fichiers sont absents.
 
 ## Principes d'écriture
 
