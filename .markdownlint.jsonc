@@ -1,0 +1,18 @@
+{
+  // Pragmatic config for a docs/wiki repo with many existing files.
+  // Catches structural issues (broken refs, hard tabs, duplicate titles)
+  // but ignores cosmetic line-level rules.
+  // See https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+  "default": true,
+  "MD013": false,          // line length
+  "MD024": { "siblings_only": true }, // duplicate headings ok if not siblings
+  "MD031": false,          // blanks around fences
+  "MD032": false,          // blanks around lists
+  "MD033": false,          // inline HTML (used in templates)
+  "MD034": false,          // bare URLs
+  "MD036": false,          // emphasis-as-heading
+  "MD038": false,          // spaces inside code spans (false positives on indented code spans)
+  "MD040": false,          // fenced-code-language (many docs blocks have no language)
+  "MD041": false,          // first line top-level heading
+  "MD046": { "style": "fenced" }
+}
