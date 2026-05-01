@@ -24,6 +24,18 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 
 - **Trou de propagation des conventions vers les vaults existants** : avant v1.0.2, toute évolution de convention (frontmatter, immutabilité `raw/`, etc.) vivait dans `CLAUDE.md.tpl` consommé au bootstrap, sans mécanisme de propagation. Cas concret : 18 pages du vault de référence ont eu `source_sha256` rempli avec un placeholder par les agents experts (batch 2026-04-29) — non corrigeable sans patch manuel par vault. Avec v1.0.2, la règle « `source_sha256` toujours via `shasum -a 256` » vit dans `.claude/rules/frontmatter.md` et est propagée automatiquement par `/update-vault`.
 
+### Fixed
+
+- **`scripts/scan-raw.sh` : 3 bugs de parsing causant des faux `NEW`** ([#3](https://github.com/tetra-plg/boiling-brain/issues/3)).
+  - **Bug 1 (apostrophes mangées)** : `tr -d '"'"'` aux lignes 79, 106, 126 supprimait à la fois les guillemets YAML et les apostrophes des chemins. Tout `source_path` contenant une apostrophe (ex: `2026-01-30-claude-code-obsidian-cpr.md` qui mentionnait `BotFather to 'Hello'`) était mal indexé. Remplacé par `sed 's/^"//; s/"$//'` qui ne touche qu'aux guillemets en début/fin de chaîne.
+  - **Bug 2 (parenthèses cassent les clés d'array assoc bash)** : un `source_path` ou `covered_paths` contenant `()` ou d'autres caractères spéciaux shell (`*`, `[`, `?`) cassait l'indexation. Neutralisé par une fonction `_safe_key` qui encode les clés via `printf '%q'` à l'écriture **et** au lookup, dans `path_to_slug`, `dir_to_slug` et `meta_to_slug`. Élimine toute la classe de bugs de quoting bash sans dépendance externe.
+  - **Bug 3 (espaces multiples)** : couvert par le même `printf '%q'` — les espaces sont maintenant préservés exactement.
+  - Tableau parallèle `indexed_paths` ajouté pour permettre l'itération sur les paths originaux (les clés encodées de `path_to_slug` ne sont pas réversibles).
+
+### Added
+
+- **`scripts/test-scan-raw.sh`** : fixture de test reproduisant les 3 cas (apostrophe, parenthèses, espaces multiples) + un cas combiné (apostrophe + parenthèses). Asserte que tous reportent `SKIP` au scan. Exit code 1 si régression.
+
 ### Removed
 
 - **`RELEASE_NOTES.md`** : fichier supprimé. Il dupliquait le `CHANGELOG.md` et le body des releases GitHub, ce qui créait du drift à chaque release. La source unique pour les notes de release est désormais `CHANGELOG.md`. Le body GitHub est rédigé directement via `gh release create --notes-file <(extrait du CHANGELOG)` ou édité depuis l'interface.

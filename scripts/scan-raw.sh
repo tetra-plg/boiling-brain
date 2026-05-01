@@ -57,11 +57,20 @@ if [ ${#files[@]} -eq 0 ]; then
   exit 0
 fi
 
+# --- Encodage des clés d'array associatif ---
+# Les arrays associatifs bash mishandlent les caractères spéciaux dans les clés
+# (parenthèses, globs, espaces multiples, etc.). printf %q neutralise toute
+# la classe de bugs de quoting en encodant la clé une fois pour toutes.
+_safe_key() {
+  printf '%q' "$1"
+}
+
 # --- Construction de l'index : raw_path → (slug, sha256) ---
 # Charge une fois tous les wiki/sources pour éviter O(N×M) grep
 
-declare -A path_to_slug   # raw_path (ou raw_dir/) → slug
-declare -A path_to_sha    # raw_path → source_sha256 stocké dans la page
+declare -A path_to_slug   # safe_key(raw_path) → slug
+declare -A path_to_sha    # safe_key(raw_path) → source_sha256 stocké dans la page
+declare -a indexed_paths  # paths originaux (pour itération — les clés encodées de path_to_slug ne le permettent pas)
 
 while IFS= read -r source_file; do
   slug=$(basename "$source_file" .md)
@@ -76,10 +85,11 @@ while IFS= read -r source_file; do
   while IFS= read -r line; do
     # Début source_path
     if echo "$line" | grep -q "^source_path:"; then
-      val=$(echo "$line" | sed 's/^source_path:[[:space:]]*//' | tr -d '"'"'")
+      val=$(echo "$line" | sed 's/^source_path:[[:space:]]*//' | sed 's/^"//; s/"$//')
       if [ -n "$val" ]; then
         # Scalaire
-        path_to_slug["$val"]="$slug"
+        path_to_slug["$(_safe_key "$val")"]="$slug"
+        indexed_paths+=("$val")
         [ -z "$first_sp" ] && first_sp="$val"
         in_sp=0
       else
@@ -103,9 +113,10 @@ while IFS= read -r source_file; do
         in_covered=0
         continue
       fi
-      item=$(echo "$line" | sed 's/^[[:space:]]*-[[:space:]]*//' | tr -d '"'"'" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+      item=$(echo "$line" | sed 's/^[[:space:]]*-[[:space:]]*//' | sed 's/^"//; s/"$//' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
       if [ -n "$item" ]; then
-        path_to_slug["$item"]="$slug"
+        path_to_slug["$(_safe_key "$item")"]="$slug"
+        indexed_paths+=("$item")
         [ $in_sp -eq 1 ] && [ -z "$first_sp" ] && first_sp="$item"
       fi
     fi
@@ -123,8 +134,11 @@ while IFS= read -r source_file; do
         in_sources=0
         continue
       fi
-      item=$(echo "$line" | sed 's/^[[:space:]]*-[[:space:]]*//' | tr -d '"'"'" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-      [ -n "$item" ] && path_to_slug["$item"]="$slug"
+      item=$(echo "$line" | sed 's/^[[:space:]]*-[[:space:]]*//' | sed 's/^"//; s/"$//' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+      if [ -n "$item" ]; then
+        path_to_slug["$(_safe_key "$item")"]="$slug"
+        indexed_paths+=("$item")
+      fi
     fi
   done < "$source_file"
 
@@ -133,7 +147,7 @@ while IFS= read -r source_file; do
     sha_line=$(grep "^source_sha256:" "$source_file" 2>/dev/null | head -1 | sed 's/^source_sha256:[[:space:]]*//')
     # Ignore si c'est aussi une liste YAML (commence par vide → valeur vide)
     if [ -n "$sha_line" ] && [[ "$sha_line" != -* ]]; then
-      path_to_sha["$first_sp"]="$sha_line"
+      path_to_sha["$(_safe_key "$first_sp")"]="$sha_line"
     fi
   fi
 
@@ -143,17 +157,19 @@ done < <(find "$WIKI_SOURCES" -name "*.md" -type f)
 # Pour chaque source_path indexé, on note son répertoire parent → slug
 # Cela permet de SKIP un fichier si un autre fichier du même dossier est déjà couvert.
 
-declare -A dir_to_slug   # raw/foo/bar/ → slug (premier slug rencontré pour ce dossier)
-declare -A meta_to_slug  # raw/videos-meta/SLUG.meta.md → slug via transcript
+declare -A dir_to_slug   # safe_key(raw/foo/bar/) → slug (premier slug rencontré pour ce dossier)
+declare -A meta_to_slug  # safe_key(raw/videos-meta/SLUG.meta.md) → slug via transcript
 
-for indexed_path in "${!path_to_slug[@]}"; do
+for indexed_path in "${indexed_paths[@]}"; do
   [ -z "$indexed_path" ] && continue
+  ip_key=$(_safe_key "$indexed_path")
 
   # Index des répertoires implicites (≥4 niveaux de profondeur requis)
   idir="${indexed_path%/*}/"
+  idir_key=$(_safe_key "$idir")
   depth=$(printf '%s' "$idir" | tr -cd '/' | wc -c | tr -d ' ')
-  if [ "$depth" -ge 4 ] && [ -z "${dir_to_slug[$idir]+_}" ]; then
-    dir_to_slug["$idir"]="${path_to_slug[$indexed_path]}"
+  if [ "$depth" -ge 4 ] && [ -z "${dir_to_slug[$idir_key]+_}" ]; then
+    dir_to_slug["$idir_key"]="${path_to_slug[$ip_key]}"
   fi
 
   # Index videos-meta → transcript
@@ -161,7 +177,8 @@ for indexed_path in "${!path_to_slug[@]}"; do
     filename="${indexed_path##*/}"
     filename="${filename%.md}"
     meta_path="raw/videos-meta/${filename}.meta.md"
-    [ -z "${meta_to_slug[$meta_path]+_}" ] && meta_to_slug["$meta_path"]="${path_to_slug[$indexed_path]}"
+    meta_key=$(_safe_key "$meta_path")
+    [ -z "${meta_to_slug[$meta_key]+_}" ] && meta_to_slug["$meta_key"]="${path_to_slug[$ip_key]}"
   fi
 done
 
@@ -170,11 +187,12 @@ done
 for abs_path in "${files[@]}"; do
   # Chemin relatif depuis la racine du vault
   rel="${abs_path#$VAULT_ROOT/}"
+  rel_key=$(_safe_key "$rel")
 
   # 1. Match exact sur source_path ou covered_paths
-  if [ -n "${path_to_slug[$rel]+_}" ]; then
-    slug="${path_to_slug[$rel]}"
-    stored_sha="${path_to_sha[$rel]:-}"
+  if [ -n "${path_to_slug[$rel_key]+_}" ]; then
+    slug="${path_to_slug[$rel_key]}"
+    stored_sha="${path_to_sha[$rel_key]:-}"
     if [ -n "$stored_sha" ]; then
       current_sha=$(sha256sum "$abs_path" 2>/dev/null | cut -d' ' -f1)
       if [ "$current_sha" != "$stored_sha" ]; then
@@ -193,8 +211,9 @@ for abs_path in "${files[@]}"; do
     parent=$(dirname "$parent")
     [ "$parent" = "." ] || [ "$parent" = "raw" ] || [ "$parent" = "" ] && break
     parent_slash="${parent}/"
-    if [ -n "${path_to_slug[$parent_slash]+_}" ]; then
-      covered="${path_to_slug[$parent_slash]}"
+    parent_key=$(_safe_key "$parent_slash")
+    if [ -n "${path_to_slug[$parent_key]+_}" ]; then
+      covered="${path_to_slug[$parent_key]}"
       break
     fi
   done
@@ -206,14 +225,15 @@ for abs_path in "${files[@]}"; do
 
   # 3. Match implicite : même répertoire qu'un fichier déjà indexé (≥4 niveaux de profondeur)
   rel_dir="$(dirname "$rel")/"
-  if [ -n "${dir_to_slug[$rel_dir]+_}" ]; then
-    echo "SKIP     $rel  (covered-by-dir-implicit: ${dir_to_slug[$rel_dir]})"
+  rel_dir_key=$(_safe_key "$rel_dir")
+  if [ -n "${dir_to_slug[$rel_dir_key]+_}" ]; then
+    echo "SKIP     $rel  (covered-by-dir-implicit: ${dir_to_slug[$rel_dir_key]})"
     continue
   fi
 
   # 4. Correspondance videos-meta → transcript déjà ingéré
-  if [ -n "${meta_to_slug[$rel]+_}" ]; then
-    echo "SKIP     $rel  (covered-by-transcript: ${meta_to_slug[$rel]})"
+  if [ -n "${meta_to_slug[$rel_key]+_}" ]; then
+    echo "SKIP     $rel  (covered-by-transcript: ${meta_to_slug[$rel_key]})"
     continue
   fi
 
