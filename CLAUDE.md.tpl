@@ -227,8 +227,8 @@ Quand l'utilisateur demande le radar ou la liste des choses à faire :
 4. Ne pas journaliser dans `log.md` (lecture seule).
 
 ### QUERY (`/query <question>`)
-1. Lire `index.md` pour trouver les pages pertinentes.
-2. Lire ces pages, suivre les `[[wikilinks]]` nécessaires.
+1. Identifier les pages candidates : `grep -rl "domains:.*<domaine>" wiki/` par domaine concerné, puis dédupliquer (`sort -u`) si la question est cross-domaine. Ne pas se limiter à `index.md` — il peut être incomplet.
+2. Lire ces pages (tiered loading L0→L1→L2), suivre les `[[wikilinks]]` nécessaires.
 3. Synthétiser avec citations `[[page]]`.
 4. Si substantiel, proposer de filer dans `wiki/syntheses/<slug>.md`.
 5. `log.md` : `## [YYYY-MM-DD] query | <question courte>`.
