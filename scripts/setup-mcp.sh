@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# setup-mcp.sh — Configure le serveur MCP boiling-brain-wiki dans ~/.claude/settings.json
-# et ajoute les instructions d'invocation dans ~/.claude/CLAUDE.md.
+# setup-mcp.sh — Configure le serveur MCP boiling-brain-wiki et les hooks Claude Code.
+#   - Merge l'entrée MCP dans ~/.claude/settings.json
+#   - Ajoute le hook Stop (check-session-activity.sh) dans settings.json
+#   - Ajoute les instructions d'invocation dans ~/.claude/CLAUDE.md
 #
 # Usage : bash scripts/setup-mcp.sh [--vault-path /chemin/vers/vault]
 #
@@ -71,6 +73,27 @@ settings["mcpServers"]["boiling-brain-wiki"] = {
     "scope": "user"
 }
 
+# Hook Stop : détecte l'activité de session
+hook_script = f"bash {vault_path}/scripts/check-session-activity.sh"
+settings.setdefault("hooks", {})
+settings["hooks"].setdefault("Stop", [])
+
+# Idempotent : n'ajoute pas si déjà présent
+existing_stop = settings["hooks"]["Stop"]
+already_registered = any(
+    (isinstance(h, dict) and hook_script in str(h.get("command", ""))) or
+    (isinstance(h, str) and hook_script in h)
+    for h in existing_stop
+)
+if not already_registered:
+    existing_stop.append({
+        "matcher": "",
+        "hooks": [{"type": "command", "command": hook_script}]
+    })
+    print("✅ Hook Stop enregistré.")
+else:
+    print("✅ Hook Stop déjà enregistré.")
+
 settings_path.write_text(json.dumps(settings, indent=2, ensure_ascii=False))
 print(f"✅ {settings_path} mis à jour.")
 PYEOF
@@ -102,7 +125,9 @@ else
   echo "✅ $CLAUDE_MD mis à jour."
 fi
 
+chmod +x "$VAULT_PATH/scripts/check-session-activity.sh"
+
 echo ""
 echo "=== Configuration terminée ==="
-echo "Redémarre Claude Code pour charger le serveur MCP."
+echo "Redémarre Claude Code pour charger le serveur MCP et les hooks."
 echo "Teste avec : /mcp"

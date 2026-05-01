@@ -211,6 +211,14 @@ L'agent expert ne déclare pas le bloc `## Frame requests` au moment de l'ingest
 - **Frontmatter** des pages source : `frames: [raw/frames/...]` (optionnel)
 - **Transcription markdown** : chaque frame promue doit être transcrite en markdown structuré (table, Mermaid, code, liste KPIs, description sémantique, etc.) dans la page wiki qui la consomme. C'est non-optionnel — sans transcription, les `/query` doivent ré-analyser l'image à chaque appel. Le format adéquat selon le type de visuel est documenté dans la section `## Frames visuelles` du prompt de chaque agent et dans l'Étape 9 du runbook.
 {{sync_repos_section}}
+### SESSION START (automatique à chaque démarrage)
+
+Vérifier les signaux dans `cache/` au démarrage :
+- **`cache/.pending-ingest`** : proposer `/ingest` pour chaque chemin listé. Ne pas supprimer — attendre confirmation.
+- **`cache/.session-pending`** : proposer `/compress-bb <slug>` pour archiver la session précédente. Supprimer après proposition.
+
+Ces vérifications sont silencieuses si les fichiers sont absents.
+
 ### RADAR (« montre le radar » / « qu'est-ce qu'il y a à faire aujourd'hui »)
 Quand l'utilisateur demande le radar ou la liste des choses à faire :
 1. Lire `wiki/radar.md` — présenter les entrées non cochées, groupées par catégorie.
