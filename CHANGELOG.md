@@ -13,28 +13,23 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 - **`.claude/rules/`** : trois conventions transverses formalisées (frontmatter, pages-wiki, raw-vs-cache) avec frontmatter `paths:` qui permet l'auto-chargement par Claude Code quand un agent travaille sur un path matchant. Pattern documenté par Anthropic (Boris Cherny, 24 mars 2026). Propagé par `/update-vault` aux vaults existants.
 - **`.claude/template-version`** : fichier de versionning explicite du template (format `template-version: X.Y.Z` + `template-sha:` + `last-updated:`). Source de vérité unique pour la machine de migration de `/update-vault`. Créé au bootstrap (BOOTSTRAP 5.10), mis à jour à chaque `/update-vault` réussi.
 - **`scripts/migrations/`** : nouveau dossier pour les migrations breaking entre versions du template. Pattern `v<X.Y.Z>-<description>.md` (slash-commands Claude Code interactifs). Premier exemple : `v1.0.2-claude-md-slim.md`. Invoqués par `/update-vault` dans la chaîne entre version locale et cible.
+- **`/create-issue [bug|enhancement|docs|question]`** ([#4](https://github.com/tetra-plg/boiling-brain/issues/4)) : nouvelle slash-command pour remonter une issue vers le repo template upstream depuis le contexte de la session courante, avec **sanitization automatique** des données vault-specific (wikilinks, slugs de domaines, chemins privés `raw/notes/<date>-*`, emails, noms d'entités du wiki). Validation utilisateur obligatoire via `AskUserQuestion` avant `gh issue create`. Règles formalisées dans `.claude/rules/sanitization-issues.md` (auto-chargé par `paths:`). Workflow proactif : quand le radar contient une entrée concernant l'environnement template, le main context propose `/create-issue` à l'utilisateur (sans création silencieuse).
+- **`scripts/test-scan-raw.sh`** : fixture de test reproduisant les 3 cas du fix `scan-raw.sh` (apostrophe, parenthèses, espaces multiples) + un cas combiné. Asserte que tous reportent `SKIP` au scan. Exit code 1 si régression.
 
 ### Changed
 
-- **`CLAUDE.md.tpl` réduit à 111 lignes** (depuis 268, soit −59 %), conformément à la recommandation Anthropic « < 200 lignes » pour préserver l'adhérence aux instructions. Les sections Workflows détaillés (~143 lignes) sont remplacées par une table compacte qui pointe vers `.claude/commands/*.md`. La section Conventions (22 lignes) devient un pointeur vers `.claude/rules/`. Les sections instance-specific (Domaines, Agents experts, Architecture) restent inchangées.
+- **`CLAUDE.md.tpl` réduit à 112 lignes** (depuis 268, soit −58 %), conformément à la recommandation Anthropic « < 200 lignes » pour préserver l'adhérence aux instructions. Les sections Workflows détaillés (~143 lignes) sont remplacées par une table compacte qui pointe vers `.claude/commands/*.md`. La section Conventions (22 lignes) devient un pointeur vers `.claude/rules/`. Les sections instance-specific (Domaines, Agents experts, Architecture) restent inchangées.
 - **`/update-vault` refactoré en machine de migration versionnée** : lit `.claude/template-version` (avec fallback rétrocompat sur `.template-bootstrap-sha` pour v1.0.1 et sur le tag `v1.0.0` pour v1.0.0), compare avec la version cible upstream, propage les fichiers nouveaux (incluant `.claude/rules/**` et `scripts/migrations/**`), exécute la chaîne de migrations applicables, bumpe `.claude/template-version` à la fin si toutes les migrations sont acceptées.
 - **`BOOTSTRAP.md` section 5.10** : enrichit `.claude/template-version` avec le SHA et la date du bootstrap (en plus de `.template-bootstrap-sha` historique conservé pour rétrocompat).
 
 ### Fixed
 
-- **Trou de propagation des conventions vers les vaults existants** : avant v1.0.2, toute évolution de convention (frontmatter, immutabilité `raw/`, etc.) vivait dans `CLAUDE.md.tpl` consommé au bootstrap, sans mécanisme de propagation. Cas concret : 18 pages du vault de référence ont eu `source_sha256` rempli avec un placeholder par les agents experts (batch 2026-04-29) — non corrigeable sans patch manuel par vault. Avec v1.0.2, la règle « `source_sha256` toujours via `shasum -a 256` » vit dans `.claude/rules/frontmatter.md` et est propagée automatiquement par `/update-vault`.
-
-### Fixed
-
-- **`scripts/scan-raw.sh` : 3 bugs de parsing causant des faux `NEW`** ([#3](https://github.com/tetra-plg/boiling-brain/issues/3)).
+- **Trou de propagation des conventions vers les vaults existants** ([#5](https://github.com/tetra-plg/boiling-brain/issues/5)) : avant v1.0.2, toute évolution de convention (frontmatter, immutabilité `raw/`, etc.) vivait dans `CLAUDE.md.tpl` consommé au bootstrap, sans mécanisme de propagation. Cas concret : 18 pages du vault de référence ont eu `source_sha256` rempli avec un placeholder par les agents experts (batch 2026-04-29) — non corrigeable sans patch manuel par vault. Avec v1.0.2, la règle « `source_sha256` toujours via `shasum -a 256` » vit dans `.claude/rules/frontmatter.md` et est propagée automatiquement par `/update-vault`.
+- **`scripts/scan-raw.sh` : 3 bugs de parsing causant des faux `NEW`** ([#3](https://github.com/tetra-plg/boiling-brain/issues/3)) :
   - **Bug 1 (apostrophes mangées)** : `tr -d '"'"'` aux lignes 79, 106, 126 supprimait à la fois les guillemets YAML et les apostrophes des chemins. Tout `source_path` contenant une apostrophe (ex: `2026-01-30-claude-code-obsidian-cpr.md` qui mentionnait `BotFather to 'Hello'`) était mal indexé. Remplacé par `sed 's/^"//; s/"$//'` qui ne touche qu'aux guillemets en début/fin de chaîne.
   - **Bug 2 (parenthèses cassent les clés d'array assoc bash)** : un `source_path` ou `covered_paths` contenant `()` ou d'autres caractères spéciaux shell (`*`, `[`, `?`) cassait l'indexation. Neutralisé par une fonction `_safe_key` qui encode les clés via `printf '%q'` à l'écriture **et** au lookup, dans `path_to_slug`, `dir_to_slug` et `meta_to_slug`. Élimine toute la classe de bugs de quoting bash sans dépendance externe.
   - **Bug 3 (espaces multiples)** : couvert par le même `printf '%q'` — les espaces sont maintenant préservés exactement.
   - Tableau parallèle `indexed_paths` ajouté pour permettre l'itération sur les paths originaux (les clés encodées de `path_to_slug` ne sont pas réversibles).
-
-### Added
-
-- **`scripts/test-scan-raw.sh`** : fixture de test reproduisant les 3 cas (apostrophe, parenthèses, espaces multiples) + un cas combiné (apostrophe + parenthèses). Asserte que tous reportent `SKIP` au scan. Exit code 1 si régression.
 
 ### Removed
 
