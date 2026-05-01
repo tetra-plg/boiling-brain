@@ -13,7 +13,7 @@ Ce vault est un **LLM Wiki** : un écosystème de connaissances maintenu par LLM
 .claude/
   agents/        # subagents Claude Code — un expert par domaine (+ suggestions accumulées pour l'évolution)
   agent-memory/  # mémoires inter-sessions par agent (état du domaine, patterns en attente)
-  commands/      # slash commands (/ingest, /ingest-video, /query, /save, /lint, /evolve-agent, /update-vault{{slash_commands_extras}})
+  commands/      # slash commands (/ingest, /ingest-video, /query, /save, /lint, /evolve-agent, /update-vault, /create-issue{{slash_commands_extras}})
   rules/         # conventions auto-chargées par Claude Code via le champ `paths` du frontmatter
   template-version  # version du template avec laquelle ce vault est aligné
 
@@ -87,8 +87,9 @@ Les workflows détaillés vivent dans `.claude/commands/`. Tableau récapitulati
 | `/lint` | Détection de contradictions, orphelins, lacunes |
 | `/evolve-agent <domain>` | Évolution curée du prompt d'un agent depuis ses suggestions accumulées |
 | `/update-vault` | Récupère les améliorations upstream du template (machine de migration versionnée) |
+| `/create-issue [type]` | Crée une issue sanitizée sur le repo template upstream à partir du contexte courant |
 
-Pour le radar : « montre le radar » / « qu'est-ce qu'il y a à faire aujourd'hui » → lecture de `wiki/radar.md` + extraction des suggestions accumulées des agents (≥2 occurrences ou jugées structurantes).
+Pour le radar : « montre le radar » / « qu'est-ce qu'il y a à faire aujourd'hui » → lecture de `wiki/radar.md` + extraction des suggestions accumulées des agents (≥2 occurrences ou jugées structurantes). **Si une entrée du radar concerne l'environnement template** (bug ou manque touchant `scripts/`, `.claude/commands/`, `BOOTSTRAP.md`, ou tout fichier propagé par `/update-vault`), proposer à l'utilisateur de la remonter via `/create-issue <type>` — sans créer l'issue tout seul, juste suggérer la commande.
 
 ## Décisions d'architecture
 
