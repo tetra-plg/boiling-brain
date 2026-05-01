@@ -552,6 +552,27 @@ git add -A
 git commit -m "vault initial — généré via BOOTSTRAP.md le {{bootstrap_date}}"
 ```
 
+### 5.11 Setup MCP optionnel
+
+Pose :
+
+```json
+{
+  "questions": [{
+    "question": "Veux-tu activer le serveur MCP pour accéder à ton wiki depuis n'importe quelle instance Claude Code ?",
+    "header": "MCP Wiki",
+    "multiSelect": false,
+    "options": [
+      {"label": "✅ Oui, configurer maintenant", "description": "Lance bash scripts/setup-mcp.sh. Pré-requis : Python 3 + connexion internet pour pip."},
+      {"label": "❌ Non, je le ferai plus tard", "description": "Lance bash scripts/setup-mcp.sh depuis le vault quand tu voudras."}
+    ]
+  }]
+}
+```
+
+- **Oui** : exécuter `bash scripts/setup-mcp.sh` (depuis la racine du vault). En cas d'erreur pip, afficher le message d'erreur + instruction manuelle : `pip install "fastmcp>=2.14,<3"` puis re-lancer.
+- **Non** : skip.
+
 ---
 
 ## Section 6 — Étape 5, Remote GitHub optionnel
@@ -600,7 +621,7 @@ Affiche un message texte propre :
 
 Identité : {{name}} — {{role}}
 Domaines actifs ({{N}}) : {{ domain_1, domain_2, ... }}
-Pipeline disponible : /ingest, /query, /save, /lint, /evolve-agent{{ ", /ingest-video" if ingest_video_enabled }}{{ ", /sync-repos" if has_tracked_repos }}, /update-vault
+Pipeline disponible : /ingest, /query, /save, /lint, /evolve-agent{{ ", /ingest-video" if ingest_video_enabled }}{{ ", /sync-repos" if has_tracked_repos }}, /update-vault, /compress-bb
 
 Trois prochaines actions guidées :
 
