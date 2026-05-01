@@ -539,12 +539,22 @@ Crée aussi `.obsidian/app.json` minimal :
 }
 ```
 
-### 5.10 Reset git + commit initial
+### 5.10 Enregistrer la version du template + reset git + commit initial
 
 ```bash
 # Enregistrer le SHA du template avant de supprimer son historique.
 # Utilisé par /update-vault pour savoir à partir d'où lister les nouveaux commits.
-git rev-parse HEAD > .template-bootstrap-sha
+TEMPLATE_SHA=$(git rev-parse HEAD)
+echo "$TEMPLATE_SHA" > .template-bootstrap-sha
+
+# Enrichir .claude/template-version avec le SHA et la date du bootstrap.
+# Ce fichier est la source de vérité pour la machine de migration de /update-vault.
+TEMPLATE_VERSION=$(grep '^template-version:' .claude/template-version | awk '{print $2}')
+cat > .claude/template-version <<EOF
+template-version: ${TEMPLATE_VERSION}
+template-sha: ${TEMPLATE_SHA}
+last-updated: {{bootstrap_date}}
+EOF
 
 rm -rf .git/
 git init
