@@ -61,7 +61,7 @@ Si tu préfères migrer manuellement, lis [scripts/migrations/v1.0.2-claude-md-s
 ### Added
 
 - **`scripts/mcp-wiki.py`** : serveur MCP stdio (FastMCP ≥ 2.14) exposant 5 outils — `scan_domain` (tiered loading L0), `preview_page` (L1), `read_page` (L2), `search_wiki`, `drop_to_raw`. Le serveur lit `WIKI_PATH` pour localiser le vault.
-- **`scripts/setup-mcp.sh`** : installeur standalone — vérifie/installe fastmcp, merge l'entrée `boiling-brain-wiki` dans `~/.claude/settings.json`, ajoute le bloc d'instructions dans `~/.claude/CLAUDE.md` (idempotent via marqueur).
+- **`scripts/setup-mcp.sh`** : installeur standalone — installe `fastmcp` (pipx prioritaire, pip --user fallback), enregistre le serveur via `claude mcp add -s user` (cross-projet), ajoute le hook `Stop` dans `~/.claude/settings.json`, et appende le bloc d'instructions dans `~/.claude/CLAUDE.md` (idempotent via marqueur).
 - **`/compress-bb`** : slash-command pour sauvegarder le journal de session courant dans `raw/notes/sessions/YYYY-MM-DD-<slug>.md`, ready for `/ingest`.
 - **Hooks** : `Stop` hook (`scripts/check-session-activity.sh`) détecte commits + fichiers modifiés → écrit `cache/.session-pending` ; `SessionStart` hook détecte `.pending-ingest` et `.session-pending` et propose les actions de suivi.
 - **`/query` tiered loading** : scan L0 en premier, descente L1/L2 uniquement si pertinent — réduit le contexte consommé pour les questions larges.
