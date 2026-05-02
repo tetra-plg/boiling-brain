@@ -46,21 +46,40 @@ if ! command -v claude &>/dev/null; then
   exit 1
 fi
 
-# --- Installer fastmcp (pipx prioritaire, pip --user fallback) ---
-if ! python3 -c "import fastmcp" 2>/dev/null; then
-  echo "📦 fastmcp non trouvé. Installation…"
-  if command -v pipx &>/dev/null; then
-    pipx install fastmcp || pipx upgrade fastmcp
+# --- Installer fastmcp + résoudre l'interpréteur Python qui peut le charger ---
+# Priorité : pipx (isolé, propre macOS/Debian PEP 668) → pip --user (pollue moins) → erreur.
+# Important : pipx isole fastmcp dans son propre venv ; il faut donc utiliser le python
+# de ce venv (pas python3 système) pour invoquer mcp-wiki.py, sinon import fastmcp échoue.
+
+MCP_PYTHON=""
+
+if python3 -c "import fastmcp" 2>/dev/null; then
+  # fastmcp déjà importable depuis python3 système (pip install antérieur, environnement géré, etc.)
+  MCP_PYTHON="$(command -v python3)"
+  echo "✅ fastmcp déjà disponible pour python3 système."
+elif command -v pipx &>/dev/null; then
+  echo "📦 Installation de fastmcp via pipx…"
+  pipx install fastmcp 2>/dev/null || pipx upgrade fastmcp || true
+  PIPX_VENVS="$(pipx environment --value PIPX_LOCAL_VENVS 2>/dev/null || echo "$HOME/.local/pipx/venvs")"
+  CANDIDATE="$PIPX_VENVS/fastmcp/bin/python"
+  if [[ -x "$CANDIDATE" ]] && "$CANDIDATE" -c "import fastmcp" 2>/dev/null; then
+    MCP_PYTHON="$CANDIDATE"
   else
-    if ! python3 -m pip install --user "fastmcp>=2.14" 2>/dev/null; then
-      echo "❌ pip install --user a échoué (probablement PEP 668)." >&2
-      echo "   Installe pipx (\`brew install pipx\` ou \`apt install pipx\`) puis relance." >&2
-      exit 1
-    fi
+    echo "❌ pipx a installé fastmcp mais le python du venv ($CANDIDATE) n'est pas exploitable." >&2
+    exit 1
+  fi
+else
+  echo "📦 pipx introuvable, fallback pip install --user…"
+  if python3 -m pip install --user "fastmcp>=2.14" 2>/dev/null; then
+    MCP_PYTHON="$(command -v python3)"
+  else
+    echo "❌ Impossible d'installer fastmcp (pip --user bloqué par PEP 668, pipx absent)." >&2
+    echo "   Installe pipx (\`brew install pipx\` ou \`apt install pipx\`) puis relance." >&2
+    exit 1
   fi
 fi
 
-python3 -c "import fastmcp; print(f'✅ fastmcp {fastmcp.__version__} OK')"
+"$MCP_PYTHON" -c "import fastmcp; print(f'✅ fastmcp {fastmcp.__version__} OK (interpréteur : $MCP_PYTHON)')"
 
 # --- Enregistrer le serveur MCP via claude mcp add (scope user) ---
 mkdir -p "$HOME/.claude"
@@ -70,8 +89,8 @@ if claude mcp get "$SERVER_NAME" >/dev/null 2>&1; then
 else
   claude mcp add -s user "$SERVER_NAME" \
     -e "WIKI_PATH=$VAULT_PATH" \
-    -- python3 "$MCP_SCRIPT"
-  echo "✅ MCP server '$SERVER_NAME' enregistré (scope user)."
+    -- "$MCP_PYTHON" "$MCP_SCRIPT"
+  echo "✅ MCP server '$SERVER_NAME' enregistré (scope user, interpréteur $MCP_PYTHON)."
 fi
 
 # --- Hook Stop dans ~/.claude/settings.json ---
