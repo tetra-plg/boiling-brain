@@ -65,6 +65,28 @@ Si tu préfères migrer manuellement, lis [scripts/migrations/v1.0.2-claude-md-s
 - **`/compress-bb`** : slash-command pour sauvegarder le journal de session courant dans `raw/notes/sessions/YYYY-MM-DD-<slug>.md`, ready for `/ingest`.
 - **Hooks** : `Stop` hook (`scripts/check-session-activity.sh`) détecte commits + fichiers modifiés → écrit `cache/.session-pending` ; `SessionStart` hook détecte `.pending-ingest` et `.session-pending` et propose les actions de suivi.
 - **`/query` tiered loading** : scan L0 en premier, descente L1/L2 uniquement si pertinent — réduit le contexte consommé pour les questions larges.
+- **`scripts/migrations/v1.1.0-mcp-setup.md`** : migration interactive invoquée par `/update-vault` pour les vaults < 1.1.0. Lance `setup-mcp.sh` (MCP + hook Stop globaux) et patche le `CLAUDE.md` du vault pour ajouter la section « Démarrage de session » qui pilote la lecture des signaux `cache/.pending-ingest` et `cache/.session-pending`.
+
+### Migration depuis v1.0.x
+
+La migration vers v1.1.0 est **gérée par `/update-vault`** :
+
+```bash
+# Dans ton vault bootstrappé :
+/update-vault
+```
+
+`/update-vault` détecte la version locale (1.0.x) → cible 1.1.0, propage les fichiers nouveaux (`scripts/mcp-wiki.py`, `scripts/setup-mcp.sh`, `scripts/check-session-activity.sh`, `.claude/commands/compress-bb.md`, `scripts/migrations/v1.1.0-mcp-setup.md`, `/query` mis à jour), puis invoque la migration `v1.1.0-mcp-setup` qui :
+
+1. Annonce les nouveautés et ce qu'elle va muter (`~/.claude/settings.json`, `~/.claude/CLAUDE.md`, `<vault>/CLAUDE.md`).
+2. Propose 3 options via `AskUserQuestion` : **Activer** (full setup) / **Patch CLAUDE.md vault uniquement** (skip mutations globales) / **Skip**.
+3. Si **Activer** : exécute `bash scripts/setup-mcp.sh --vault-path <vault>` (idempotent — pip install `fastmcp` si absent, merge mcpServers + hook Stop, append bloc avec marqueur dans `~/.claude/CLAUDE.md`).
+4. Patche le `CLAUDE.md` du vault pour insérer la section `## Démarrage de session (signaux cache/)` (idempotent — détection par titre).
+5. Commit dédié, puis bump `.claude/template-version` à 1.1.0.
+
+Ni `~/.claude/settings.json` ni `~/.claude/CLAUDE.md` ni `<vault>/CLAUDE.md` ne sont jamais réécrits — seul du contenu est ajouté ou mergé.
+
+Si tu préfères migrer manuellement, lis [scripts/migrations/v1.1.0-mcp-setup.md](scripts/migrations/v1.1.0-mcp-setup.md) qui décrit exactement quoi modifier. Le rollback complet (vault + globaux + remote) est documenté dans [docs/local-pre-release-testing.md](docs/local-pre-release-testing.md) Phase 5.
 
 ## [v1.0.1] — hotfix
 
