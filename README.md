@@ -6,7 +6,7 @@
 
 ## Status
 
-First public release (v1.0.0). The template works end-to-end and has been used to scaffold real vaults. Future releases will iterate on the bootstrap interview, agent prompts, and domain-deduction heuristics based on community feedback. See [CHANGELOG.md](./CHANGELOG.md) for milestones. Bug reports and generic-improvement PRs welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md).
+First public release (v1.0). The template works end-to-end and has been used to scaffold real vaults. Future releases will iterate on the bootstrap interview, agent prompts, and domain-deduction heuristics based on community feedback. See [CHANGELOG.md](./CHANGELOG.md) for milestones. Bug reports and generic-improvement PRs welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## Prerequisites
 
