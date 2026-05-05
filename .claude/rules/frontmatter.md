@@ -1,5 +1,5 @@
 ---
-description: Règles de frontmatter pour les pages du wiki (sources, concepts, syntheses, decisions)
+description: Frontmatter rules for wiki pages (sources, concepts, syntheses, decisions)
 paths:
   - "wiki/sources/**"
   - "wiki/concepts/**"
@@ -11,11 +11,11 @@ paths:
   - "wiki/domains/**"
 ---
 
-# Frontmatter — règles dures
+# Frontmatter — hard rules
 
-Toute page du wiki commence par un frontmatter YAML. Ces règles sont **non-négociables** : un agent expert qui les viole produit une page invalide.
+Every wiki page starts with a YAML frontmatter. These rules are **non-negotiable**: an expert agent that violates them produces an invalid page.
 
-## Champs obligatoires
+## Mandatory fields
 
 ```yaml
 ---
@@ -26,54 +26,54 @@ updated: YYYY-MM-DD
 ---
 ```
 
-- `type` : exactement une des valeurs ci-dessus, en minuscules.
-- `domains` : tableau YAML, slugs de domaines déclarés dans `wiki/index.md`. Au moins un.
-- `created` / `updated` : format ISO `YYYY-MM-DD`. `updated` reflète la dernière modification matérielle de la page.
+- `type`: exactly one of the values above, lowercase.
+- `domains`: YAML array, slugs of domains declared in `wiki/index.md`. At least one.
+- `created` / `updated`: ISO format `YYYY-MM-DD`. `updated` reflects the last material modification of the page.
 
-## Champs spécifiques aux pages `type: source`
+## Fields specific to `type: source` pages
 
 ```yaml
-source_path: "raw/<dossier>/<fichier>.md"   # obligatoire, non-vide, chemin réel existant
-source_sha256: "<hash hex 64 caractères>"   # obligatoire, non-vide
-ingested: YYYY-MM-DD                        # date d'ingestion par l'agent
-covered_paths:                              # optionnel : si la page synthétise plusieurs raw
-  - "raw/<dossier>/<fichier1>.md"
-  - "raw/<dossier>/<fichier2>.md"
+source_path: "raw/<folder>/<file>.md"        # mandatory, non-empty, real existing path
+source_sha256: "<64-character hex hash>"     # mandatory, non-empty
+ingested: YYYY-MM-DD                         # date of ingestion by the agent
+covered_paths:                               # optional: if the page synthesizes multiple raws
+  - "raw/<folder>/<file1>.md"
+  - "raw/<folder>/<file2>.md"
 ```
 
-### Règle dure `source_sha256`
+### Hard rule `source_sha256`
 
-`source_sha256` doit **toujours** être calculé via `shasum -a 256 <file>` sur le fichier réel au moment de l'ingestion. Jamais un placeholder textuel (`see-raw-file`, le slug, un faux hex, `TODO`...). Cette règle s'applique sans exception à tous les agents experts.
+`source_sha256` must **always** be computed via `shasum -a 256 <file>` on the actual file at ingestion time. Never a textual placeholder (`see-raw-file`, the slug, a fake hex, `TODO`...). This rule applies without exception to every expert agent.
 
-Commande de calcul standard :
+Standard computation command:
 
 ```bash
-shasum -a 256 raw/<dossier>/<fichier>.md | awk '{print $1}'
+shasum -a 256 raw/<folder>/<file>.md | awk '{print $1}'
 ```
 
-Si le fichier ne peut pas être calculé (chemin invalide, erreur d'accès), l'ingestion échoue — pas de fallback silencieux.
+If the file cannot be hashed (invalid path, access error), the ingestion fails — no silent fallback.
 
-## Champs `summary_l0` et `summary_l1` (tiered loading)
+## `summary_l0` and `summary_l1` fields (tiered loading)
 
-Obligatoires pour `domains/`, `cheatsheets/`, `concepts/`, `syntheses/`. Recommandés pour `sources/`, `entities/`.
+Mandatory for `domains/`, `cheatsheets/`, `concepts/`, `syntheses/`. Recommended for `sources/`, `entities/`.
 
 ```yaml
-summary_l0: "≤140 chars, télégraphique, scannable"
+summary_l0: "≤140 chars, telegraphic, scannable"
 summary_l1: |
-  2-5 phrases, ~50-150 mots, description structurée.
-  Couvre les claims principaux et l'angle.
+  2-5 sentences, ~50-150 words, structured description.
+  Covers the main claims and the angle.
 ```
 
-Ces champs alimentent le **tiered loading** des oracles : un agent peut scanner un domaine entier via les `summary_l0` (TOC L0), puis descendre en `summary_l1` (preview L1) ou body complet (L2) seulement si pertinent.
+These fields feed the **tiered loading** of oracles: an agent can scan an entire domain via the `summary_l0` (TOC L0), then descend to `summary_l1` (preview L1) or full body (L2) only when relevant.
 
-## Champ `sources` (cross-référence)
+## `sources` field (cross-reference)
 
-Pour les pages non-`source` qui s'appuient sur des sources :
+For non-`source` pages that lean on sources:
 
 ```yaml
 sources:
   - "[[sources/2026-XX-XX-slug]]"
-  - "[[sources/2026-YY-YY-autre-slug]]"
+  - "[[sources/2026-YY-YY-other-slug]]"
 ```
 
-Wikilinks Obsidian, pas de chemin nu.
+Obsidian wikilinks, no bare paths.
