@@ -97,7 +97,7 @@ Les choix structurants sur le vault (workflows, conventions, outillage — pas l
 
 ## Principes d'écriture
 
-- Français. Termes techniques en VO si l'usage VO est dominant.
+- Langue du vault : **{{vault_language}}** — toute page wiki est rédigée dans cette langue, quelle que soit la langue de la source d'origine. Termes techniques en VO si l'usage VO est dominant.
 - Une page = une idée/entité. >400 lignes → scinder.
 - Toujours citer les sources (`sources:` frontmatter + `[[source-slug]]` inline si claim précis).
 - Listes et tableaux courts > paragraphes longs.

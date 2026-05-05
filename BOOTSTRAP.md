@@ -3,6 +3,8 @@
 > Tu (Claude) lis ce fichier dans un clone fraîchement récupéré de `tetra-plg/boiling-brain`. Ta mission : conduire l'utilisateur en interview, déduire son architecture, scaffolder son instance LLM Wiki personnalisée, puis nettoyer.
 >
 > **Langue** : détecte la langue de l'utilisateur depuis ses premiers messages (ou depuis la locale système si tu peux l'inférer) et conduis toute l'interview, génère tous les fichiers et rédige tous les commentaires dans cette langue. Si tu n'es pas sûr, pose la question en anglais avant de continuer. Ne maintiens pas plusieurs versions du prompt — adapte à la volée. Sois direct, pas de prose. Les `AskUserQuestion` doivent être posés tels que spécifiés.
+>
+> **Persistance de la langue** : la langue détectée ici devient la valeur du placeholder `{{vault_language}}` (label humain : `English`, `Français`, `Español`, `Deutsch`, `日本語`…). Cette valeur est ensuite injectée dans `CLAUDE.md` et dans chaque agent de domaine pour que **toutes les pages wiki produites par `/ingest` soient rédigées dans cette langue**, indépendamment de la langue des sources d'origine. Une source EN dans un vault FR produit des pages FR ; l'inverse est tout aussi vrai. Confirme la langue avec l'utilisateur en fin de Q1 si tu as un doute.
 
 ---
 
@@ -381,12 +383,12 @@ Si « ↩️ » → repars de Q1. Sinon → Section 5.
 
 Exécute dans **cet ordre exact**. Utilise `Edit replace_all=true` ou `sed` pour les substitutions, `Bash` pour les `mv`/`rm`/`cp`/`git`.
 
-### 5.1 Substitution des 28 placeholders (référence : `PLACEHOLDERS.md` à la racine)
+### 5.1 Substitution des 29 placeholders (référence : `PLACEHOLDERS.md` à la racine)
 
 Pour chaque fichier `.tpl` du repo (CLAUDE.md.tpl, wiki/index.md.tpl, wiki/log.md.tpl, wiki/overview.md.tpl, wiki/radar.md.tpl, wiki/domains/domain.md.tpl, .claude/agents/domain-expert.md.tpl, .claude/agent-memory/domain-memory.md.tpl) :
 
 - Charge le contenu.
-- Substitue tous les placeholders **globaux** : `{{name}}`, `{{vault_name}}`, `{{role}}`, `{{parcours_short}}`, `{{bootstrap_date}}`, `{{has_tracked_repos}}` (et ses sections conditionnelles : `{{slash_commands_extras}}`, `{{tracked_repos_arborescence}}`, `{{tracked_repos_cache}}`, `{{tracked_repos_scripts_extras}}`, `{{sync_repos_section}}`).
+- Substitue tous les placeholders **globaux** : `{{name}}`, `{{vault_name}}`, `{{vault_language}}` (label humain de la langue détectée à l'interview — cf. directive *Persistance de la langue* en tête de ce prompt), `{{role}}`, `{{parcours_short}}`, `{{bootstrap_date}}`, `{{has_tracked_repos}}` (et ses sections conditionnelles : `{{slash_commands_extras}}`, `{{tracked_repos_arborescence}}`, `{{tracked_repos_cache}}`, `{{tracked_repos_scripts_extras}}`, `{{sync_repos_section}}`).
 - Substitue les placeholders **cross-domain** calculés : `{{domains_section}}`, `{{domains_index_section}}`, `{{domains_links}}`, `{{projects_links}}`, `{{agents_section}}`.
 
 **Note** : `tracked-repos.config.json.tpl` ne contient aucun placeholder, skipper la substitution. Le renommage final sera géré en Section 5.6.

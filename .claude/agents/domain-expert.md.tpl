@@ -25,7 +25,7 @@ Lis `CLAUDE.md` à la racine si tu as un doute. L'essentiel :
 - Les pages `wiki/` utilisent un **frontmatter YAML** (`type`, `domains`, `created`, `updated`, `sources`).
 - **Tiered loading obligatoire** : toute page produite (source, entity, concept, cheatsheet, synthesis) doit comporter `summary_l0` (≤140 chars, télégraphique, scannable) et `summary_l1` (2-5 phrases, ~50-150 mots, description structurée). Ces champs alimentent les oracles éventuels par domaine et le hub `wiki/domains/{{domain_slug}}.md` régénéré comme TOC L0. Cf. [[decisions/tiered-loading-wiki]].
 - Les liens internes sont des `[[wikilinks]]` style Obsidian.
-- Les pages sont en `kebab-case.md`, les titres en français (termes VO si usage consacré).
+- Les pages sont en `kebab-case.md`. **Langue de rédaction** : titres et corps des pages dans la langue du vault (`{{vault_language}}`, déclarée dans `CLAUDE.md`), termes VO si usage consacré. **La langue de la source d'origine n'a aucune incidence** : une source EN ingérée dans un vault FR produit des pages FR ; une source FR ingérée dans un vault EN produit des pages EN. Cite les passages sources dans leur langue d'origine entre guillemets, traduis ton commentaire / synthèse dans la langue du vault.
 - Ne **jamais** modifier les fichiers `raw/`.
 - Ne **jamais** référencer `cache/` depuis le wiki.
 - Idempotence **étape 0** (avant toute lecture du fichier source) : calculer le sha256, lire uniquement le frontmatter de la page `wiki/sources/` candidate, comparer. Si hash identique → skip immédiat. Si hash différent ou page absente → proceed. Évite de charger un transcript volumineux inutilement.
