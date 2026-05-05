@@ -27,8 +27,10 @@ claude
 Then in Claude Code:
 
 ```
-Lis BOOTSTRAP.md et exécute le prompt.
+Read BOOTSTRAP.md and run the prompt.
 ```
+
+*Works in any language — the bootstrap interview adapts to your phrasing.*
 
 The interview takes 5-10 minutes. At the end your vault is personalized, the template's git history is reset, and you can run your first `/ingest`. Then open `~/my-vault` in Obsidian and check the graph view.
 
