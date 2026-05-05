@@ -10,34 +10,6 @@
 
 First public release (v1.0). The template works end-to-end and has been used to scaffold real vaults. Future releases will iterate on the bootstrap interview, agent prompts, and domain-deduction heuristics based on community feedback. See [CHANGELOG.md](./CHANGELOG.md) for milestones. Bug reports and generic-improvement PRs welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
-## Prerequisites
-
-- **[Claude Code](https://claude.com/claude-code)** — the CLI agent that drives the interview and the wiki workflows. The template is built around its slash-commands and `AskUserQuestion` tool.
-- **[Obsidian](https://obsidian.md/)** — the markdown editor where your vault lives day-to-day. Wiki pages use `[[wikilinks]]` and the bootstrap generates an `.obsidian/` config (graph filter + per-domain colors) so the graph view shows your `wiki/` clean of `raw/` and `cache/` noise.
-- **`gh` CLI** (optional) — only needed if you want to clone via `gh repo clone` and create a remote vault repo automatically at the end of the interview.
-
-After bootstrap, **open the cloned folder in Obsidian** ("Open folder as vault") and switch to the **graph view** (icon in the left ribbon, or `Ctrl/Cmd+G`). You'll see your domains laid out by color — that's the auto-generated `.obsidian/graph.json` doing its job.
-
-## Quick start
-
-```bash
-gh repo clone tetra-plg/boiling-brain ~/my-vault
-cd ~/my-vault
-claude
-```
-
-Then in Claude Code:
-
-```
-Read BOOTSTRAP.md and run the prompt.
-```
-
-*Works in any language — the bootstrap interview adapts to your phrasing.*
-
-The interview takes 5-10 minutes. At the end your vault is personalized, the template's git history is reset, and you can run your first `/ingest`. Then open `~/my-vault` in Obsidian and check the graph view.
-
-Detailed flow → [How to bootstrap](#how-to-bootstrap) below.
-
 ## What is an LLM Wiki?
 
 A vault where:
@@ -65,6 +37,34 @@ Karpathy's LLM Wiki is a **concept**: notes maintained by an LLM, with the LLM f
 | **Architectural decisions** | Mixed into notes | ADR-lite in `wiki/decisions/` with a fixed structure (Problem → Options → Decision → Why → Open questions) |
 
 Said otherwise: Karpathy says "let LLMs maintain a wiki." BoilingBrain says "*here's what the wiki layout, the agent contract, the ingest protocol and the evolution loop need to look like for that to actually scale past a few weeks of use.*" The opinions come from real usage — fork them if they don't fit.
+
+## Prerequisites
+
+- **[Claude Code](https://claude.com/claude-code)** — the CLI agent that drives the interview and the wiki workflows. The template is built around its slash-commands and `AskUserQuestion` tool.
+- **[Obsidian](https://obsidian.md/)** — the markdown editor where your vault lives day-to-day. Wiki pages use `[[wikilinks]]` and the bootstrap generates an `.obsidian/` config (graph filter + per-domain colors) so the graph view shows your `wiki/` clean of `raw/` and `cache/` noise.
+- **`gh` CLI** (optional) — only needed if you want to clone via `gh repo clone` and create a remote vault repo automatically at the end of the interview.
+
+After bootstrap, **open the cloned folder in Obsidian** ("Open folder as vault") and switch to the **graph view** (icon in the left ribbon, or `Ctrl/Cmd+G`). You'll see your domains laid out by color — that's the auto-generated `.obsidian/graph.json` doing its job.
+
+## Quick start
+
+```bash
+gh repo clone tetra-plg/boiling-brain ~/my-vault
+cd ~/my-vault
+claude
+```
+
+Then in Claude Code:
+
+```
+Read BOOTSTRAP.md and run the prompt.
+```
+
+*Works in any language — the bootstrap interview adapts to your phrasing.*
+
+The interview takes 5-10 minutes. At the end your vault is personalized, the template's git history is reset, and you can run your first `/ingest`. Then open `~/my-vault` in Obsidian and check the graph view.
+
+Detailed flow → [How to bootstrap](#how-to-bootstrap) below.
 
 ## Why a template?
 
