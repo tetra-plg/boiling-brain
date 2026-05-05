@@ -2,6 +2,8 @@
 
 ![status: alpha](https://img.shields.io/badge/status-alpha-yellow) ![license: MIT](https://img.shields.io/badge/license-MIT-blue) ![claude code](https://img.shields.io/badge/built%20for-Claude%20Code-purple)
 
+![BoilingBrain wiki graph — domain clusters auto-emerge from the linking structure](docs/graph.png)
+
 > Bootstrap template for an **LLM Wiki** — a personal knowledge base curated by you and maintained by LLM agents.
 
 ## Status
