@@ -1,109 +1,109 @@
 ---
-description: Ingest sources from raw/ into the wiki via un agent expert de domaine (batch, idempotent, hash-based)
-argument-hint: [--force] [--frames] [chemin-ou-dossier — vide = tout raw/]
+description: Ingest sources from raw/ into the wiki via a domain-expert agent (batch, idempotent, hash-based)
+argument-hint: [--force] [--frames] [path-or-folder — empty = all of raw/]
 ---
 
 Run the INGEST workflow from CLAUDE.md on: $ARGUMENTS
 
-**Mode batch idempotent.** Comportement :
-- Sans argument → scan complet de `raw/`.
-- Argument = dossier → scan du sous-arbre.
-- Argument = fichier → force re-ingest **de ce fichier uniquement**.
-- Flag `--force` (combinable avec dossier ou scan global) → traite chaque fichier comme **modifié**, même si le sha256 est inchangé. Utile après une évolution d'agent expert (`/evolve-agent`) pour bénéficier des nouveaux réflexes sur des sources déjà ingérées. **Aucune création de doublon** : le re-ingest met à jour les pages existantes (sources, entités, concepts) plutôt que d'en créer de nouvelles avec des slugs différents.
-- Flag `--frames` (combinable avec `--force` et un fichier/dossier) → indique à l'agent que l'objectif est d'**extraire les frames visuelles manquantes**. L'agent doit relire le transcript, produire un bloc `## Frame requests` selon la convention, et ne rien modifier d'autre dans les pages existantes. Utilisable seul (`--frames`) ou combiné (`--force --frames`) sur un transcript déjà ingéré.
+**Idempotent batch mode.** Behavior:
+- No argument → full sweep of `raw/`.
+- Argument = folder → scan that subtree.
+- Argument = file → force re-ingest **of that file only**.
+- `--force` flag (combinable with folder or full sweep) → treat every file as **modified**, even if its sha256 is unchanged. Useful after an expert agent evolved (`/evolve-agent`) to apply the new reflexes to already-ingested sources. **No duplicates created**: re-ingest updates existing pages (sources, entities, concepts) rather than creating new ones with different slugs.
+- `--frames` flag (combinable with `--force` and a file/folder) → tells the agent the goal is to **extract missing visual frames**. The agent must re-read the transcript, produce a `## Frame requests` block per the convention, and not modify anything else in existing pages. Usable alone (`--frames`) or combined (`--force --frames`) on an already-ingested transcript.
 
-Pour chaque fichier du scope, depuis le **main context** :
+For each in-scope file, from the **main context**:
 
-### 1. Détection de l'état
+### 1. State detection
 
-Lancer `bash scripts/scan-raw.sh [scope]` (sans argument = tout `raw/` ; avec dossier ou fichier = sous-arbre). Le script produit une ligne par fichier :
+Run `bash scripts/scan-raw.sh [scope]` (no argument = all of `raw/`; with folder or file = subtree). The script outputs one line per file:
 
 ```
-NEW      raw/...    → jamais vu
-SKIP     raw/...    (covered-by: <slug>)   → déjà couvert par une page wiki
-MODIFIED raw/...    (covered-by: <slug>, sha-changed)   → couvert mais contenu modifié
+NEW      raw/...    → never seen
+SKIP     raw/...    (covered-by: <slug>)   → already covered by a wiki page
+MODIFIED raw/...    (covered-by: <slug>, sha-changed)   → covered but content changed
 ```
 
-La détection est **robuste** : elle cherche correspondance exacte sur `source_path`, puis sur `covered_paths` (liste de tous les raw paths couverts par une page composite), puis sur répertoire parent. Cela évite les faux "NEW" quand un agent a synthétisé plusieurs fichiers en une page sans lister chaque fichier individuellement.
+Detection is **robust**: it checks exact match on `source_path`, then on `covered_paths` (list of all raw paths covered by a composite page), then on parent directory. This avoids false "NEW" entries when an agent synthesized several files into a single page without listing each file individually.
 
-Arbitrage :
-- `SKIP` → ignorer (sauf si `--force` → traiter comme `MODIFIED`).
-- `NEW` / `MODIFIED` → passer à l'étape 2.
+Arbitration:
+- `SKIP` → ignore (unless `--force` → treat as `MODIFIED`).
+- `NEW` / `MODIFIED` → proceed to step 2.
 
-**Mode `--force`** : signaler explicitement à l'agent expert dans son prompt que la source a **déjà été ingérée** (citer la page source existante) et qu'il s'agit d'un re-ingest **additif**. L'agent doit lire les pages existantes, identifier ce qui manque, ajouter uniquement ça, ne pas réécrire le contenu déjà correct. Mettre à jour `ingested:` uniquement si du contenu a été ajouté.
+**`--force` mode**: explicitly tell the expert agent in its prompt that the source has **already been ingested** (cite the existing source page) and that it's an **additive** re-ingest. The agent must read existing pages, identify what's missing, add only that, not rewrite content that's already correct. Update `ingested:` only if content was added.
 
-**Mode `--frames`** : signaler à l'agent que l'objectif est **exclusivement** de produire des frame requests pour ce transcript. Instruction au spawn :
-- Relire le transcript source.
-- Produire un bloc `## Frame requests` selon la convention du vault (cf. CLAUDE.md).
-- **Ne rien modifier d'autre** dans les pages existantes — pas de mise à jour du contenu textuel, pas de `ingested:` mis à jour.
-- Si aucun visuel détectable dans le transcript → répondre « aucune frame à déclarer » et ne pas produire le bloc.
+**`--frames` mode**: tell the agent the goal is **exclusively** to produce frame requests for this transcript. Spawn instruction:
+- Re-read the source transcript.
+- Produce a `## Frame requests` block per the vault convention (cf. CLAUDE.md).
+- **Don't modify anything else** in existing pages — no textual content update, no `ingested:` bump.
+- If no detectable visual in the transcript → answer "no frame to declare" and don't produce the block.
 
-Si vidéo/audio/URL non transcrit → enchaîner `scripts/transcribe.sh` d'abord.
+If video/audio/URL not transcribed → chain `scripts/transcribe.sh` first.
 
-### 2. Proposition d'agent expert (validation utilisateur)
+### 2. Expert-agent proposal (user validation)
 
-**L'ingest est délégué à un agent expert du domaine.** Le main context n'écrit pas les pages — il dispatche.
+**Ingest is delegated to a domain-expert agent.** The main context doesn't write pages — it dispatches.
 
-1. Analyse la source : titre, emplacement dans `raw/`, extrait du contenu (~200 lignes), cross-ref avec `wiki/domains/`.
-2. Propose un ou plusieurs agents experts parmi ceux présents dans `.claude/agents/` (chaque domaine déclaré au bootstrap a son `<domain>-expert.md`) avec **niveau de confiance** et **justification courte**.
-3. Demande validation via `AskUserQuestion` :
-   - **Confiance haute** → option « Recommandé » par défaut + 2-3 alternatives + « autre ».
-   - **Confiance faible / ambiguë** → liste des experts disponibles sans recommandation + « autre ».
-   - **Cross-domaine évident** → multiSelect pour lancer plusieurs experts en parallèle.
-4. Si le user choisit « autre » ou personnalise, honorer son choix.
+1. Analyze the source: title, location in `raw/`, content excerpt (~200 lines), cross-ref with `wiki/domains/`.
+2. Propose one or more expert agents from those present in `.claude/agents/` (each domain declared at bootstrap has its `<domain>-expert.md`) with **confidence level** and **short justification**.
+3. Ask validation via `AskUserQuestion`:
+   - **High confidence** → "Recommended" option as default + 2-3 alternatives + "other".
+   - **Low / ambiguous confidence** → list of available experts without recommendation + "other".
+   - **Obvious cross-domain** → multiSelect to spawn several experts in parallel.
+4. If the user chooses "other" or customizes, honor their pick.
 
-### 3. Spawn de l'agent expert
+### 3. Spawning the expert agent
 
-Pour chaque agent validé, lancer un appel `Agent` avec :
-- `subagent_type`: l'agent choisi.
-- **Prompt** contenant :
-  - Chemin du fichier raw à ingérer.
-  - Liste des titres des pages existantes du domaine (`wiki/entities/`, `wiki/concepts/`, `wiki/cheatsheets/`, etc. selon les livrables de l'agent).
-  - Chemin de `wiki/domains/<d>.md`.
-  - Instruction : exécuter l'ingest de bout en bout, puis renvoyer le rapport dans le format `## Ingest summary` + `## Evolution suggestions` (cf. prompt de l'agent).
+For each validated agent, launch an `Agent` call with:
+- `subagent_type`: the chosen agent.
+- **Prompt** containing:
+  - Path of the raw file to ingest.
+  - List of titles of existing pages in the domain (`wiki/entities/`, `wiki/concepts/`, `wiki/cheatsheets/`, etc. depending on the agent's deliverables).
+  - Path of `wiki/domains/<d>.md`.
+  - Instruction: execute the ingest end-to-end, then return the report in `## Ingest summary` + `## Evolution suggestions` format (cf. agent prompt).
 
-Cross-domaine → plusieurs agents en parallèle (même appel multi-tools).
+Cross-domain → multiple agents in parallel (same multi-tool call).
 
-### 4. Collecte et journalisation
+### 4. Collection and journaling
 
-Quand le ou les agents ont rendu leur rapport :
+When the agent(s) have returned their report:
 
-1. Ajouter une entrée dans `wiki/log.md` :
+1. Append to `wiki/log.md`:
    ```
-   ## [YYYY-MM-DD] ingest | <titre source> (agent: <nom>)
-   <résumé du bloc Ingest summary — pages créées/mises à jour, livrables>
+   ## [YYYY-MM-DD] ingest | <source title> (agent: <name>)
+   <summary of the Ingest summary block — pages created/updated, deliverables>
    ```
-2. Appendre le bloc `## Evolution suggestions` au fichier `.claude/agents/<domain>-expert.suggestions.md` (créer si besoin) avec un horodatage `### [YYYY-MM-DD HH:MM] source: <chemin>`.
-3. Mettre à jour `wiki/index.md` si l'agent ne l'a pas déjà fait.
+2. Append the `## Evolution suggestions` block to `.claude/agents/<domain>-expert.suggestions.md` (create if needed) with a `### [YYYY-MM-DD HH:MM] source: <path>` timestamp.
+3. Update `wiki/index.md` if the agent didn't already.
 
-### 4b. Extraction de frames (si présent)
+### 4b. Frame extraction (if present)
 
-Si le rapport de l'agent contient un bloc `## Frame requests`, traiter **avant** le rapport final :
+If the agent's report contains a `## Frame requests` block, handle **before** the final report:
 
-1. Vérifier si une vidéo source est disponible dans `cache/videos/` (chercher un fichier dont le nom correspond au slug du transcript ingéré).
-2. Si vidéo disponible :
-   a. Pour chaque ligne `FRAME: HH:MM:SS | slug | description` : extraire via `./scripts/extract-frames.sh <video_path> <timestamp> cache/frames/<slug>.png` (applique un offset de +5s par défaut — compense le décalage entre mention verbale et affichage visuel).
-   b. Afficher toutes les frames extraites à l'utilisateur en un seul batch (`AskUserQuestion`).
-   c. Sur validation → `cp cache/frames/<slug>.png raw/frames/YYYY-MM-DD-<source-slug>-<slug>.png`.
-   d. Sur rejet → proposer 3 alternatives rapides sans redemander à l'utilisateur de spécifier un offset : extraire à T-10s (`offset=-5`), T+0s (`offset=0`) et T+20s (`offset=15`) via `./scripts/extract-frames.sh <video> <timestamp> cache/frames/<slug>-altN.png <offset>`, afficher les 3 en batch, valider ou annoter `> [!question] Frame non extraite` si aucune ne convient.
-3. Si aucune vidéo en cache : signaler à l'utilisateur les timestamps déclarés avec la description attendue — il peut relancer manuellement ou annoter les frames comme `> [!question]`.
-4. Inclure dans le rapport final : `Frames : N promues · M rejetées` (ou `Frame requests : N déclarées — vidéo non disponible en cache`).
+1. Check if a source video is available in `cache/videos/` (look for a file whose name matches the slug of the ingested transcript).
+2. If video available:
+   a. For each `FRAME: HH:MM:SS | slug | description` line: extract via `./scripts/extract-frames.sh <video_path> <timestamp> cache/frames/<slug>.png` (applies a default +5s offset — compensates for the lag between verbal mention and visual display).
+   b. Show all extracted frames to the user in a single batch (`AskUserQuestion`).
+   c. On validation → `cp cache/frames/<slug>.png raw/frames/YYYY-MM-DD-<source-slug>-<slug>.png`.
+   d. On rejection → propose 3 quick alternatives without re-asking the user to specify an offset: extract at T-10s (`offset=-5`), T+0s (`offset=0`) and T+20s (`offset=15`) via `./scripts/extract-frames.sh <video> <timestamp> cache/frames/<slug>-altN.png <offset>`, show all 3 as a batch, validate or annotate `> [!question] Frame not extracted` if none works.
+3. If no video in cache: tell the user the declared timestamps with the expected description — they can re-run manually or annotate the frames as `> [!question]`.
+4. Include in the final report: `Frames: N promoted · M rejected` (or `Frame requests: N declared — video not available in cache`).
 
-### 5. Rapport final global
+### 5. Final overall report
 
-Format :
+Format:
 ```
-N nouveaux · M mis à jour · K inchangés (skipped) · L orphelins
+N new · M updated · K unchanged (skipped) · L orphans
 ```
-Suivi de :
-- Pour chaque source : agent invoqué, pages touchées, livrables produits.
-- Suggestions d'évolution remontées (pointeur vers les fichiers `.suggestions.md`).
-- Contradictions détectées (entre sources ou avec le wiki existant).
-- Questions ouvertes pour l'utilisateur.
-- Orphelins (pages `wiki/sources/` dont le raw a disparu — pas de suppression auto).
+Followed by:
+- Per source: agent invoked, pages touched, deliverables produced.
+- Evolution suggestions surfaced (pointer to `.suggestions.md` files).
+- Contradictions detected (between sources or against the existing wiki).
+- Open questions for the user.
+- Orphans (pages `wiki/sources/` whose raw has disappeared — no auto-deletion).
 
 ## Notes
 
-- Un source = un agent principal (même si cross-domaine, un agent a le lead pour la page `wiki/sources/` ; les autres enrichissent concepts/entities de leur domaine).
-- Si aucun agent expert n'est adapté et que le user choisit « autre » → le main context fait l'ingest générique (fallback comportement actuel).
-- Si la commande `/evolve-agent <domain>` existe, elle consomme les `.suggestions.md` pour faire évoluer le prompt de l'agent.
+- One source = one main agent (even if cross-domain, one agent leads the `wiki/sources/` page; the others enrich concepts/entities in their domain).
+- If no expert agent fits and the user picks "other" → the main context performs the generic ingest (current fallback behavior).
+- If the `/evolve-agent <domain>` command exists, it consumes the `.suggestions.md` to evolve the agent's prompt.

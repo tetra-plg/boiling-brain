@@ -8,31 +8,31 @@ summary_l0: "{{summary_l0}}"
 summary_l1: |
   {{summary_l1}}
 ---
-# Domaine — {{domain_label}}
+# Domain — {{domain_label}}
 
-Hub du domaine **{{domain_label}}**.{{hub_pivot_marker}}
+Hub for the **{{domain_label}}** domain.{{hub_pivot_marker}}
 
 {{domain_intro_paragraph}}
 
-## Sous-thèmes (à peupler)
+## Sub-themes (to populate)
 
 {{taxonomy_section}}
 
-## Entités liées
+## Related entities
 
-_(à peupler au fil des ingests)_
+_(to populate as ingests come in)_
 
-## Concepts liés
+## Related concepts
 
-_(à peupler au fil des ingests)_
+_(to populate as ingests come in)_
 
 ## Sources
 
-_(à peupler au fil des ingests)_
+_(to populate as ingests come in)_
 
-## Outillage vidéo
+## Video tooling
 
-- [[decisions/extraction-frames-induction-runbook|Runbook extraction de frames par induction croisée]] — pipeline en 9 étapes invocable via `/ingest-video --induction` pour les vidéos {{domain_slug}} denses en visuels.
-- [[decisions/ingest-video-modes-a-b-generalisation|Modes A/B `/ingest-video`]] — `/ingest-video` propose mode léger (frame requests) ou mode lourd (induction croisée) selon la densité visuelle.
+- [[decisions/extraction-frames-induction-runbook|Frame-extraction-by-cross-induction runbook]] — 9-step pipeline invokable via `/ingest-video --induction` for visually dense {{domain_slug}} videos.
+- [[decisions/ingest-video-modes-a-b-generalisation|`/ingest-video` modes A/B]] — `/ingest-video` proposes the light mode (frame requests) or the heavy mode (cross-induction) based on visual density.
 
 {{related_domains_section}}

@@ -3,35 +3,35 @@ type: radar
 updated: {{bootstrap_date}}
 ---
 
-# Radar — Questions ouvertes & points d'attention
+# Radar — Open questions & points of attention
 
-> Fichier alimenté automatiquement à chaque `/ingest` quand un agent expert remonte des questions ouvertes (à vérifier, à rechercher, à décider, à améliorer, à surveiller). Consulte-le le matin pour décider quoi creuser ce jour-là.
+> File fed automatically at every `/ingest` when an expert agent surfaces open questions (to verify, to research, to decide, to improve, to watch). Check it in the morning to decide what to dig into that day.
 >
-> Chaque entrée porte : date, domaine, type, et action suggérée. Format :
-> `- [ ] **[Domaine · YYYY-MM-DD]** Description. → [[lien]]`
+> Every entry carries: date, domain, type, and suggested action. Format:
+> `- [ ] **[Domain · YYYY-MM-DD]** Description. → [[link]]`
 >
-> Coche `[x]` ou supprime une entrée quand elle est traitée.
+> Tick `[x]` or remove an entry once it's handled.
 >
-> Quand tu demandes **« montre-moi le radar »** ou **« qu'est-ce qu'il y a à faire aujourd'hui »**, Claude lit aussi les suggestions d'évolution agents accumulées dans `.claude/agents/*.suggestions.md` et en fait un résumé en fin de réponse — signaux récurrents, patterns émergents, agents mûrs pour un `/evolve-agent`.
+> When you ask **"show me the radar"** or **"what's on the agenda today"**, Claude also reads the agent evolution suggestions accumulated in `.claude/agents/*.suggestions.md` and summarizes them at the end — recurring signals, emerging patterns, agents ready for an `/evolve-agent`.
 
 ---
 
-## À vérifier (faits à confirmer)
+## To verify (facts to confirm)
 
-<!-- Items à confirmer par recoupement avec une source officielle ou un test. -->
+<!-- Items to confirm by cross-checking against an authoritative source or a test. -->
 
-## À rechercher (lacunes à combler)
+## To research (gaps to fill)
 
-<!-- Concepts entendus mais pas encore documentés ; sources candidates à ingérer. -->
+<!-- Concepts heard but not yet documented; candidate sources to ingest. -->
 
-## À décider (arbitrages structurants)
+## To decide (structural trade-offs)
 
-<!-- Choix à faire pour le wiki ou pour un projet : architecture, conventions, priorisation. -->
+<!-- Choices to make for the wiki or a project: architecture, conventions, prioritization. -->
 
-## À améliorer (dette wiki)
+## To improve (wiki debt)
 
-<!-- Pages à scinder, cross-refs manquantes, sections à enrichir. -->
+<!-- Pages to split, missing cross-refs, sections to enrich. -->
 
-## À surveiller (signaux faibles)
+## To watch (weak signals)
 
-<!-- Tendances, features en preview, patterns émergents qui méritent une re-vérification dans X semaines. -->
+<!-- Trends, features in preview, emerging patterns worth re-checking in X weeks. -->

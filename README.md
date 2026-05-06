@@ -1,38 +1,14 @@
 # BoilingBrain
 
-![status: experimental](https://img.shields.io/badge/status-experimental-orange) ![license: MIT](https://img.shields.io/badge/license-MIT-blue) ![claude code](https://img.shields.io/badge/built%20for-Claude%20Code-purple)
+![status: alpha](https://img.shields.io/badge/status-alpha-yellow) ![license: MIT](https://img.shields.io/badge/license-MIT-blue) ![claude code](https://img.shields.io/badge/built%20for-Claude%20Code-purple)
+
+![BoilingBrain wiki graph — domain clusters auto-emerge from the linking structure](docs/graph.png)
 
 > Bootstrap template for an **LLM Wiki** — a personal knowledge base curated by you and maintained by LLM agents.
 
 ## Status
 
-First public release (v1.0.0). The template works end-to-end and has been used to scaffold real vaults. Future releases will iterate on the bootstrap interview, agent prompts, and domain-deduction heuristics based on community feedback. See [CHANGELOG.md](./CHANGELOG.md) for milestones. Bug reports and generic-improvement PRs welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md).
-
-## Prerequisites
-
-- **[Claude Code](https://claude.com/claude-code)** — the CLI agent that drives the interview and the wiki workflows. The template is built around its slash-commands and `AskUserQuestion` tool.
-- **[Obsidian](https://obsidian.md/)** — the markdown editor where your vault lives day-to-day. Wiki pages use `[[wikilinks]]` and the bootstrap generates an `.obsidian/` config (graph filter + per-domain colors) so the graph view shows your `wiki/` clean of `raw/` and `cache/` noise.
-- **`gh` CLI** (optional) — only needed if you want to clone via `gh repo clone` and create a remote vault repo automatically at the end of the interview.
-
-After bootstrap, **open the cloned folder in Obsidian** ("Open folder as vault") and switch to the **graph view** (icon in the left ribbon, or `Ctrl/Cmd+G`). You'll see your domains laid out by color — that's the auto-generated `.obsidian/graph.json` doing its job.
-
-## Quick start
-
-```bash
-gh repo clone tetra-plg/boiling-brain ~/my-vault
-cd ~/my-vault
-claude
-```
-
-Then in Claude Code:
-
-```
-Lis BOOTSTRAP.md et exécute le prompt.
-```
-
-The interview takes 5-10 minutes. At the end your vault is personalized, the template's git history is reset, and you can run your first `/ingest`. Then open `~/my-vault` in Obsidian and check the graph view.
-
-Detailed flow → [How to bootstrap](#how-to-bootstrap) below.
+First public release (v1.0). The template works end-to-end and has been used to scaffold real vaults. Future releases will iterate on the bootstrap interview, agent prompts, and domain-deduction heuristics based on community feedback. See [CHANGELOG.md](./CHANGELOG.md) for milestones. Bug reports and generic-improvement PRs welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## What is an LLM Wiki?
 
@@ -61,6 +37,34 @@ Karpathy's LLM Wiki is a **concept**: notes maintained by an LLM, with the LLM f
 | **Architectural decisions** | Mixed into notes | ADR-lite in `wiki/decisions/` with a fixed structure (Problem → Options → Decision → Why → Open questions) |
 
 Said otherwise: Karpathy says "let LLMs maintain a wiki." BoilingBrain says "*here's what the wiki layout, the agent contract, the ingest protocol and the evolution loop need to look like for that to actually scale past a few weeks of use.*" The opinions come from real usage — fork them if they don't fit.
+
+## Prerequisites
+
+- **[Claude Code](https://claude.com/claude-code)** — the CLI agent that drives the interview and the wiki workflows. The template is built around its slash-commands and `AskUserQuestion` tool.
+- **[Obsidian](https://obsidian.md/)** — the markdown editor where your vault lives day-to-day. Wiki pages use `[[wikilinks]]` and the bootstrap generates an `.obsidian/` config (graph filter + per-domain colors) so the graph view shows your `wiki/` clean of `raw/` and `cache/` noise.
+- **`gh` CLI** (optional) — only needed if you want to clone via `gh repo clone` and create a remote vault repo automatically at the end of the interview.
+
+After bootstrap, **open the cloned folder in Obsidian** ("Open folder as vault") and switch to the **graph view** (icon in the left ribbon, or `Ctrl/Cmd+G`). You'll see your domains laid out by color — that's the auto-generated `.obsidian/graph.json` doing its job.
+
+## Quick start
+
+```bash
+gh repo clone tetra-plg/boiling-brain ~/my-vault
+cd ~/my-vault
+claude
+```
+
+Then in Claude Code:
+
+```
+Read BOOTSTRAP.md and run the prompt.
+```
+
+*Works in any language — the bootstrap interview adapts to your phrasing.*
+
+The interview takes 5-10 minutes. At the end your vault is personalized, the template's git history is reset, and you can run your first `/ingest`. Then open `~/my-vault` in Obsidian and check the graph view.
+
+Detailed flow → [How to bootstrap](#how-to-bootstrap) below.
 
 ## Why a template?
 
@@ -160,6 +164,25 @@ This lets agents (and you, via `/query`) navigate the wiki without paying the fu
 3. Tomorrow morning, ask "show me the radar" — Claude reads `radar.md` and the accumulated `.suggestions.md` of each agent, proposes the day's priorities.
 4. After a few ingestions in a domain, run `/evolve-agent <domain>` to fold accumulated suggestions back into the expert's prompt.
 5. Use `/query` whenever you need to answer something from the corpus. Substantial answers can be archived via `/save`.
+
+## Who is this for?
+
+**For you if:**
+
+- You're a **solo dev, researcher, PM or writer** building a personal knowledge base across 3-6 domains.
+- You already use **Claude Code** (CLI, desktop app, IDE extension, or claude.ai/code) and **Obsidian** — or want to.
+- You want a **thinking partner** that grounds its answers in *your* sources (with citations), not a chatbot guessing from training data.
+- You'd rather **have an opinion than a blank page**: hash-keyed `raw/`, one expert agent per domain, mandatory frontmatter — these constraints feel like a feature, not a friction.
+- You want a vault that **scales past a few weeks** without falling into the "200 unlinked notes" trap.
+- You enjoy **owning your wiki layer** (the LLM writes it, you curate the prompts and the diff).
+
+**Probably not for you if:**
+
+- You want a **team or shared wiki** — BoilingBrain is single-tenant by design (one agent set per vault).
+- You want a **one-click hosted product** (Mem, NotebookLM, ChatGPT projects) where you upload notes and the storage is abstracted away — here the wiki is yours, plain markdown, you read and edit it directly.
+- You're expecting a **vector embeddings / RAG** retrieval layer — there's none, on purpose. For a personal knowledge base at this scale, hash-keyed sources + LLM-maintained wikilinks are simpler and effective; full RAG is overkill.
+- You don't use Claude Code (Codex, Cursor, Aider support is on the roadmap — contributions welcome, see open issues).
+- You want a **no-code, no-config** experience — every action goes through a slash command and you'll edit YAML frontmatter.
 
 ## FAQ
 
