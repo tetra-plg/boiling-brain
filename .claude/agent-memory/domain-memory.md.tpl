@@ -1,29 +1,29 @@
-# Mémoire — {{domain_label}}-expert
+# Memory — {{domain_label}}-expert
 
-> Cette mémoire est lue par `{{domain_slug}}-expert` au démarrage de chaque ingest, et mise à jour en fin d'ingest. Elle représente l'**état du domaine** dans le wiki — pas des règles comportementales (celles-ci vivent dans le prompt système et évoluent via `/evolve-agent`).
+> This memory is read by `{{domain_slug}}-expert` at the start of every ingest, and updated at the end. It represents the **domain state** in the wiki — not behavioral rules (those live in the system prompt and evolve via `/evolve-agent`).
 >
-> Format : sections nommées avec entrées datées `[last-seen: YYYY-MM-DD]`. Une entrée disparaît dès qu'elle est confirmée (concept créé, pattern codifié) ou archivée si elle traîne > 90 jours sans suite.
+> Format: named sections with dated entries `[last-seen: YYYY-MM-DD]`. An entry disappears as soon as it's confirmed (concept created, pattern codified) or archived if it lingers > 90 days without follow-up.
 
-## Patterns en attente
+## Pending patterns
 
-> Patterns observés dans une seule source — j'attends une 2e occurrence avant de créer la page concept correspondante (cf. règle « ≥2 sources » du wiki). Si une nouvelle source confirme l'un d'eux, je crée la page maintenant et je retire l'entry.
+> Patterns observed in a single source — I'm waiting for a 2nd occurrence before creating the matching concept page (cf. wiki rule "≥2 sources"). If a new source confirms one of these, I create the page right away and drop the entry.
 
-_(vide à l'amorçage)_
+_(empty at boot)_
 
-## Concepts récents
+## Recent concepts
 
-> Liste des 10 derniers concepts que j'ai créés ou enrichis significativement, par date décroissante. Sert à éviter les doublons et à proposer des cross-refs naturelles dans les ingestions à venir.
+> List of the last 10 concepts I created or significantly enriched, descending by date. Used to avoid duplicates and to surface natural cross-refs in upcoming ingests.
 
-_(vide à l'amorçage)_
+_(empty at boot)_
 
-## Sources pivots
+## Pivot sources
 
-> Sources particulièrement structurantes du domaine — cadrent un sous-thème entier. À garder en tête pour les cross-refs.
+> Particularly structural sources for the domain — they anchor an entire sub-theme. Worth keeping in mind for cross-refs.
 
-_(vide à l'amorçage)_
+_(empty at boot)_
 
-## Patterns expirés
+## Expired patterns
 
-> Archive des entries restées trop longtemps en attente (> 90 jours) ou écartées. Pas supprimées — elles peuvent redevenir pertinentes.
+> Archive of entries that stayed too long pending (> 90 days) or were discarded. Not deleted — they may become relevant again.
 
-_(vide à l'amorçage)_
+_(empty at boot)_
