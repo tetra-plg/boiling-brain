@@ -1,5 +1,5 @@
 {
-  "$schema_note": "Manifest des repos GitHub à synchroniser vers raw/ via /sync-repos. Chaque sync crée un snapshot par SHA court (merge sur main). Voir CLAUDE.md > SYNC-REPOS. Champs par source : name (slug), repo (owner/name GitHub), branch, dest (chemin relatif au vault — typiquement raw/tracked-repos/<slug>), paths (optionnel, défaut = default_paths), exclude_paths (optionnel, défaut = default_exclude_paths) — chemins à supprimer du snapshot après copie, relatifs à la racine du repo.",
+  "$schema_note": "Manifest of GitHub repos to sync into raw/ via /sync-repos. Each sync creates a short-SHA snapshot (one per merge into main). See CLAUDE.md > SYNC-REPOS. Per-source fields: name (slug), repo (owner/name on GitHub), branch, dest (vault-relative path — typically raw/tracked-repos/<slug>), paths (optional, default = default_paths), exclude_paths (optional, default = default_exclude_paths) — paths removed from the snapshot after copy, relative to the repo root.",
   "default_paths": ["docs/", "README.md", "CHANGELOG.md"],
   "default_exclude_paths": [],
   "sources": []
