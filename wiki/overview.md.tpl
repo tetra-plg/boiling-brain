@@ -6,30 +6,30 @@ updated: {{bootstrap_date}}
 
 # Portrait — {{name}}
 
-Page racine de l'utilisateur. Mise à jour au fil des ingests et des conversations. Ce vault est une instance du pattern **LLM Wiki**.
+User's root page. Updated continuously through ingests and conversations. This vault is an instance of the **LLM Wiki** pattern.
 
-## Parcours
+## Background
 
 {{parcours_short}}
 
-## Activités
+## Activities
 
-### Professionnel
+### Professional
 - {{role}}.
-- Voir les domaines liés ci-dessous.
+- See related domains below.
 
-### Personnel
+### Personal
 {{projects_links}}
 
-## Centres d'intérêt
+## Areas of interest
 
 {{domains_links}}
 
-## À compléter
+## To flesh out
 
-> [!question] Informations à enrichir au fil des ingests
-> - Parcours détaillé (formation, timeline, étapes clés).
-> - Stack technique préférée, langages, outils.
-> - Granularité des centres d'intérêt (sous-thèmes prioritaires par domaine).
-> - Projets en cours / projets latents.
-> - Tout ce qui rendrait les agents experts plus efficaces s'ils le savaient.
+> [!question] Information to enrich as ingests come in
+> - Detailed background (education, timeline, key milestones).
+> - Preferred technical stack, languages, tools.
+> - Granularity of areas of interest (priority sub-themes per domain).
+> - Active projects / latent projects.
+> - Anything that would make expert agents more effective if they knew it.
