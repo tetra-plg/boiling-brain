@@ -5,26 +5,26 @@ argument-hint: <question>
 
 Run the QUERY workflow from CLAUDE.md on: $ARGUMENTS
 
-## Tiered loading — stratégie de lecture
+## Tiered loading — reading strategy
 
-Lire le moins possible pour répondre avec précision. Descendre les niveaux dans l'ordre :
+Read as little as possible to answer accurately. Descend levels in order:
 
-**L0 — scan** : `summary_l0` de chaque page candidate (champ frontmatter, ≤140 chars).
-**L1 — preview** : `summary_l1` (frontmatter, 2-5 phrases) si L0 ne suffit pas à discriminer.
-**L2 — full body** : corps complet uniquement pour les pages confirmées pertinentes par L1.
+**L0 — scan**: `summary_l0` of each candidate page (frontmatter field, ≤140 chars).
+**L1 — preview**: `summary_l1` (frontmatter, 2-5 sentences) if L0 isn't enough to discriminate.
+**L2 — full body**: full content only for pages confirmed relevant by L1.
 
-## Étapes
+## Steps
 
-1. Identifier le ou les domaines de la question (poker, ia, factory, metier, tech, astro, ou transversal).
-2. Construire la liste des pages candidates :
-   - Par domaine identifié : `grep -rl "domains:.*<domaine>" wiki/`
-   - Si plusieurs domaines : lancer un grep par domaine et dédupliquer (`sort -u`)
-   - Ne pas dépendre de `wiki/index.md` : il peut être incomplet.
-3. **L0** : lire les `summary_l0` des candidates (frontmatter uniquement).
-   - Si la réponse est claire depuis L0 → répondre directement avec citations.
-   - Sinon : sélectionner les pages nécessitant un approfondissement.
-4. **L1** : lire le `summary_l1` des pages sélectionnées. Si suffisant → répondre. Sinon → L2.
-5. **L2** : lire le corps complet des pages retenues. Suivre les `[[wikilinks]]` uniquement si indispensable.
-6. Synthétiser la réponse avec citations `[[page]]`. Mentionner explicitement si la réponse est partielle faute de sources.
-7. Si la réponse est substantielle (>200 mots, exploitable en dehors de cette session), proposer de l'archiver via `/save <slug>`.
-8. Ajouter dans `wiki/log.md` : `## [YYYY-MM-DD] query | <question courte>`.
+1. Identify the domain(s) of the question (one or more of the domains declared in `wiki/index.md`, or cross-domain).
+2. Build the candidate-page list:
+   - Per identified domain: `grep -rl "domains:.*<domain>" wiki/`
+   - If several domains: run one grep per domain and deduplicate (`sort -u`).
+   - Don't rely on `wiki/index.md`: it may be incomplete.
+3. **L0**: read the `summary_l0` of the candidates (frontmatter only).
+   - If the answer is clear from L0 → answer directly with citations.
+   - Otherwise: pick the pages needing deeper inspection.
+4. **L1**: read the `summary_l1` of the selected pages. If sufficient → answer. Otherwise → L2.
+5. **L2**: read the full body of the retained pages. Follow `[[wikilinks]]` only if essential.
+6. Synthesize the answer with `[[page]]` citations. Explicitly mention if the answer is partial due to missing sources.
+7. If the answer is substantial (>200 words, usable outside this session), suggest archiving it via `/save <slug>`.
+8. Append to `wiki/log.md`: `## [YYYY-MM-DD] query | <short question>`.

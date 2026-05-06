@@ -1,61 +1,61 @@
 ---
-description: Consomme les suggestions accumulées d'un agent expert et propose une évolution de son prompt système
+description: Consume the accumulated suggestions of an expert agent and propose an evolution of its system prompt
 argument-hint: <domain>
 ---
 
 Run EVOLVE-AGENT workflow on domain: $ARGUMENTS
 
-Faire évoluer le prompt de l'agent expert `$ARGUMENTS-expert` à partir des suggestions qu'il a lui-même remontées lors de ses ingestions.
+Evolve the prompt of the expert agent `$ARGUMENTS-expert` from the suggestions it itself surfaced during its ingests.
 
-## Étapes
+## Steps
 
-### 1. Lire les matériaux
+### 1. Read the materials
 
-- **Prompt actuel** : `.claude/agents/$ARGUMENTS-expert.md`.
-- **Suggestions accumulées** : `.claude/agents/$ARGUMENTS-expert.suggestions.md` (append-only, horodaté par `/ingest`).
-- **Archive précédente** (si existe) : `.claude/agents/$ARGUMENTS-expert.suggestions.archive.md` — pour voir ce qui a déjà été intégré dans le passé.
+- **Current prompt**: `.claude/agents/$ARGUMENTS-expert.md`.
+- **Accumulated suggestions**: `.claude/agents/$ARGUMENTS-expert.suggestions.md` (append-only, timestamped by `/ingest`).
+- **Previous archive** (if it exists): `.claude/agents/$ARGUMENTS-expert.suggestions.archive.md` — to see what's already been integrated in the past.
 
-Si le fichier de suggestions n'existe pas ou est vide → informer le user, proposer qu'il déclenche d'abord une ou plusieurs ingestions du domaine.
+If the suggestions file doesn't exist or is empty → tell the user, suggest they trigger one or more domain ingests first.
 
-### 2. Analyser
+### 2. Analyze
 
-Pour chaque suggestion accumulée :
-- Classer : **pattern récurrent** (≥2 occurrences) / **angle mort** / **proposition de prompt** / **proposition de livrable**.
-- Dédupliquer les suggestions équivalentes.
-- Filtrer : garder ce qui est **récurrent** ou **clairement structurant**. Écarter l'anecdotique isolé (mais ne pas l'archiver — il pourra redevenir récurrent).
+For each accumulated suggestion:
+- Classify: **recurring pattern** (≥2 occurrences) / **blind spot** / **prompt proposal** / **deliverable proposal**.
+- Deduplicate equivalent suggestions.
+- Filter: keep what's **recurring** or **clearly structural**. Discard isolated anecdotal items (but don't archive them — they may become recurring later).
 
-### 3. Proposer un diff de révision
+### 3. Propose a revision diff
 
-Présenter au user un **plan de révision concis** :
-- Liste des suggestions retenues (et pourquoi).
-- Liste des suggestions écartées pour cette itération (avec raison).
-- **Diff proposé** sur `.claude/agents/$ARGUMENTS-expert.md` : sections ajoutées, modifiées, supprimées.
-- Impact attendu sur les prochaines ingestions (en 2-3 lignes).
+Present a **concise revision plan** to the user:
+- List of suggestions kept (and why).
+- List of suggestions discarded for this iteration (with reason).
+- **Proposed diff** on `.claude/agents/$ARGUMENTS-expert.md`: sections added, modified, removed.
+- Expected impact on next ingests (in 2-3 lines).
 
-Demander validation via `AskUserQuestion` avec options :
-- **Appliquer le diff** (option par défaut si pertinent).
-- **Modifier** (user précise ce qui doit changer).
-- **Reporter** (ne rien faire, les suggestions restent en attente).
+Ask for validation via `AskUserQuestion` with options:
+- **Apply the diff** (default option if relevant).
+- **Modify** (user specifies what should change).
+- **Defer** (do nothing, suggestions stay pending).
 
-### 4. Appliquer (si validé)
+### 4. Apply (if validated)
 
-1. Éditer `.claude/agents/$ARGUMENTS-expert.md` selon le diff.
-2. Déplacer les suggestions intégrées de `.suggestions.md` vers `.suggestions.archive.md`. Préfixer chaque bloc archivé par `### [YYYY-MM-DD] evolve → version <n>`. Ne pas perdre les suggestions écartées — elles restent dans `.suggestions.md`.
-3. Appendre une entrée dans `wiki/log.md` :
+1. Edit `.claude/agents/$ARGUMENTS-expert.md` per the diff.
+2. Move integrated suggestions from `.suggestions.md` to `.suggestions.archive.md`. Prefix each archived block with `### [YYYY-MM-DD] evolve → version <n>`. Don't lose discarded suggestions — they stay in `.suggestions.md`.
+3. Append an entry to `wiki/log.md`:
    ```
    ## [YYYY-MM-DD] evolve | $ARGUMENTS-expert
-   Révision du prompt système à partir de <N> suggestions. Retenues : <résumé>. Écartées : <résumé court>. Archive : `.claude/agents/$ARGUMENTS-expert.suggestions.archive.md`.
+   System prompt revision from <N> suggestions. Kept: <summary>. Discarded: <short summary>. Archive: `.claude/agents/$ARGUMENTS-expert.suggestions.archive.md`.
    ```
-4. Indiquer au user que l'agent sera mis à jour au prochain démarrage de session (les subagents sont chargés au boot).
+4. Tell the user the agent will be updated at the next session start (subagents are loaded at boot).
 
-### 5. Rapport final
+### 5. Final report
 
-- Nombre de suggestions lues / retenues / reportées / archivées.
-- Chemin du fichier agent mis à jour.
-- Prochaine étape recommandée (ex. rejouer `/ingest` sur une source récente pour valider l'amélioration).
+- Number of suggestions read / kept / deferred / archived.
+- Path of the updated agent file.
+- Recommended next step (e.g. re-run `/ingest` on a recent source to validate the improvement).
 
-## Principes
+## Principles
 
-- **Curation humaine, pas auto-modification silencieuse** — l'agent propose, le user valide.
-- **Pas de régression** : le diff respecte la structure existante (frontmatter, sections, ton). On ajoute ou affine, on ne refond pas sans raison.
-- **Traçabilité** : chaque évolution est loguée, chaque suggestion intégrée est archivée avec sa date et son origine.
+- **Human curation, not silent self-modification** — the agent proposes, the user validates.
+- **No regression**: the diff respects the existing structure (frontmatter, sections, tone). We add or refine, we don't refactor without reason.
+- **Traceability**: every evolution is logged, every integrated suggestion is archived with its date and origin.

@@ -1,63 +1,63 @@
 ---
-description: Conventions d'écriture des pages du wiki (style, slugs, callouts, structure)
+description: Writing conventions for wiki pages (style, slugs, callouts, structure)
 paths:
   - "wiki/**"
 ---
 
-# Pages wiki — conventions d'écriture
+# Wiki pages — writing conventions
 
-## Slug et nommage
+## Slug and naming
 
-- `kebab-case.md` strict pour tous les fichiers wiki.
-- Pas d'accents, pas de majuscules, pas d'espaces, pas de caractères spéciaux dans les noms de fichiers.
-- Une page = une idée / une entité / un concept / une décision. Si > 400 lignes, scinder.
-- `wiki/sources/` : format `YYYY-MM-DD-slug.md` (date d'acquisition de la source).
+- Strict `kebab-case.md` for all wiki files.
+- No accents, no uppercase, no spaces, no special characters in file names.
+- One page = one idea / one entity / one concept / one decision. If > 400 lines, split.
+- `wiki/sources/`: format `YYYY-MM-DD-slug.md` (date the source was acquired).
 
-## Liens internes
+## Internal links
 
-- Tous les liens internes en `[[wikilinks]]` style Obsidian.
-- Format alias : `[[chemin/slug|Texte affiché]]` quand le slug n'est pas explicite.
-- Pas de chemins relatifs `../` pour les pages wiki — toujours wikilinks.
-- Liens externes via syntaxe markdown standard `[texte](url)`.
+- All internal links as `[[wikilinks]]` Obsidian-style.
+- Alias format: `[[path/slug|Display text]]` when the slug is not self-explanatory.
+- No relative `../` paths for wiki pages — always wikilinks.
+- External links via standard markdown syntax `[text](url)`.
 
-## Callouts Obsidian
+## Obsidian callouts
 
-Pour signaler explicitement les contradictions et incertitudes :
+To explicitly flag contradictions and uncertainties:
 
 ```markdown
 > [!warning] Contradiction
-> Source A dit X, source B dit Y. Pas de résolution actuelle.
+> Source A says X, source B says Y. No current resolution.
 
-> [!question] Incertitude
-> Le mécanisme exact de Z n'est pas documenté dans les sources lues.
+> [!question] Uncertainty
+> The exact mechanism behind Z is not documented in the sources read.
 ```
 
-- `[!warning]` pour une contradiction factuelle entre sources ou avec le wiki existant.
-- `[!question]` pour une incertitude non résolue, à élever vers `wiki/radar.md`.
+- `[!warning]` for a factual contradiction between sources or against the existing wiki.
+- `[!question]` for an unresolved uncertainty, to bubble up to `wiki/radar.md`.
 
 ## Style
 
-- Français pour les titres, le corps, les explications. Termes techniques en VO si l'usage VO est dominant.
-- Ton **neutre** pour `entities/`, `concepts/`, `cheatsheets/`. Plus personnel pour `overview.md`, `wiki/domains/*.md`.
-- Listes et tableaux courts > paragraphes longs.
-- Toujours citer les sources : champ `sources:` du frontmatter + `[[source-slug]]` inline pour un claim précis.
-- Pas de longues introductions. Pas de méta-commentaire ("Cette page va vous expliquer...").
+- Vault language (declared as `{{vault_language}}` in `CLAUDE.md`) for titles, body, explanations. Technical terms in VO when the VO usage is dominant.
+- **Neutral** tone for `entities/`, `concepts/`, `cheatsheets/`. More personal for `overview.md`, `wiki/domains/*.md`.
+- Short lists and tables > long paragraphs.
+- Always cite sources: `sources:` field in frontmatter + `[[source-slug]]` inline for a specific claim.
+- No long introductions. No meta-commentary ("This page will explain...").
 
-## Cross-références
+## Cross-references
 
-Une section `## Cross-refs` à la fin de chaque page substantielle, listant les pages connexes :
+A `## Cross-refs` section at the end of every substantial page, listing related pages:
 
 ```markdown
 ## Cross-refs
 
-- [[concepts/<lié>]] — angle complémentaire.
-- [[decisions/<liée>]] — choix d'archi qui s'applique.
-- [[sources/<source>]] — source primaire.
+- [[concepts/<related>]] — complementary angle.
+- [[decisions/<related>]] — applicable architectural choice.
+- [[sources/<source>]] — primary source.
 ```
 
-## Seuil de création de page
+## Page-creation threshold
 
-- **≥ 2 sources** mentionnent le concept indépendamment, OU
-- jugé structurant par l'utilisateur (validation explicite).
+- **≥ 2 sources** mention the concept independently, OR
+- judged structural by the user (explicit validation).
 
-Pas de page pour chaque concept mentionné en passant.
+No page for every concept mentioned in passing.

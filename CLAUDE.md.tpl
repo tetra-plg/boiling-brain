@@ -1,122 +1,122 @@
-# {{vault_name}} — Schéma du wiki personnel
+# {{vault_name}} — Personal wiki schema
 
-Ce vault est un **LLM Wiki** : un écosystème de connaissances maintenu par LLM, centré sur l'utilisateur ({{name}}) et ses domaines d'intérêt.
+This vault is an **LLM Wiki**: a knowledge ecosystem maintained by an LLM, centered on the user ({{name}}) and their domains of interest.
 
-## Rôles
+## Roles
 
-- **Humain** : curate les sources, pose les questions, guide l'analyse.
-- **LLM (toi)** : lis, synthétise, cross-référence, maintiens. Tu n'inventes pas — tu t'appuies sur les sources citées.
+- **Human**: curates sources, asks questions, guides the analysis.
+- **LLM (you)**: read, synthesize, cross-reference, maintain. You don't invent — you rely on cited sources.
 
 ## Architecture
 
 ```
 .claude/
-  agents/        # subagents Claude Code — un expert par domaine (+ suggestions accumulées pour l'évolution)
-  agent-memory/  # mémoires inter-sessions par agent (état du domaine, patterns en attente)
+  agents/        # Claude Code subagents — one expert per domain (+ accumulated suggestions for evolution)
+  agent-memory/  # cross-session memories per agent (domain state, pending patterns)
   commands/      # slash commands (/ingest, /ingest-video, /query, /save, /lint, /evolve-agent, /update-vault, /create-issue{{slash_commands_extras}})
-  rules/         # conventions auto-chargées par Claude Code via le champ `paths` du frontmatter
-  template-version  # version du template avec laquelle ce vault est aligné
+  rules/         # conventions auto-loaded by Claude Code via the `paths` field in their frontmatter
+  template-version  # template version this vault is aligned with
 
-raw/                 # sources brutes IMMUTABLES — ce qui est référencé par le wiki.
-  notes/             # retours d'expérience perso (texte)
-  transcripts/       # transcripts de vidéos/audios (YYYY-MM-DD-slug.md + timestamps)
-  videos-meta/       # pointeurs/metadata des vidéos
-  frames/            # frames extraites effectivement utilisées par le wiki (promues depuis cache)
-{{tracked_repos_arborescence}}  # + articles/, pdfs/, clippings/... selon besoin
+raw/                 # IMMUTABLE raw sources — what the wiki references.
+  notes/             # personal experience notes (text)
+  transcripts/       # video/audio transcripts (YYYY-MM-DD-slug.md + timestamps)
+  videos-meta/       # video pointers/metadata
+  frames/            # frames effectively used by the wiki (promoted from cache)
+{{tracked_repos_arborescence}}  # + articles/, pdfs/, clippings/... as needed
 
-cache/                 # artefacts TRANSITOIRES — jamais référencés par le wiki, purgeables à tout moment.
-  videos/              # vidéos téléchargées/déposées, supprimées après transcription
-  audio/               # audio extrait, supprimé après transcription
-  frames/              # frames candidates, promues vers raw/frames/ si utilisées
+cache/                 # TRANSIENT artifacts — never referenced by the wiki, purgeable at any time.
+  videos/              # downloaded/dropped videos, removed after transcription
+  audio/               # extracted audio, removed after transcription
+  frames/              # candidate frames, promoted to raw/frames/ if used
 {{tracked_repos_cache}}
-wiki/          # pages générées par le LLM. Tu possèdes cette couche.
-  index.md     # portail humain minimal (overview, radar, log, domaines)
-  log.md       # journal chronologique (ingest, query, lint, evolve)
-  radar.md     # questions ouvertes & points d'attention — alimenté à chaque ingest
-  overview.md  # portrait de l'utilisateur, mis à jour au fil de l'eau
-  domains/     # pages racines des grands domaines (hubs)
-  entities/    # personnes, entreprises, produits, lieux
-  concepts/    # idées, théories, frameworks
-  sources/     # une page par source ingérée (YYYY-MM-DD-slug.md)
-  syntheses/   # réponses substantielles archivées
-  decisions/   # choix d'architecture du vault lui-même (ADR-lite)
-  cheatsheets/ # tableaux synthétiques, paliers, matrices
-  diagrams/    # diagrammes Mermaid / ASCII
+wiki/          # LLM-generated pages. You own this layer.
+  index.md     # minimal human portal (overview, radar, log, domains)
+  log.md       # chronological journal (ingest, query, lint, evolve)
+  radar.md     # open questions & points of attention — fed at every ingest
+  overview.md  # user portrait, updated continuously
+  domains/     # root pages of major domains (hubs)
+  entities/    # people, companies, products, places
+  concepts/    # ideas, theories, frameworks
+  sources/     # one page per ingested source (YYYY-MM-DD-slug.md)
+  syntheses/   # archived substantial answers
+  decisions/   # architectural choices about the vault itself (ADR-lite)
+  cheatsheets/ # synthesis tables, thresholds, matrices
+  diagrams/    # Mermaid / ASCII diagrams
 
-scripts/       # utilitaires (extraction audio, transcription, sampling de frames, image-diff{{tracked_repos_scripts_extras}})
-  migrations/  # migrations breaking entre versions du template, invoquées par /update-vault
+scripts/       # utilities (audio extraction, transcription, frame sampling, image-diff{{tracked_repos_scripts_extras}})
+  migrations/  # breaking migrations between template versions, invoked by /update-vault
 ```
 
-## Domaines de l'utilisateur
+## User domains
 
 {{domains_section}}
 
-Chaque domaine a une page dans `wiki/domains/` qui sert de hub.
+Each domain has a page in `wiki/domains/` that serves as a hub.
 
 ## Conventions
 
-Les conventions d'écriture (frontmatter, slugs, callouts, immutabilité de `raw/`) sont formalisées dans `.claude/rules/` et **auto-chargées** par Claude Code via le champ `paths` du frontmatter de chaque rule. Voir `.claude/rules/frontmatter.md`, `.claude/rules/pages-wiki.md`, `.claude/rules/raw-vs-cache.md`.
+Writing conventions (frontmatter, slugs, callouts, immutability of `raw/`) are formalized in `.claude/rules/` and **auto-loaded** by Claude Code via the `paths` field in each rule's frontmatter. See `.claude/rules/frontmatter.md`, `.claude/rules/pages-wiki.md`, `.claude/rules/raw-vs-cache.md`.
 
-Trois règles critiques résiduelles :
+Three critical residual rules:
 
-- **`raw/` est strictement immutable.** Aucune exception. Aucun agent ni script ne réécrit un fichier de `raw/`.
-- **Frontmatter YAML obligatoire** sur chaque page wiki, avec `source_sha256` calculé via `shasum -a 256 <file>` — jamais un placeholder textuel.
-- **Slugs en `kebab-case.md`**, liens internes en `[[wikilinks]]` style Obsidian.
+- **`raw/` is strictly immutable.** No exceptions. No agent or script ever rewrites a file in `raw/`.
+- **YAML frontmatter is mandatory** on every wiki page, with `source_sha256` computed via `shasum -a 256 <file>` — never a textual placeholder.
+- **Slugs in `kebab-case.md`**, internal links as `[[wikilinks]]` Obsidian-style.
 
-## Agents experts par domaine
+## Per-domain expert agents
 
-L'ingestion est **déléguée à un agent expert** du domaine de la source. Les agents vivent dans `.claude/agents/` :
+Ingestion is **delegated to a domain-expert agent** matching the source. Agents live in `.claude/agents/`:
 
 {{agents_section}}
 
-Chaque agent a un prompt **volontairement ouvert** (pas une checklist fermée) et **écrit directement** dans le wiki. Il conclut par deux blocs parsables : `## Ingest summary` et `## Evolution suggestions`. Les suggestions s'accumulent dans `.claude/agents/<domain>-expert.suggestions.md` pour alimenter `/evolve-agent`.
+Each agent has a **deliberately open** prompt (not a closed checklist) and **writes directly** into the wiki. It concludes with two parsable blocks: `## Ingest summary` and `## Evolution suggestions`. Suggestions accumulate in `.claude/agents/<domain>-expert.suggestions.md` to feed `/evolve-agent`.
 
-Le dispatch d'agent à `/ingest` propose un agent avec niveau de confiance + justification, puis l'utilisateur valide via `AskUserQuestion`. Voir `.claude/commands/ingest.md` pour le détail.
+The agent dispatch in `/ingest` proposes an agent with a confidence level + justification, then the user validates via `AskUserQuestion`. See `.claude/commands/ingest.md` for details.
 
 ## Workflows
 
-Les workflows détaillés vivent dans `.claude/commands/`. Tableau récapitulatif :
+Detailed workflows live in `.claude/commands/`. Summary table:
 
-| Slash-command | Rôle |
+| Slash-command | Role |
 |---|---|
-| `/ingest [chemin]` | Ingestion idempotente des `raw/` via agent expert du domaine |
-| `/ingest-video <url-ou-path>` | Pipeline vidéo → transcript → ingest → frames (optionnel) |
-| `/sync-repos [noms]` | Snapshot immuable des repos GitHub trackés (si `tracked-repos.config.json` présent) |
-| `/query <question>` | Recherche dans le wiki avec citations, archive optionnelle |
-| `/save <slug>` | Archive la dernière synthèse dans `wiki/syntheses/` |
-| `/lint` | Détection de contradictions, orphelins, lacunes |
-| `/evolve-agent <domain>` | Évolution curée du prompt d'un agent depuis ses suggestions accumulées |
-| `/update-vault` | Récupère les améliorations upstream du template (machine de migration versionnée) |
-| `/create-issue [type]` | Crée une issue sanitizée sur le repo template upstream à partir du contexte courant |
-| `/compress-bb [slug]` | Sauvegarde le journal de la session courante dans `raw/notes/sessions/YYYY-MM-DD-<slug>.md` |
+| `/ingest [path]` | Idempotent ingestion of `raw/` files via the matching domain-expert agent |
+| `/ingest-video <url-or-path>` | Pipeline: video → transcript → ingest → frames (optional) |
+| `/sync-repos [names]` | Immutable snapshot of tracked GitHub repos (if `tracked-repos.config.json` is present) |
+| `/query <question>` | Search the wiki with citations, optional archive |
+| `/save <slug>` | Archive the latest synthesis into `wiki/syntheses/` |
+| `/lint` | Detect contradictions, orphans, gaps |
+| `/evolve-agent <domain>` | Curated evolution of an agent's prompt from its accumulated suggestions |
+| `/update-vault` | Pull upstream template improvements (versioned migration machine) |
+| `/create-issue [type]` | Open a sanitized issue on the upstream template repo from the current context |
+| `/compress-bb [slug]` | Save the current session journal into `raw/notes/sessions/YYYY-MM-DD-<slug>.md` |
 
-Pour le radar : « montre le radar » / « qu'est-ce qu'il y a à faire aujourd'hui » → lecture de `wiki/radar.md` + extraction des suggestions accumulées des agents (≥2 occurrences ou jugées structurantes). **Si une entrée du radar concerne l'environnement template** (bug ou manque touchant `scripts/`, `.claude/commands/`, `BOOTSTRAP.md`, ou tout fichier propagé par `/update-vault`), proposer à l'utilisateur de la remonter via `/create-issue <type>` — sans créer l'issue tout seul, juste suggérer la commande.
+For the radar: "show me the radar" / "what's on the agenda today" → read `wiki/radar.md` + extract accumulated agent suggestions (≥2 occurrences OR judged structural). **If a radar entry concerns the template environment** (bug or gap touching `scripts/`, `.claude/commands/`, `BOOTSTRAP.md`, or any file propagated by `/update-vault`), suggest the user file it via `/create-issue <type>` — don't create the issue yourself, just surface the command.
 
-## Décisions d'architecture
+## Architectural decisions
 
-Les choix structurants sur le vault (workflows, conventions, outillage — pas les domaines de connaissance) vont dans `wiki/decisions/` au format ADR-lite : Problème → Options écartées → Décision retenue → Pourquoi → Questions ouvertes. Pas de numérotation, slug descriptif. Si une décision est révisée, créer une nouvelle qui cite et remplace l'ancienne.
+Structural choices about the vault (workflows, conventions, tooling — not knowledge domains) go to `wiki/decisions/` in ADR-lite format: Problem → Discarded options → Decision → Why → Open questions. No numbering, descriptive slug. If a decision is revised, create a new one that cites and supersedes the old.
 
-## Démarrage de session (signaux `cache/`)
+## Session start (signals from `cache/`)
 
-Au démarrage de chaque session, vérifier les signaux laissés dans `cache/` :
+At the start of each session, check the signals left in `cache/`:
 
-- **`cache/.pending-ingest`** : un ou plusieurs chemins en attente d'ingestion (déposés via le MCP `drop_to_raw` ou par un autre vault). Proposer `/ingest <chemin>` pour chaque entrée. Ne pas supprimer le fichier — attendre la confirmation utilisateur.
-- **`cache/.session-pending`** : la session précédente avait des changements non journalisés (commits + fichiers modifiés détectés par le hook `Stop`). Proposer `/compress-bb <slug>` pour archiver le journal dans `raw/notes/sessions/`. Supprimer le fichier après proposition.
+- **`cache/.pending-ingest`**: one or more paths awaiting ingestion (dropped via the `drop_to_raw` MCP or by another vault). Suggest `/ingest <path>` for each entry. Don't delete the file — wait for user confirmation.
+- **`cache/.session-pending`**: the previous session had unjournaled changes (commits + modified files detected by the `Stop` hook). Suggest `/compress-bb <slug>` to archive the journal into `raw/notes/sessions/`. Delete the file after the proposal.
 
-Ces vérifications sont silencieuses si les fichiers sont absents.
+These checks are silent if the files are absent.
 
-## Principes d'écriture
+## Writing principles
 
-- Français. Termes techniques en VO si l'usage VO est dominant.
-- Une page = une idée/entité. >400 lignes → scinder.
-- Toujours citer les sources (`sources:` frontmatter + `[[source-slug]]` inline si claim précis).
-- Listes et tableaux courts > paragraphes longs.
-- Ton neutre pour `entities/`, `concepts/`. Plus personnel pour `overview` et `domains/`.
+- Vault language: **{{vault_language}}** — every wiki page is written in this language, regardless of the source's original language. Technical terms in VO (original) when the VO usage is dominant.
+- One page = one idea/entity. >400 lines → split.
+- Always cite sources (`sources:` frontmatter + `[[source-slug]]` inline for specific claims).
+- Short lists and tables > long paragraphs.
+- Neutral tone for `entities/`, `concepts/`. More personal for `overview` and `domains/`.
 
-## Ce qu'il ne faut PAS faire
+## What NOT to do
 
-- **Une source = un fichier dans `raw/`.** Pas d'ingestion depuis la mémoire ou la conversation. Pour faire entrer un retour d'expérience : déposer d'abord dans `raw/notes/YYYY-MM-DD-<sujet>.md`, puis ingest normal.
-- **Ne jamais référencer `cache/` depuis le wiki.** Le contenu peut disparaître à tout moment.
-- **Ne jamais modifier les fichiers dans `raw/`.** Une source qui évolue → nouveau fichier, jamais réécriture.
-- **Pas de page pour chaque concept mentionné en passant** : seuil ≥ 2 sources OU jugé structurant par l'utilisateur.
-- **Pas de longues introductions, pas de méta-commentaires.**
+- **One source = one file in `raw/`.** No ingestion from memory or conversation. To bring in a personal takeaway: drop it first as `raw/notes/YYYY-MM-DD-<topic>.md`, then ingest normally.
+- **Never reference `cache/` from the wiki.** Its contents may disappear at any time.
+- **Never modify files in `raw/`.** A source that evolves → new file, never overwrite.
+- **No page for every concept mentioned in passing**: threshold ≥ 2 sources OR judged structural by the user.
+- **No long introductions, no meta-commentary.**

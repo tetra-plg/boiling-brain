@@ -1,433 +1,439 @@
-# BOOTSTRAP.md — prompt portable de personnalisation du LLM Wiki
+# BOOTSTRAP.md — portable LLM-Wiki personalization prompt
 
-> Tu (Claude) lis ce fichier dans un clone fraîchement récupéré de `tetra-plg/boiling-brain`. Ta mission : conduire l'utilisateur en interview, déduire son architecture, scaffolder son instance LLM Wiki personnalisée, puis nettoyer.
+> You (Claude) are reading this file in a fresh clone of `tetra-plg/boiling-brain`. Your mission: walk the user through an interview, infer their architecture, scaffold their personalized LLM-Wiki instance, then clean up.
 >
-> **Langue** : détecte la langue de l'utilisateur depuis ses premiers messages (ou depuis la locale système si tu peux l'inférer) et conduis toute l'interview, génère tous les fichiers et rédige tous les commentaires dans cette langue. Si tu n'es pas sûr, pose la question en anglais avant de continuer. Ne maintiens pas plusieurs versions du prompt — adapte à la volée. Sois direct, pas de prose. Les `AskUserQuestion` doivent être posés tels que spécifiés.
+> **Language**: detect the user's language from their first messages (or from the system locale if you can infer it) and run the entire interview, generate every file and write every comment in that language. If unsure, ask the question in English before continuing. Do not maintain multiple versions of the prompt — adapt on the fly. Be direct, no prose. The `AskUserQuestion` calls must be asked as specified.
+>
+> **Language persistence**: the language detected here becomes the value of the `{{vault_language}}` placeholder (human label: `English`, `Français`, `Español`, `Deutsch`, `日本語`…). That value is then injected into `CLAUDE.md` and into every domain agent so that **all wiki pages produced by `/ingest` are written in that language**, regardless of the original source language. An EN source in a FR vault yields FR pages; the reverse is just as true. Confirm the language with the user at the end of Q1 if you have any doubt.
 
 ---
 
-## Section 1 — Préambule (à internaliser)
+## Section 1 — Preamble (to internalize)
 
-### 1.1 Ce qu'est un LLM Wiki
+### 1.1 What an LLM Wiki is
 
-Un **LLM Wiki** est un wiki personnel maintenu par LLM :
+An **LLM Wiki** is a personal wiki maintained by an LLM:
 
-- L'humain dépose des sources brutes (notes, transcripts vidéo, PDFs, clippings, docs officielles, snapshots de repos) dans `raw/` — **immutable**.
-- Des **agents experts par domaine** (un par domaine déclaré) ingèrent ces sources, écrivent dans `wiki/sources/`, `wiki/concepts/`, `wiki/entities/`, et leur livrable signature (`cheatsheets/`, `syntheses/`, `diagrams/`).
-- Des **slash-commands** orchestrent : `/ingest`, `/query`, `/save`, `/lint`, `/evolve-agent`, et conditionnellement `/ingest-video`, `/sync-repos`.
-- Le wiki est **toujours dérivable** de `raw/`. Pas de connaissance orpheline. Pas de lien inventé.
+- The human drops raw sources (notes, video transcripts, PDFs, web clippings, official docs, repo snapshots) into `raw/` — **immutable**.
+- **Per-domain expert agents** (one per declared domain) ingest those sources, write into `wiki/sources/`, `wiki/concepts/`, `wiki/entities/`, and their signature deliverable (`cheatsheets/`, `syntheses/`, `diagrams/`).
+- **Slash-commands** orchestrate: `/ingest`, `/query`, `/save`, `/lint`, `/evolve-agent`, and conditionally `/ingest-video`, `/sync-repos`.
+- The wiki is **always derivable** from `raw/`. No orphan knowledge. No invented links.
 
-### 1.2 Rôles
+### 1.2 Roles
 
-- **Humain** : curate les sources, pose les questions, valide les arbitrages.
-- **LLM (toi pendant le bootstrap, puis les agents experts ensuite)** : lit, synthétise, cross-référence, maintient. Ne jamais inventer hors source.
+- **Human**: curates sources, asks questions, validates trade-offs.
+- **LLM (you during bootstrap, then the expert agents thereafter)**: read, synthesize, cross-reference, maintain. Never invent outside sources.
 
-### 1.3 Principes structurants (les graver pendant le bootstrap)
+### 1.3 Structuring principles (to engrave during bootstrap)
 
-- `raw/` = jamais modifié, jamais réécrit, hash-addressé (`source_sha256`).
-- `cache/` = transitoire, jamais référencé par le wiki.
-- Liens internes en `[[wikilinks]]` Obsidian, pages en kebab-case, frontmatter YAML obligatoire.
-- Tiered loading : chaque page porte `summary_l0` (≤140 chars) + `summary_l1` (2-5 phrases). Permet aux agents de scanner un domaine sans charger les bodies.
-- Pas d'ingestion depuis la mémoire ou la conversation : une source = un fichier dans `raw/`.
+- `raw/` = never modified, never overwritten, hash-addressed (`source_sha256`).
+- `cache/` = transient, never referenced from the wiki.
+- Internal links as `[[wikilinks]]` Obsidian-style, pages in kebab-case, YAML frontmatter mandatory.
+- Tiered loading: every page carries `summary_l0` (≤140 chars) + `summary_l1` (2-5 sentences). Lets agents scan a domain without loading bodies.
+- No ingestion from memory or conversation: one source = one file in `raw/`.
 
-### 1.4 Ce que tu vas faire (vue d'ensemble)
+### 1.4 What you'll do (overview)
 
-1. Interview en 7 questions (Section 2).
-2. Déduction des 5 propriétés par domaine (Section 3).
-3. Validation par domaine + global (Section 4).
-4. Génération : substitution placeholders, duplication par domaine, suppressions conditionnelles, déplacement de ce fichier en ADR, reset git (Section 5).
-5. Remote GitHub optionnel (Section 6).
-6. Récap onboarding + 3 prochaines actions (Section 7).
+1. 7-question interview (Section 2).
+2. Inference of 5 properties per domain (Section 3).
+3. Per-domain + global validation (Section 4).
+4. Generation: placeholder substitution, per-domain duplication, conditional removals, this file moved to ADR, git reset (Section 5).
+5. Optional GitHub remote (Section 6).
+6. Onboarding wrap-up + 3 next actions (Section 7).
 
 ---
 
-## Section 2 — Étape 1, Interview (7 questions)
+## Section 2 — Step 1, Interview (7 questions)
 
-Pose les questions **séquentiellement**. Stocke chaque réponse dans une variable interne. **Ne passe à la suivante que quand la précédente est résolue.**
+Ask the questions **sequentially**. Store every answer in an internal variable. **Move on only when the previous one is resolved.**
 
-### Q1 — Identité
+### Q1 — Identity
 
-Pose 2 questions en texte simple, séquentielles, pas via `AskUserQuestion` :
+Ask 2 plain-text questions, sequential, not via `AskUserQuestion`:
 
-1. « Quel est ton nom complet ? (ex. *Maria Dupont*, *Carlos Silva*) »
-   → Stocke comme `name`. Extrais le **prénom** (1er token avant l'espace) lowercased pour calculer `vault_name = <prenom>-vault`.
-   → Pour les prénoms composés avec tiret (« Jean-Marc »), splitte sur **espaces uniquement** : `vault_name = jean-marc-vault`.
+1. "What's your full name? (e.g. *Maria Dupont*, *Carlos Silva*)"
+   → Store as `name`. Extract the **first name** (1st token before the space) lowercased to compute `vault_name = <firstname>-vault`.
+   → For hyphenated first names ("Jean-Marc"), split on **spaces only**: `vault_name = jean-marc-vault`.
 
-2. « Quel est ton rôle pro court (1 ligne) ? (ex. *Lead data engineer chez Acme Corp*, *Chercheure post-doc en génomique au CNRS*) »
-   → Stocke comme `role`.
+2. "What's your short professional role (1 line)? (e.g. *Lead data engineer at Acme Corp*, *Post-doc researcher in genomics at CNRS*)"
+   → Store as `role`.
 
-**Parsing :**
-- `name` = réponse Q1.1 brute (ex. `"Maria Dupont"`).
-- `role` = réponse Q1.2 brute.
-- `vault_name` = `<premier_token_lowercase>-vault`. Le « premier token » est obtenu par split sur **espaces uniquement** (pas sur tirets). Donc `"Maria Dupont"` → `maria-vault`, `"Jean-Marc Lefebvre"` → `jean-marc-vault`. Confirme silencieusement, pas de question dédiée.
+**Parsing:**
+- `name` = raw answer to Q1.1 (e.g. `"Maria Dupont"`).
+- `role` = raw answer to Q1.2.
+- `vault_name` = `<first_token_lowercase>-vault`. The "first token" is obtained by splitting on **spaces only** (not on hyphens). So `"Maria Dupont"` → `maria-vault`, `"Jean-Marc Lefebvre"` → `jean-marc-vault`. Confirm silently, no dedicated question.
 
-### Q2 — Domaines de connaissance
+### Q2 — Knowledge domains
 
-Pose en free-text simple (pas d'`AskUserQuestion` — la liste est ouverte) :
+Ask in plain free-text (no `AskUserQuestion` — the list is open):
 
 ```
-Liste les domaines de connaissance que tu veux maintenir.
-Format: slugs en kebab-case, séparés par des virgules.
-Exemple : data-science, ml-ops, devops, leadership, ecriture
-Conseil: regroupe plutôt que d'éclater quand c'est naturel. Pas de plafond — déclare autant de domaines que pertinent.
+List the knowledge domains you want to maintain.
+Format: kebab-case slugs, comma-separated.
+Example: data-science, ml-ops, devops, leadership, writing
+Tip: cluster rather than splinter when natural. No cap — declare as many as relevant.
 ```
 
-**Parsing :**
-- `domains = [slugs...]`. Trim chaque slug. Vérifie kebab-case, corrige sinon (silencieux).
-- Si 0 domaine → re-pose la question en disant qu'il en faut au moins 1.
-- Pour chaque slug, déduis un `domain_label` par titre-cassing humain (ex. `astro-physics` → `Astronomie & Physique`, `ia` → `IA`). Présenteras au moment de la validation.
+**Parsing:**
+- `domains = [slugs...]`. Trim every slug. Validate kebab-case, fix silently otherwise.
+- If 0 domain → re-ask, saying at least 1 is needed.
+- For each slug, infer a `domain_label` via human title-casing (e.g. `astro-physics` → `Astronomy & Physics`, `ai` → `AI`). You will display it at validation time.
 
-**Mapping slug → label humain (titre du domaine)** :
-- Slug en kebab-case ASCII (ex. `marche`, `paleo-dna`).
-- Le label humain est dérivé pour affichage : capitalize + accents si pertinent (ex. `marche` → `Marché`, `paleo-dna` → `Paleo-DNA`).
-- En cas d'ambiguïté (ex. slug `cs` → `Computer Science` ou `Customer Success` ?), demande à l'utilisateur de confirmer le label humain.
+**Slug → human-label mapping (domain title)**:
+- ASCII kebab-case slug (e.g. `market`, `paleo-dna`).
+- The human label is derived for display: capitalize + accents if relevant (e.g. `marche` → `Marché`, `paleo-dna` → `Paleo-DNA`).
+- On ambiguity (e.g. slug `cs` → `Computer Science` or `Customer Success`?), ask the user to confirm the human label.
 
 ### Q3 — Hub pivot
 
-Single-select dynamique avec une option par domaine + « aucun ». **Avant de poser la question**, affiche cette consigne courte en texte :
+Dynamic single-select with one option per domain + "none". **Before asking the question**, show this short reminder in plain text:
 
-> « Si tu hésites, choisis « aucun » — tu pourras désigner un hub plus tard via `/evolve-agent`. »
+> "If you hesitate, pick 'none' — you can designate a hub later via `/evolve-agent`."
 
-Construis le JSON dynamiquement :
+Build the JSON dynamically:
 
 ```json
 {
   "questions": [{
-    "question": "Quel domaine joue le rôle de hub pivot (irrigue les autres) ?",
+    "question": "Which domain plays the role of hub pivot (feeds the others)?",
     "header": "Hub pivot",
     "multiSelect": false,
     "options": [
-      {"label": "<domain_slug_1>", "description": "<domain_slug_1> outille / alimente les autres domaines."},
-      {"label": "<domain_slug_2>", "description": "<domain_slug_2> outille / alimente les autres domaines."},
+      {"label": "<domain_slug_1>", "description": "<domain_slug_1> tools / feeds the other domains."},
+      {"label": "<domain_slug_2>", "description": "<domain_slug_2> tools / feeds the other domains."},
       ...
-      {"label": "aucun", "description": "Mes domaines sont indépendants. Je désignerai un hub plus tard si besoin via /evolve-agent."}
+      {"label": "none", "description": "My domains are independent. I'll designate a hub later via /evolve-agent if needed."}
     ]
   }]
 }
 ```
 
-**Exemple concret** pour `domains = [poker, ia, factory, metier, tech]` : 5 options labellisées `poker`/`ia`/.../`tech` + l'option `aucun`. Description statique : « Le hub pivot est le domaine qui outille ou alimente les autres. Ex: l'IA alimente la Factory (agents) et le Métier (techniques LLM). »
+**Concrete example** for `domains = [poker, ai, factory, work, tech]`: 5 options labeled `poker`/`ai`/.../`tech` + the `none` option. Static description: "The hub pivot is the domain that tools or feeds the others. Example: AI feeds the Factory (agents) and Work (LLM management techniques)."
 
-**Parsing :**
-- `hub_pivot = <slug>` ou `null` si « aucun ».
+**Parsing:**
+- `hub_pivot = <slug>` or `null` if "none".
 
-### Q4 — Projets en cours
+### Q4 — Active projects
 
-Free-text (prose naturelle, format libre) :
+Free-text (natural prose, free format):
 
 ```
-Décris tes 2-3 projets actifs en ce moment (1 ligne par projet, en langage naturel).
+Describe your 2-3 currently active projects (1 line per project, in natural language).
 
-Exemple :
-Je suis une masterclass poker MTT pour améliorer mon jeu de tournoi
-Je refonds mon plugin Factory en architecture multi-agents
+Example:
+I'm following an MTT poker masterclass to improve my tournament play
+I'm rebuilding my Factory plugin in a multi-agent architecture
 
-(Laisse vide si aucun projet actif pour l'instant.)
+(Leave empty if no active project right now.)
 ```
 
-**Parsing automatique** :
-- Pour chaque ligne non-vide, extrais un `slug` en kebab-case (2-4 mots-clés condensés depuis la phrase) et garde la phrase complète comme `description`.
-- Exemple : `"Je suis une masterclass poker MTT pour 2026"` → `{slug: "masterclass-poker-mtt", description: "masterclass poker MTT 2026"}`.
-- Si la ligne est trop courte pour extraire un slug significatif → `projet-1`, `projet-2`, etc.
-- `projects = [{slug, description}, ...]`. Liste vide acceptée (utiliseras `« (à compléter) »` plus tard).
+**Automatic parsing**:
+- For every non-empty line, extract a kebab-case `slug` (2-4 keywords condensed from the sentence) and keep the full sentence as `description`.
+- Example: `"I'm following an MTT poker masterclass for 2026"` → `{slug: "mtt-poker-masterclass", description: "MTT poker masterclass 2026"}`.
+- If the line is too short to extract a meaningful slug → `project-1`, `project-2`, etc.
+- `projects = [{slug, description}, ...]`. Empty list accepted (you'll use `"(to be filled in)"` later).
 
-### Q5 — Types de sources
+### Q5 — Source types
 
-Multi-select 6 options :
+Multi-select 6 options:
 
 ```json
 {
   "questions": [{
-    "question": "Quels types de sources comptes-tu ingérer ?",
-    "header": "Types de sources",
+    "question": "Which source types do you plan to ingest?",
+    "header": "Source types",
     "multiSelect": true,
     "options": [
-      {"label": "Notes perso", "description": "Réflexions, retours d'expérience, drafts personnels."},
-      {"label": "Transcripts vidéo", "description": "YouTube + fichiers locaux. Active /ingest-video et le pipeline frames."},
+      {"label": "Personal notes", "description": "Reflections, takeaways, personal drafts."},
+      {"label": "Video transcripts", "description": "YouTube + local files. Enables /ingest-video and the frames pipeline."},
       {"label": "PDFs", "description": "Papers, ebooks, slides."},
-      {"label": "Clippings web", "description": "Articles de blog, threads, posts."},
-      {"label": "Docs officielles", "description": "SDK, API, frameworks."},
-      {"label": "Repos GitHub", "description": "Suivi de projets en évolution. Active /sync-repos."}
+      {"label": "Web clippings", "description": "Blog articles, threads, posts."},
+      {"label": "Official docs", "description": "SDKs, APIs, frameworks."},
+      {"label": "GitHub repos", "description": "Tracking evolving projects. Enables /sync-repos."}
     ]
   }]
 }
 ```
 
-**Parsing :**
+**Parsing:**
 - `source_types = [labels...]`.
-- `ingest_video_enabled = "Transcripts vidéo" in source_types` (booléen).
-- `has_tracked_repos = "Repos GitHub" in source_types` (booléen).
+- `ingest_video_enabled = "Video transcripts" in source_types` (boolean).
+- `has_tracked_repos = "GitHub repos" in source_types` (boolean).
 
-### Q6 — Cadence d'ingestion
+### Q6 — Ingestion cadence
 
-Single-select 3 options :
+Single-select 3 options:
 
 ```json
 {
   "questions": [{
-    "question": "À quelle cadence comptes-tu ingérer ?",
+    "question": "At what cadence do you plan to ingest?",
     "header": "Cadence",
     "multiSelect": false,
     "options": [
-      {"label": "< 1 par semaine", "description": "Faible volume. Favorise le coût (haiku/medium par défaut)."},
-      {"label": "1 à 3 par semaine", "description": "Cadence standard."},
-      {"label": "> 3 par semaine", "description": "Volume élevé. Favorise la qualité (sonnet/high par défaut sur agents non-pivot denses)."}
+      {"label": "< 1 per week", "description": "Low volume. Favors cost (haiku/medium by default)."},
+      {"label": "1 to 3 per week", "description": "Standard cadence."},
+      {"label": "> 3 per week", "description": "High volume. Favors quality (sonnet/high by default on dense non-pivot agents)."}
     ]
   }]
 }
 ```
 
-**Parsing :**
+**Parsing:**
 - `cadence ∈ {"low", "medium", "high"}`.
 
-### Q7 — Storage vidéo (conditionnel)
+### Q7 — Video storage (conditional)
 
-Pose **uniquement si** `ingest_video_enabled = true`. Free-text :
+Ask **only if** `ingest_video_enabled = true`. Free-text:
 
 ```
-Chemin du cache vidéo (où seront stockées les vidéos avant transcription).
-Défaut: cache/videos/ (interne au vault, sur ton disque principal).
-Si tu as un SSD externe pour les vidéos lourdes : indique son chemin (ex. /Volumes/T7/llm-wiki-cache/videos/).
+Path of the video cache (where videos are stored before transcription).
+Default: cache/videos/ (inside the vault, on your main disk).
+If you have an external SSD for heavy videos: provide its path (e.g. /Volumes/T7/llm-wiki-cache/videos/).
 ```
 
-**Parsing :**
-- `video_cache_path` = réponse, défaut `cache/videos/` si vide.
+**Parsing:**
+- `video_cache_path` = answer, default `cache/videos/` if empty.
 
 ---
 
-## Section 3 — Étape 2, Déduction (B1-B5 par domaine)
+## Section 3 — Step 2, Inference (B1-B5 per domain)
 
-Pour chaque `domain_slug` dans `domains`, déduis 5 propriétés. **Tu fais ce travail toi-même, pas l'utilisateur.** Il validera ensuite.
+For each `domain_slug` in `domains`, infer 5 properties. **You do this work, not the user.** They will validate afterwards.
 
-### B1 — `trigger_examples` (4-6 phrases verbales)
+### B1 — `trigger_examples` (4-6 verbal phrases)
 
-Phrases qu'on entendrait dans un transcript vidéo de ce domaine et qui signaleraient qu'un visuel est à l'écran. Déduis du label.
+Phrases you'd hear in a video transcript of this domain that signal a visual is on screen. Infer from the label.
 
-Patterns calibrants :
-- **Données / chiffres / matrices** (poker, finance, sport stats) → « regardez le tableau », « voilà la grille », « vous les voyez », « cette colonne », « cette case ».
-- **Schémas / architectures / flux** (ia, devops, factory, tech) → « ce schéma », « voilà l'architecture », « ce diagramme », « cette flèche », « ce composant ».
-- **Formules / équations** (physique, math, astro) → « cette formule », « voilà l'équation », « cette démonstration », « ce calcul ».
-- **Interfaces / outils / captures** (devtool, UX) → « regardez l'écran », « voilà la capture », « ce bouton », « cette interface ».
-- **Réflexif / management / qualitatif** (metier, leadership, philo) → 0-3 phrases seulement, ex. « ce framework », « cette grille de lecture », « voilà la matrice ».
+**Generate the phrases in the vault language** (`{{vault_language}}` — captured at the very start of the interview). Example patterns are given in EN below; use them as a calibration template, then translate / adapt to the target language. If the user is German, generate German phrases; if Spanish, Spanish; etc. Don't mix languages.
 
-**Exemple concret pour `data-science`** : `["regardez le tableau", "ce graphique", "cette courbe", "voilà la matrice de confusion", "vous voyez l'histogramme"]`.
+Calibration patterns:
+- **Data / numbers / matrices** (poker, finance, sport stats) → "look at the table", "here's the grid", "you can see them", "this column", "this cell".
+- **Schemas / architectures / flows** (ai, devops, factory, tech) → "this diagram", "here's the architecture", "this flowchart", "this arrow", "this component".
+- **Formulas / equations** (physics, math, astro) → "this formula", "here's the equation", "this proof", "this calculation".
+- **Interfaces / tools / screenshots** (devtool, UX) → "look at the screen", "here's the screenshot", "this button", "this UI".
+- **Reflective / management / qualitative** (work, leadership, philosophy) → 0-3 phrases only, e.g. "this framework", "this mental model", "here's the matrix".
 
-### B2 — `deliverables` (livrable signature)
+**Concrete example for `data-science` (vault_language = English)**: `["look at the table", "this chart", "this curve", "here's the confusion matrix", "you can see the histogram"]`.
 
-Heuristique :
-- Domaine **technique-dense** (chiffres, ranges, taux, KPIs) → `[cheatsheets]`.
-- Domaine **réflexif** (patterns, frameworks, retours d'expérience) → `[syntheses]`.
-- Domaine **système** (architectures, flux, composants) → `[diagrams]`.
-- Domaine **mixte** → `[cheatsheets, syntheses]`. Typique pour `ia` (chiffres ET patterns).
+**Concrete example for `data-science` (vault_language = Français)**: `["regardez le tableau", "ce graphique", "cette courbe", "voilà la matrice de confusion", "vous voyez l'histogramme"]`.
 
-Ajoute toujours implicitement les livrables de base : `[sources, entities, concepts]` (universels).
+### B2 — `deliverables` (signature deliverable)
+
+Heuristic:
+- **Technical-dense** domain (numbers, ranges, rates, KPIs) → `[cheatsheets]`.
+- **Reflective** domain (patterns, frameworks, takeaways) → `[syntheses]`.
+- **Systems** domain (architectures, flows, components) → `[diagrams]`.
+- **Mixed** domain → `[cheatsheets, syntheses]`. Typical for `ai` (numbers AND patterns).
+
+Always implicitly add the base deliverables: `[sources, entities, concepts]` (universal).
 
 ### B3 — `co_ingest_partners`
 
-- Si `hub_pivot != null` ET `domain_slug != hub_pivot` → `co_ingest_partners = [hub_pivot]`.
-- Si `domain_slug == hub_pivot` ou `hub_pivot == null` → `co_ingest_partners = []`.
+- If `hub_pivot != null` AND `domain_slug != hub_pivot` → `co_ingest_partners = [hub_pivot]`.
+- If `domain_slug == hub_pivot` or `hub_pivot == null` → `co_ingest_partners = []`.
 
 ### B4 — `model` / `effort` / `maxTurns`
 
-Table de décision :
+Decision table:
 
 | Condition | model | effort | maxTurns |
 |---|---|---|---|
 | `is_hub_pivot = true` | `sonnet` | `high` | `80` |
-| Domaine technique-dense (B2 contient `cheatsheets`) | `sonnet` | `high` | `60` |
-| `cadence = "high"` ET pas réflexif pur | `sonnet` | `high` | `60` |
-| Sinon (default) | `haiku` | `medium` | `60` |
+| Technical-dense domain (B2 contains `cheatsheets`) | `sonnet` | `high` | `60` |
+| `cadence = "high"` AND not pure reflective | `sonnet` | `high` | `60` |
+| Otherwise (default) | `haiku` | `medium` | `60` |
 
-**Priorité en cas de conflit** :
-1. `is_hub_pivot = true` → toujours `sonnet/high/80`.
-2. Sinon, `deliverables` contient `cheatsheets` → `sonnet/high/60` (densité technique justifie le coût même en cadence basse).
-3. Sinon, `cadence = high (>3/sem)` → `sonnet/high/60` (volume justifie qualité).
+**Priority on conflict**:
+1. `is_hub_pivot = true` → always `sonnet/high/80`.
+2. Otherwise, `deliverables` contains `cheatsheets` → `sonnet/high/60` (technical density justifies the cost even at low cadence).
+3. Otherwise, `cadence = high (>3/week)` → `sonnet/high/60` (volume justifies quality).
 4. Default → `haiku/medium/60`.
 
 ### B5 — `is_hub_pivot`
 
-Trivial : `is_hub_pivot = (domain_slug == hub_pivot)`.
+Trivial: `is_hub_pivot = (domain_slug == hub_pivot)`.
 
-### B6 — frames_visual_formats (4-6 formats de transcription markdown)
+### B6 — frames_visual_formats (4-6 markdown transcription formats)
 
-Pour chaque domaine, déduis 4-6 formats utiles pour transcrire les frames vidéo en markdown structuré.
+For each domain, infer 4-6 useful formats to transcribe video frames into structured markdown.
 
-Patterns par type de domaine :
-- **Données / chiffres / matrices** (poker, finance, sport stats) : « tableau Markdown », « table avec colonnes profondeur × position », « grille 13×13 », « palmarès chiffré ».
-- **Schémas / architectures / flux** (ia, factory, devops) : « diagramme Mermaid », « flowchart », « graph LR », « sequenceDiagram ».
-- **Formules / équations / démonstrations** (physique, math, biostat) : « bloc LaTeX », « équation inline », « table de variables », « démonstration pas-à-pas ».
-- **Interfaces / outils / captures** (devtool, UX) : « description d'UI », « table de raccourcis clavier », « bullet de boutons cliqués ».
-- **Réflexif / management / qualitatif** (metier, leadership) : « table 2D framework × axes », « bullet list de patterns », « citation marquante encadrée ».
+Patterns by domain type:
+- **Data / numbers / matrices** (poker, finance, sport stats): "Markdown table", "table with depth × position columns", "13×13 grid", "numerical leaderboard".
+- **Schemas / architectures / flows** (ai, factory, devops): "Mermaid diagram", "flowchart", "graph LR", "sequenceDiagram".
+- **Formulas / equations / proofs** (physics, math, biostat): "LaTeX block", "inline equation", "variables table", "step-by-step proof".
+- **Interfaces / tools / screenshots** (devtool, UX): "UI description", "keyboard shortcuts table", "bullet list of clicked buttons".
+- **Reflective / management / qualitative** (work, leadership): "2D framework × axes table", "pattern bullet list", "boxed memorable quote".
 
-L'utilisateur peut éditer en validation domaine.
+The user can edit these at domain validation.
 
-### Autres déductions accessoires
+### Other side inferences
 
-- `summary_l0` (≤140 chars) : génère un draft à partir du label + livrable. Ex. `"Hub IA — agents, LLM, orchestration. Outille la Factory et alimente les techniques de management LLM."`.
-- `summary_l1` (2-5 phrases) : draft pareil, plus détaillé.
-- `domain_intro_paragraph` : 2-3 lignes en H1 du hub.
-- `parcours_short` : draft 2-4 bullets à partir de Q1 `role` + Q4 `projects`. À éditer ensuite par l'utilisateur.
-- `taxonomy_section` : laisse vide initialement (`(à étoffer au fil des ingests)`) — l'utilisateur n'a pas envie d'inventer une taxonomie à froid.
-- `authority_table_enabled` : `true` pour domaines réflexifs où l'autorité de la source compte (ia, science, métier d'analyse) ; `false` sinon. Tu peux te baser sur le label.
-- `confidentiality_block` : non-vide uniquement pour `metier` ou tout domaine que l'utilisateur a explicitement marqué sensible (à demander pendant la validation si doute).
-- `bootstrap_date` : `date +%Y-%m-%d` shell.
+- `summary_l0` (≤140 chars): generate a draft from label + deliverable. E.g. `"AI hub — agents, LLM, orchestration. Tools the Factory and feeds LLM management techniques."`.
+- `summary_l1` (2-5 sentences): same draft, more detailed.
+- `domain_intro_paragraph`: 2-3 lines under the hub's H1.
+- `parcours_short`: draft 2-4 bullets from Q1 `role` + Q4 `projects`. To be edited later by the user.
+- `taxonomy_section`: leave initially empty (`(to be fleshed out as ingests come in)`) — the user doesn't want to invent a taxonomy cold.
+- `authority_table_enabled`: `true` for reflective domains where source authority matters (ai, science, analytical work); `false` otherwise. You can decide from the label.
+- `confidentiality_block`: non-empty only for `work` or any domain the user has explicitly flagged sensitive (ask during validation if in doubt).
+- `bootstrap_date`: shell `date +%Y-%m-%d`.
 
 ---
 
-## Section 4 — Étape 3, Validation (par domaine + global)
+## Section 4 — Step 3, Validation (per domain + global)
 
-### 4.1 Validation par domaine
+### 4.1 Per-domain validation
 
-**Pour chaque** `domain_slug` (boucle), affiche un bloc récap markdown puis pose un `AskUserQuestion` :
+**For each** `domain_slug` (loop), display a markdown recap block then ask an `AskUserQuestion`:
 
 ```markdown
-### Domaine : {{domain_label}} (`{{domain_slug}}`)
+### Domain: {{domain_label}} (`{{domain_slug}}`)
 
-- **Hub pivot** : {{ "oui ⭐" if is_hub_pivot else "non" }}
-- **Livrable signature** : {{ deliverables joined }} — {{ justification 1 ligne }}
-- **Trigger phrases** (visuels dans transcripts vidéo) :
-  - « {{ trigger_1 }} »
-  - « {{ trigger_2 }} »
+- **Hub pivot**: {{ "yes ⭐" if is_hub_pivot else "no" }}
+- **Signature deliverable**: {{ deliverables joined }} — {{ 1-line justification }}
+- **Trigger phrases** (visuals in video transcripts):
+  - "{{ trigger_1 }}"
+  - "{{ trigger_2 }}"
   - …
-- **Co-ingest partners** : {{ co_ingest_partners or "[] (aucun)" }}
-- **Model** : {{ model }} · **Effort** : {{ effort }} · **MaxTurns** : {{ maxTurns }}
+- **Co-ingest partners**: {{ co_ingest_partners or "[] (none)" }}
+- **Model**: {{ model }} · **Effort**: {{ effort }} · **MaxTurns**: {{ maxTurns }}
 ```
 
-Puis :
+Then:
 
 ```json
 {
   "questions": [{
-    "question": "Domaine {{domain_slug}} — valides-tu cette config ?",
-    "header": "Validation domaine",
+    "question": "Domain {{domain_slug}} — do you validate this config?",
+    "header": "Domain validation",
     "multiSelect": false,
     "options": [
-      {"label": "✅ Valide ce domaine", "description": "Garde la déduction telle quelle."},
-      {"label": "✏️ Ajuste", "description": "Édite une ou plusieurs des 5 propriétés (triggers, livrables, co-ingest, model/effort/maxTurns, hub pivot)."}
+      {"label": "✅ Validate this domain", "description": "Keep the inference as-is."},
+      {"label": "✏️ Adjust", "description": "Edit one or more of the 5 properties (triggers, deliverables, co-ingest, model/effort/maxTurns, hub pivot)."}
     ]
   }]
 }
 ```
 
-Sur « ✏️ Ajuste » :
+On "✏️ Adjust":
 
-1. Affiche un `AskUserQuestion` **multiSelect** : « Quelles propriétés veux-tu éditer ? » avec 5 options (B1 trigger_examples, B2 deliverables, B3 co_ingest_partners, B4 model/effort/maxTurns, B5 frames_visual_formats).
-2. Pour chaque propriété cochée seulement, prompt texte ciblé avec la valeur courante affichée et demande la nouvelle.
-3. Re-affiche le bloc récap édité, redemande validation.
+1. Show an `AskUserQuestion` **multiSelect**: "Which properties do you want to edit?" with 5 options (B1 trigger_examples, B2 deliverables, B3 co_ingest_partners, B4 model/effort/maxTurns, B5 frames_visual_formats).
+2. For each ticked property only, prompt with the current value displayed and ask for the new one.
+3. Re-display the edited recap, ask again for validation.
 
-**Une fois le domaine validé (✅ ou après ajustement)**, pose immédiatement :
+**Once the domain is validated (✅ or after adjustment)**, ask immediately:
 
 ```json
 {
   "questions": [{
-    "question": "Quelle couleur pour «{{domain_slug}}» dans le graph Obsidian ?",
-    "header": "Couleur graph",
+    "question": "Which color for \"{{domain_slug}}\" in the Obsidian graph?",
+    "header": "Graph color",
     "multiSelect": false,
     "options": [
-      {"label": "🔵 Turquoise", "description": "#2BC7D3 — IA, tech, numérique. rgb=2869203"},
-      {"label": "🟢 Vert", "description": "#51C463 — sciences, santé, nature. rgb=5358691"},
-      {"label": "🟠 Orange", "description": "#E07B39 — management, sport, compétition. rgb=14711609"},
-      {"label": "🔴 Rouge", "description": "#E05252 — poker, jeu, intensité. rgb=14701138"}
+      {"label": "🔵 Turquoise", "description": "#2BC7D3 — AI, tech, digital. rgb=2869203"},
+      {"label": "🟢 Green", "description": "#51C463 — sciences, health, nature. rgb=5358691"},
+      {"label": "🟠 Orange", "description": "#E07B39 — management, sport, competition. rgb=14711609"},
+      {"label": "🔴 Red", "description": "#E05252 — poker, gaming, intensity. rgb=14701138"}
     ]
   }]
 }
 ```
 
-→ Stocke `domain_color_rgb = <valeur rgb de l'option choisie>` pour ce domaine (utilisé en Section 5 pour générer `.obsidian/graph.json`). Si l'utilisateur choisit « Other » et entre un hex `#RRGGBB`, convertis via `R*65536 + G*256 + B`.
+→ Store `domain_color_rgb = <chosen option's rgb value>` for this domain (used in Section 5 to generate `.obsidian/graph.json`). If the user picks "Other" and enters a hex `#RRGGBB`, convert via `R*65536 + G*256 + B`.
 
-### 4.2 Validation globale
+### 4.2 Global validation
 
-Une fois tous les domaines validés individuellement, affiche un récap complet :
+Once every domain has been individually validated, show a full recap:
 
 ```markdown
-## Récap final
+## Final recap
 
-**Identité** : {{name}} — {{role}}
-**Vault** : `{{vault_name}}`
-**Cadence** : {{cadence}}
-**Types de sources** : {{source_types joined}}
-{{ "**Storage vidéo** : " + video_cache_path if ingest_video_enabled else "" }}
+**Identity**: {{name}} — {{role}}
+**Vault**: `{{vault_name}}`
+**Cadence**: {{cadence}}
+**Source types**: {{source_types joined}}
+{{ "**Video storage**: " + video_cache_path if ingest_video_enabled else "" }}
 
-**Projets en cours** :
+**Active projects**:
 - {{ project_1.slug }} | {{ project_1.description }}
 - ...
 
-**Domaines** ({{N}}) :
+**Domains** ({{N}}):
 - {{ domain_1_slug }} {{ "⭐" if pivot }} — {{ deliverables }} — {{ model }}/{{ effort }}/{{ maxTurns }}
 - ...
 ```
 
-Puis :
+Then:
 
 ```json
 {
   "questions": [{
-    "question": "Tout est bon ?",
-    "header": "Validation finale",
+    "question": "All good?",
+    "header": "Final validation",
     "multiSelect": false,
     "options": [
-      {"label": "✅ Tout est bon, scaffolde", "description": "Lance la génération du vault."},
-      {"label": "↩️ Refais l'interview depuis le début", "description": "Reprend Q1. Toutes les réponses sont effacées."}
+      {"label": "✅ All good, scaffold it", "description": "Run vault generation."},
+      {"label": "↩️ Restart the interview from scratch", "description": "Goes back to Q1. All answers are wiped."}
     ]
   }]
 }
 ```
 
-Si « ↩️ » → repars de Q1. Sinon → Section 5.
+If "↩️" → restart from Q1. Otherwise → Section 5.
 
 ---
 
-## Section 5 — Étape 4, Génération du vault
+## Section 5 — Step 4, Vault generation
 
-Exécute dans **cet ordre exact**. Utilise `Edit replace_all=true` ou `sed` pour les substitutions, `Bash` pour les `mv`/`rm`/`cp`/`git`.
+Run in **this exact order**. Use `Edit replace_all=true` or `sed` for substitutions, `Bash` for `mv`/`rm`/`cp`/`git`.
 
-### 5.1 Substitution des 28 placeholders (référence : `PLACEHOLDERS.md` à la racine)
+### 5.1 Substitution of the 29 placeholders (reference: `PLACEHOLDERS.md` at the root)
 
-Pour chaque fichier `.tpl` du repo (CLAUDE.md.tpl, wiki/index.md.tpl, wiki/log.md.tpl, wiki/overview.md.tpl, wiki/radar.md.tpl, wiki/domains/domain.md.tpl, .claude/agents/domain-expert.md.tpl, .claude/agent-memory/domain-memory.md.tpl) :
+For each `.tpl` file in the repo (CLAUDE.md.tpl, wiki/index.md.tpl, wiki/log.md.tpl, wiki/overview.md.tpl, wiki/radar.md.tpl, wiki/domains/domain.md.tpl, .claude/agents/domain-expert.md.tpl, .claude/agent-memory/domain-memory.md.tpl):
 
-- Charge le contenu.
-- Substitue tous les placeholders **globaux** : `{{name}}`, `{{vault_name}}`, `{{role}}`, `{{parcours_short}}`, `{{bootstrap_date}}`, `{{has_tracked_repos}}` (et ses sections conditionnelles : `{{slash_commands_extras}}`, `{{tracked_repos_arborescence}}`, `{{tracked_repos_cache}}`, `{{tracked_repos_scripts_extras}}`, `{{sync_repos_section}}`).
-- Substitue les placeholders **cross-domain** calculés : `{{domains_section}}`, `{{domains_index_section}}`, `{{domains_links}}`, `{{projects_links}}`, `{{agents_section}}`.
+- Load the content.
+- Substitute every **global** placeholder: `{{name}}`, `{{vault_name}}`, `{{vault_language}}` (human label of the language detected at the interview — see *Language persistence* directive at the top of this prompt), `{{role}}`, `{{parcours_short}}`, `{{bootstrap_date}}`, `{{has_tracked_repos}}` (and its conditional sections: `{{slash_commands_extras}}`, `{{tracked_repos_arborescence}}`, `{{tracked_repos_cache}}`, `{{tracked_repos_scripts_extras}}`, `{{sync_repos_section}}`).
+- Substitute the computed **cross-domain** placeholders: `{{domains_section}}`, `{{domains_index_section}}`, `{{domains_links}}`, `{{projects_links}}`, `{{agents_section}}`.
 
-**Note** : `tracked-repos.config.json.tpl` ne contient aucun placeholder, skipper la substitution. Le renommage final sera géré en Section 5.6.
+**Note**: `tracked-repos.config.json.tpl` contains no placeholder, skip substitution. The final rename is handled in Section 5.6.
 
-> Pour `{{has_tracked_repos}} = false`, les 5 placeholders conditionnels deviennent des chaînes vides (cf. table dans `PLACEHOLDERS.md`).
-> Pour `{{has_tracked_repos}} = true`, copie le bloc complet `### SYNC-REPOS` fourni en **Annexe D** ci-dessous (verbatim, à la place du placeholder `{{sync_repos_section}}`).
+> For `{{has_tracked_repos}} = false`, the 5 conditional placeholders become empty strings (cf. table in `PLACEHOLDERS.md`).
+> For `{{has_tracked_repos}} = true`, copy the full `### SYNC-REPOS` block provided in **Annex D** below (verbatim, replacing the `{{sync_repos_section}}` placeholder).
 
-### 5.2 Duplication par domaine — agents
+### 5.2 Per-domain duplication — agents
 
-Pour chaque `domain_slug` dans `domains` :
+For each `domain_slug` in `domains`:
 
 ```bash
 cp .claude/agents/domain-expert.md.tpl .claude/agents/{{domain_slug}}-expert.md
 ```
 
-Puis substitue dans la copie les **17 placeholders per-domain** : `{{domain_slug}}`, `{{domain_label}}`, `{{is_hub_pivot}}`, `{{hub_pivot_marker}}`, `{{summary_l0}}`, `{{summary_l1}}`, `{{domain_intro_paragraph}}`, `{{taxonomy_section}}`, `{{related_domains_section}}`, `{{deliverables}}`, `{{deliverables_signature_block}}`, `{{trigger_examples}}`, `{{frames_visual_formats}}`, `{{co_ingest_partners}}`, `{{co_ingest_section}}`, `{{authority_table_enabled}}`, `{{authority_table_section}}`, `{{confidentiality_block}}`, `{{confidentiality_section}}`, `{{domain_specific_observation_section}}`, `{{model}}`, `{{effort}}`, `{{maxTurns}}`.
+Then substitute in the copy the **17 per-domain placeholders**: `{{domain_slug}}`, `{{domain_label}}`, `{{is_hub_pivot}}`, `{{hub_pivot_marker}}`, `{{summary_l0}}`, `{{summary_l1}}`, `{{domain_intro_paragraph}}`, `{{taxonomy_section}}`, `{{related_domains_section}}`, `{{deliverables}}`, `{{deliverables_signature_block}}`, `{{trigger_examples}}`, `{{frames_visual_formats}}`, `{{co_ingest_partners}}`, `{{co_ingest_section}}`, `{{authority_table_enabled}}`, `{{authority_table_section}}`, `{{confidentiality_block}}`, `{{confidentiality_section}}`, `{{domain_specific_observation_section}}`, `{{model}}`, `{{effort}}`, `{{maxTurns}}`.
 
-### 5.3 Duplication par domaine — hubs
+### 5.3 Per-domain duplication — hubs
 
-Pour chaque `domain_slug` :
+For each `domain_slug`:
 
 ```bash
 cp wiki/domains/domain.md.tpl wiki/domains/{{domain_slug}}.md
 ```
 
-Substitue les placeholders per-domain (mêmes valeurs que 5.2 sauf qu'on ne ré-écrit pas tout — voir mapping dans PLACEHOLDERS.md).
+Substitute the per-domain placeholders (same values as 5.2, except we don't rewrite everything — see mapping in PLACEHOLDERS.md).
 
-### 5.4 Duplication par domaine — mémoires agents
+### 5.4 Per-domain duplication — agent memories
 
-Pour chaque `domain_slug` :
+For each `domain_slug`:
 
 ```bash
 mkdir -p .claude/agent-memory/{{domain_slug}}
 cp .claude/agent-memory/domain-memory.md.tpl .claude/agent-memory/{{domain_slug}}/MEMORY.md
 ```
 
-Substitue.
+Substitute.
 
-### 5.5 Suppressions conditionnelles
+### 5.5 Conditional removals
 
-**Si `ingest_video_enabled = false`** :
+**If `ingest_video_enabled = false`**:
 
 ```bash
 rm .claude/commands/ingest-video.md
@@ -436,18 +442,18 @@ rm wiki/decisions/extraction-frames-induction-runbook.md
 rm wiki/decisions/ingest-video-modes-a-b-generalisation.md
 ```
 
-**Si `has_tracked_repos = false`** :
+**If `has_tracked_repos = false`**:
 
 ```bash
 rm .claude/commands/sync-repos.md
 rm scripts/sync-repos.sh
-rm tracked-repos.config.json.tpl    # ou son rendu si déjà substitué
+rm tracked-repos.config.json.tpl    # or its rendered output if already substituted
 rm wiki/decisions/tracked-repos-immutable-snapshots.md
 ```
 
-### 5.6 Renommage des `.tpl` substitués vers leur nom final
+### 5.6 Renaming substituted `.tpl` files to their final name
 
-Une fois la substitution faite, renomme les templates **uniques** (pas ceux dupliqués par domaine, déjà renommés) :
+Once substitution is done, rename the **unique** templates (not those duplicated per domain, already renamed):
 
 ```bash
 mv CLAUDE.md.tpl CLAUDE.md
@@ -455,11 +461,11 @@ mv wiki/index.md.tpl wiki/index.md
 mv wiki/log.md.tpl wiki/log.md
 mv wiki/overview.md.tpl wiki/overview.md
 mv wiki/radar.md.tpl wiki/radar.md
-# Si has_tracked_repos = true :
+# If has_tracked_repos = true:
 mv tracked-repos.config.json.tpl tracked-repos.config.json
 ```
 
-Supprime les `.tpl` originaux qui ont été dupliqués (ils ont fait leur job) :
+Remove the original `.tpl` that have been duplicated (their job is done):
 
 ```bash
 rm .claude/agents/domain-expert.md.tpl
@@ -467,42 +473,42 @@ rm wiki/domains/domain.md.tpl
 rm .claude/agent-memory/domain-memory.md.tpl
 ```
 
-### 5.7 Déplacement de `BOOTSTRAP.md` et `PLACEHOLDERS.md` en ADR
+### 5.7 Move `BOOTSTRAP.md` and `PLACEHOLDERS.md` into ADR
 
-Trace consultable du bootstrap :
+Consultable trace of the bootstrap:
 
 ```bash
 mv BOOTSTRAP.md wiki/decisions/bootstrap-prompt.md
 mv PLACEHOLDERS.md wiki/decisions/placeholders-reference.md
 ```
 
-### 5.8 Répertoires conditionnels (raw/ et cache/)
+### 5.8 Conditional directories (raw/ and cache/)
 
-Les sous-dossiers de base `raw/notes/`, `raw/transcripts/`, `raw/videos-meta/`, `raw/frames/` existent déjà dans le template via `.gitkeep`. Crée uniquement les sous-dossiers **conditionnels** :
+The base subfolders `raw/notes/`, `raw/transcripts/`, `raw/videos-meta/`, `raw/frames/` already exist in the template via `.gitkeep`. Only create the **conditional** subfolders:
 
 ```bash
-# Si "PDFs" coché en Q5 :
+# If "PDFs" was ticked in Q5:
 mkdir -p raw/pdfs && touch raw/pdfs/.gitkeep
 
-# Si "Clippings web" coché en Q5 :
+# If "Web clippings" was ticked in Q5:
 mkdir -p raw/articles && touch raw/articles/.gitkeep
 
-# Si "Docs officielles" coché en Q5 :
+# If "Official docs" was ticked in Q5:
 mkdir -p raw/docs && touch raw/docs/.gitkeep
 
-# Toujours (structure cache/) :
+# Always (cache/ structure):
 mkdir -p cache/frames && touch cache/frames/.gitkeep
 
-# Si ingest_video_enabled = true :
+# If ingest_video_enabled = true:
 mkdir -p cache/videos/inbox cache/audio && touch cache/videos/inbox/.gitkeep cache/audio/.gitkeep
 
-# Si has_tracked_repos = true :
+# If has_tracked_repos = true:
 mkdir -p cache/sync-repos && touch cache/sync-repos/.gitkeep
 ```
 
-### 5.9 Génération de `.obsidian/graph.json`
+### 5.9 Generate `.obsidian/graph.json`
 
-Crée le dossier `.obsidian/` et écris le fichier `graph.json` à partir des couleurs collectées en Section 4.1 :
+Create the `.obsidian/` folder and write the `graph.json` file from the colors collected in Section 4.1:
 
 ```json
 {
@@ -512,7 +518,7 @@ Crée le dossier `.obsidian/` et écris le fichier `graph.json` à partir des co
   "hideUnresolved": true,
   "showOrphans": false,
   "colorGroups": [
-    // Pour chaque domain_slug (dans l'ordre déclaré en Q2) :
+    // For each domain_slug (in the order declared at Q2):
     {
       "query": "[\"domains\":{{domain_slug}}]",
       "color": {
@@ -530,7 +536,7 @@ Crée le dossier `.obsidian/` et écris le fichier `graph.json` à partir des co
 }
 ```
 
-Crée aussi `.obsidian/app.json` minimal :
+Also create a minimal `.obsidian/app.json`:
 
 ```json
 {
@@ -539,16 +545,16 @@ Crée aussi `.obsidian/app.json` minimal :
 }
 ```
 
-### 5.10 Enregistrer la version du template + reset git + commit initial
+### 5.10 Record the template version + git reset + initial commit
 
 ```bash
-# Enregistrer le SHA du template avant de supprimer son historique.
-# Utilisé par /update-vault pour savoir à partir d'où lister les nouveaux commits.
+# Record the template SHA before deleting its history.
+# Used by /update-vault to know which point to start listing new commits from.
 TEMPLATE_SHA=$(git rev-parse HEAD)
 echo "$TEMPLATE_SHA" > .template-bootstrap-sha
 
-# Enrichir .claude/template-version avec le SHA et la date du bootstrap.
-# Ce fichier est la source de vérité pour la machine de migration de /update-vault.
+# Enrich .claude/template-version with the SHA and the bootstrap date.
+# This file is the source of truth for the /update-vault migration machine.
 TEMPLATE_VERSION=$(grep '^template-version:' .claude/template-version | awk '{print $2}')
 cat > .claude/template-version <<EOF
 template-version: ${TEMPLATE_VERSION}
@@ -559,164 +565,164 @@ EOF
 rm -rf .git/
 git init
 git add -A
-git commit -m "vault initial — généré via BOOTSTRAP.md le {{bootstrap_date}}"
+git commit -m "initial vault — generated via BOOTSTRAP.md on {{bootstrap_date}}"
 ```
 
-### 5.11 Setup MCP optionnel
+### 5.11 Optional MCP setup
 
-Pose :
+Ask:
 
 ```json
 {
   "questions": [{
-    "question": "Veux-tu activer le serveur MCP pour accéder à ton wiki depuis n'importe quelle instance Claude Code ?",
+    "question": "Do you want to enable the MCP server to access your wiki from any Claude Code instance?",
     "header": "MCP Wiki",
     "multiSelect": false,
     "options": [
-      {"label": "✅ Oui, configurer maintenant", "description": "Lance bash scripts/setup-mcp.sh. Pré-requis : Python 3 + connexion internet pour pip."},
-      {"label": "❌ Non, je le ferai plus tard", "description": "Lance bash scripts/setup-mcp.sh depuis le vault quand tu voudras."}
+      {"label": "✅ Yes, set it up now", "description": "Runs bash scripts/setup-mcp.sh. Prerequisites: Python 3 + internet connection for pip."},
+      {"label": "❌ No, I'll do it later", "description": "Run bash scripts/setup-mcp.sh from the vault whenever you want."}
     ]
   }]
 }
 ```
 
-- **Oui** : exécuter `bash scripts/setup-mcp.sh` (depuis la racine du vault). En cas d'erreur pip, afficher le message d'erreur + instruction manuelle : `pip install "fastmcp>=2.14,<3"` puis re-lancer.
-- **Non** : skip.
+- **Yes**: run `bash scripts/setup-mcp.sh` (from the vault root). On pip error, show the error message + manual fallback: `pip install "fastmcp>=2.14,<3"` then re-run.
+- **No**: skip.
 
 ---
 
-## Section 6 — Étape 5, Remote GitHub optionnel
+## Section 6 — Step 5, Optional GitHub remote
 
-Pose :
+Ask:
 
 ```json
 {
   "questions": [{
-    "question": "Souhaites-tu créer un repo GitHub pour ton vault {{vault_name}} ?",
+    "question": "Do you want to create a GitHub repo for your {{vault_name}} vault?",
     "header": "Remote",
     "multiSelect": false,
     "options": [
-      {"label": "✅ Oui, privé", "description": "gh repo create {{vault_name}} --private --source=. --push"},
-      {"label": "✅ Oui, public", "description": "gh repo create {{vault_name}} --public --source=. --push"},
-      {"label": "❌ Non, je gère manuellement", "description": "Aucune action. Tu pourras ajouter un remote plus tard avec git remote add origin <url>."}
+      {"label": "✅ Yes, private", "description": "gh repo create {{vault_name}} --private --source=. --push"},
+      {"label": "✅ Yes, public", "description": "gh repo create {{vault_name}} --public --source=. --push"},
+      {"label": "❌ No, I'll handle it manually", "description": "No action. You can add a remote later with git remote add origin <url>."}
     ]
   }]
 }
 ```
 
-Selon réponse :
+Per the answer:
 
-- **Privé** : `gh repo create {{vault_name}} --private --source=. --push`
-- **Public** : `gh repo create {{vault_name}} --public --source=. --push`
-- **Manuel** : skip.
+- **Private**: `gh repo create {{vault_name}} --private --source=. --push`
+- **Public**: `gh repo create {{vault_name}} --public --source=. --push`
+- **Manual**: skip.
 
-**Si `gh` n'est pas installé ou pas authentifié** (capture l'erreur du `gh repo create`) :
-- Bascule en manuel.
-- Affiche : « `gh` indisponible. Pour ajouter un remote plus tard : `gh auth login` puis `gh repo create {{vault_name}} --private --source=. --push`. »
+**If `gh` is not installed or not authenticated** (catch the `gh repo create` error):
+- Switch to manual.
+- Show: "`gh` unavailable. To add a remote later: `gh auth login` then `gh repo create {{vault_name}} --private --source=. --push`."
 
-**Gestion des erreurs `gh repo create`** :
+**Handling `gh repo create` errors**:
 
-- **Nom déjà pris** (« repository already exists ») : re-pose la question « Le nom `{{vault_name}}` est déjà pris. Quel autre nom utiliser ? (ou laisse vide pour skip le push) ».
-- **Authentification expirée** (« HTTP 401 ») : afficher « `gh auth login` requis. Bascule en mode manuel : voici les commandes à lancer plus tard : `gh repo create <name> --private --source=. --push`. » et continue le bootstrap sans le remote.
-- **Autre erreur** : afficher l'erreur brute + bascule en manuel comme ci-dessus.
+- **Name already taken** ("repository already exists"): re-ask "The name `{{vault_name}}` is already taken. Which name should we use? (or leave empty to skip the push)".
+- **Expired authentication** ("HTTP 401"): show "`gh auth login` required. Switching to manual mode: here are the commands to run later: `gh repo create <name> --private --source=. --push`." and continue the bootstrap without the remote.
+- **Other error**: show the raw error + switch to manual as above.
 
 ---
 
-## Section 7 — Étape 6, Récap onboarding final
+## Section 7 — Step 6, Final onboarding wrap-up
 
-Affiche un message texte propre :
+Show a clean text message:
 
 ```
-🎉 Ton vault `{{vault_name}}` est prêt.
+🎉 Your vault `{{vault_name}}` is ready.
 
-Identité : {{name}} — {{role}}
-Domaines actifs ({{N}}) : {{ domain_1, domain_2, ... }}
-Pipeline disponible : /ingest, /query, /save, /lint, /evolve-agent{{ ", /ingest-video" if ingest_video_enabled }}{{ ", /sync-repos" if has_tracked_repos }}, /update-vault, /compress-bb
+Identity: {{name}} — {{role}}
+Active domains ({{N}}): {{ domain_1, domain_2, ... }}
+Available pipeline: /ingest, /query, /save, /lint, /evolve-agent{{ ", /ingest-video" if ingest_video_enabled }}{{ ", /sync-repos" if has_tracked_repos }}, /update-vault, /compress-bb
 
-Trois prochaines actions guidées :
+Three guided next actions:
 
-1. Dépose ta première source dans `raw/notes/<YYYY-MM-DD-sujet>.md` (ou `raw/transcripts/`, `raw/pdfs/`, etc. selon le format).
-2. Lance `/ingest` — Claude proposera l'agent expert correspondant et tu valideras via AskUserQuestion.
-3. Édite `wiki/overview.md` pour étoffer ton portrait : parcours, activités, intentions. Le draft généré n'est qu'un point de départ.
+1. Drop your first source into `raw/notes/<YYYY-MM-DD-topic>.md` (or `raw/transcripts/`, `raw/pdfs/`, etc. depending on the format).
+2. Run `/ingest` — Claude will propose the matching expert agent and you'll validate via AskUserQuestion.
+3. Edit `wiki/overview.md` to flesh out your portrait: background, activities, intentions. The generated draft is just a starting point.
 
-Pour mettre à jour ton vault quand le template évolue : `/update-vault`.
+To update your vault when the template evolves: `/update-vault`.
 
-Trace du bootstrap : wiki/decisions/bootstrap-prompt.md (ce que tu viens de lancer) + wiki/decisions/placeholders-reference.md (mapping détaillé).
+Bootstrap trace: wiki/decisions/bootstrap-prompt.md (what you just ran) + wiki/decisions/placeholders-reference.md (detailed mapping).
 
-Bon ingest.
+Happy ingesting.
 ```
 
 ---
 
 ## Annexes
 
-### A. Liste des fichiers générés (à titre de checklist mentale)
+### A. List of generated files (mental checklist)
 
-- `CLAUDE.md` (à la racine)
+- `CLAUDE.md` (at the root)
 - `wiki/index.md`, `wiki/log.md`, `wiki/overview.md`, `wiki/radar.md`
-- Pour chaque domaine : `wiki/domains/<slug>.md` + `.claude/agents/<slug>-expert.md` + `.claude/agent-memory/<slug>/MEMORY.md`
+- For each domain: `wiki/domains/<slug>.md` + `.claude/agents/<slug>-expert.md` + `.claude/agent-memory/<slug>/MEMORY.md`
 - `wiki/decisions/bootstrap-prompt.md`, `wiki/decisions/placeholders-reference.md`
-- Conditionnels : `tracked-repos.config.json`, `wiki/decisions/tracked-repos-immutable-snapshots.md`, `wiki/decisions/extraction-frames-induction-runbook.md`, `wiki/decisions/ingest-video-modes-a-b-generalisation.md`
-- Structure `raw/` : `notes/`, `transcripts/`, `videos-meta/`, `frames/` (pré-existants via .gitkeep) + conditionnels (`pdfs/`, `articles/`, `docs/`)
-- Structure `cache/` : `frames/` + conditionnels (`videos/inbox/`, `audio/`, `sync-repos/`)
-- `.obsidian/graph.json` (filtres graph + colorGroups par domaine) + `.obsidian/app.json`
-- `.git/` neuf, premier commit posé.
+- Conditional: `tracked-repos.config.json`, `wiki/decisions/tracked-repos-immutable-snapshots.md`, `wiki/decisions/extraction-frames-induction-runbook.md`, `wiki/decisions/ingest-video-modes-a-b-generalisation.md`
+- `raw/` structure: `notes/`, `transcripts/`, `videos-meta/`, `frames/` (pre-existing via .gitkeep) + conditional (`pdfs/`, `articles/`, `docs/`)
+- `cache/` structure: `frames/` + conditional (`videos/inbox/`, `audio/`, `sync-repos/`)
+- `.obsidian/graph.json` (graph filters + colorGroups per domain) + `.obsidian/app.json`
+- Fresh `.git/`, initial commit landed.
 
-### B. Fichiers à NE PAS toucher
+### B. Files NOT to touch
 
-- `LICENSE`, `.gitignore`, `README.md` (le README peut être mis à jour par l'utilisateur lui-même plus tard pour son instance — ne le réécris pas pendant le bootstrap).
-- `scripts/scan-raw.sh`, `scripts/backfill-summaries.py`, `scripts/enrich-hub.py` (génériques, restent tels quels).
-- Les slash-commands non-conditionnels : `/ingest`, `/query`, `/save`, `/lint`, `/evolve-agent`, `/update-vault`.
+- `LICENSE`, `.gitignore`, `README.md` (the README can be updated by the user later for their own instance — don't rewrite it during bootstrap).
+- `scripts/scan-raw.sh`, `scripts/backfill-summaries.py`, `scripts/enrich-hub.py` (generic, stay as-is).
+- The non-conditional slash-commands: `/ingest`, `/query`, `/save`, `/lint`, `/evolve-agent`, `/update-vault`.
 
-### C. En cas de blocage
+### C. If you get stuck
 
-Si une étape de la Section 5 échoue (ex. un placeholder oublié dans un fichier, un `.tpl` qui ne se laisse pas substituer) :
+If a step in Section 5 fails (e.g. a placeholder forgotten in a file, a `.tpl` that won't substitute):
 
-1. Ne fais **pas** le `git init` final tant que tout n'est pas propre.
-2. Affiche l'erreur précise à l'utilisateur, propose un fix manuel ou un retry de l'étape.
-3. Le `.git/` original existe encore tant que 5.8 n'a pas été lancé — tu peux toujours `git diff` pour comparer à l'état initial.
+1. **Don't** run the final `git init` until everything is clean.
+2. Show the precise error to the user, propose a manual fix or a step retry.
+3. The original `.git/` still exists until 5.8 has run — you can always `git diff` to compare against the initial state.
 
-Une fois le `git init` neuf fait, l'historique du template est perdu. C'est volontaire (clean start — l'utilisateur démarre avec un repo vierge, sans le bruit du template).
+Once the fresh `git init` is done, the template's history is gone. That's intentional (clean start — the user begins with a pristine repo, no template noise).
 
-### D. Bloc SYNC-REPOS à injecter dans CLAUDE.md
+### D. SYNC-REPOS block to inject into CLAUDE.md
 
-Quand `has_tracked_repos = true`, copier ce bloc verbatim à la place du placeholder `{{sync_repos_section}}` dans CLAUDE.md.
+When `has_tracked_repos = true`, copy this block verbatim in place of the `{{sync_repos_section}}` placeholder in CLAUDE.md.
 
 ````markdown
-### SYNC-REPOS (`/sync-repos [noms]`)
+### SYNC-REPOS (`/sync-repos [names]`)
 
-Synchronise la doc de repos GitHub externes (frameworks, outils, projets que tu suis) vers `raw/`, en respectant strictement l'immutabilité.
+Sync the docs of external GitHub repos (frameworks, tools, projects you follow) into `raw/`, while strictly preserving immutability.
 
-**Manifest** : `tracked-repos.config.json` à la racine du vault. Champs par source :
-- `name` (slug, clé d'invocation), `repo` (`owner/name` GitHub, ex. `vercel/next.js`, `nf-core/sarek`, `your-org/your-repo`), `branch` (typiquement `main`)
-- `dest` (chemin relatif au vault, sans le `<shortsha>/`) — libre, à toi de définir l'arborescence
-- `paths` (optionnel, défaut `default_paths` du manifest) — uniquement ces chemins sont copiés depuis le clone
-- `exclude_paths` (optionnel, défaut `default_exclude_paths` du manifest) — chemins supprimés du snapshot **après** copie. `rm -rf` tolérant : un chemin absent est ignoré silencieusement.
+**Manifest**: `tracked-repos.config.json` at the vault root. Fields per source:
+- `name` (slug, invocation key), `repo` (`owner/name` GitHub, e.g. `vercel/next.js`, `nf-core/sarek`, `your-org/your-repo`), `branch` (typically `main`)
+- `dest` (vault-relative path, without the `<shortsha>/`) — free, you define the layout
+- `paths` (optional, default `default_paths` of the manifest) — only those paths are copied from the clone
+- `exclude_paths` (optional, default `default_exclude_paths` of the manifest) — paths removed from the snapshot **after** copy. Tolerant `rm -rf`: a missing path is silently ignored.
 
-Défauts au niveau racine : `default_paths` et `default_exclude_paths`. Ces défauts s'appliquent à toute source qui n'override pas explicitement.
+Manifest-level defaults: `default_paths` and `default_exclude_paths`. These defaults apply to any source that doesn't override them.
 
-**Principe snapshot par SHA.** Chaque sync crée `<dest>/<shortsha>/` (shortsha = 7 premiers chars du SHA du HEAD de `branch`). Si ce dossier existe déjà → skip. Un merge sur `main` côté GitHub = un nouveau SHA = un nouveau snapshot à côté de l'ancien. Les anciens snapshots ne sont **jamais** modifiés ni supprimés.
+**SHA-keyed snapshot principle.** Each sync creates `<dest>/<shortsha>/` (shortsha = first 7 chars of the HEAD SHA of `branch`). If that folder already exists → skip. A merge into `main` upstream = a new SHA = a new snapshot beside the old. Old snapshots are **never** modified or deleted.
 
-**Résolution de la cible** (main context) :
-- aucun argument → multiSelect interactif (`AskUserQuestion`) sur les sources du manifest, pour éviter un « tout sync » involontaire.
-- noms explicites (`next sarek`) → ces sources.
+**Target resolution** (main context):
+- no argument → interactive multiSelect (`AskUserQuestion`) over manifest sources, to avoid an unintended "sync all".
+- explicit names (`next sarek`) → those sources.
 
-**Mécanique** (`scripts/sync-repos.sh`) :
-1. `gh api repos/<repo>/commits/<branch>` → SHA du HEAD.
-2. Si `<dest>/<shortsha>/` existe → `SKIPPED`.
-3. Sinon : `gh repo clone --depth=1 -b <branch>` dans `cache/sync-repos/<name>/`, copie des `paths` listés vers `<dest>/<shortsha>/`, écriture de `.sync-meta.json` (repo, branch, sha, synced_at, paths), cleanup du clone.
+**Mechanics** (`scripts/sync-repos.sh`):
+1. `gh api repos/<repo>/commits/<branch>` → HEAD SHA.
+2. If `<dest>/<shortsha>/` exists → `SKIPPED`.
+3. Otherwise: `gh repo clone --depth=1 -b <branch>` into `cache/sync-repos/<name>/`, copy listed `paths` to `<dest>/<shortsha>/`, write `.sync-meta.json` (repo, branch, sha, synced_at, paths), clean up the clone.
 
-**Chaînage sur `/ingest`.** Pour chaque ligne `CREATED <path>` remontée par le script : enchaîner `/ingest <path>` séquentiellement.
+**Chaining `/ingest`.** For each `CREATED <path>` line surfaced by the script: chain `/ingest <path>` sequentially.
 
-**Journalisation.** Entrée dans `wiki/log.md` :
+**Logging.** Entry in `wiki/log.md`:
 ```
-## [YYYY-MM-DD] sync-repos | N snapshots créés
-<liste>
+## [YYYY-MM-DD] sync-repos | N snapshots created
+<list>
 ```
 
-**Ajouter un nouveau repo** : éditer `tracked-repos.config.json`, puis `/sync-repos <nouveau-name>`.
+**Add a new repo**: edit `tracked-repos.config.json`, then `/sync-repos <new-name>`.
 ````
 
 ---
 
-*Fin du prompt portable. Lance maintenant la Section 2.*
+*End of the portable prompt. Now run Section 2.*

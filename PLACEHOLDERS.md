@@ -8,6 +8,7 @@ This file documents every `{{placeholder}}` used in the `*.tpl` files of this te
 |---|---|---|---|
 | `{{name}}` | string | Interview Q1 (full name) | `CLAUDE.md.tpl`, `overview.md.tpl`, `index.md.tpl` |
 | `{{vault_name}}` | string | Interview Q (vault name, defaults to a slug of `{{name}}`) | `CLAUDE.md.tpl` |
+| `{{vault_language}}` | human-readable language label | Detected at the very start of the interview from the user's first messages (e.g. `English`, `Français`, `Español`, `Deutsch`, `日本語`). This is the language **all wiki pages will be written in**, regardless of source language. Confirm with the user during validation if uncertain. | `CLAUDE.md.tpl`, `domain-expert.md.tpl` |
 | `{{role}}` | string | Interview Q (current role / title) | `CLAUDE.md.tpl`, `overview.md.tpl` |
 | `{{parcours_short}}` | markdown bullet list, 2-4 lines | Interview Q (career, in 2-3 bullets) | `overview.md.tpl` |
 | `{{bootstrap_date}}` | YYYY-MM-DD | `date +%Y-%m-%d` at bootstrap time | `overview.md.tpl`, `index.md.tpl`, `radar.md.tpl`, `domain.md.tpl` (per-domain) |
@@ -73,7 +74,7 @@ Per-domain placeholders:
 
 ## Total
 
-- **Global placeholders** (instance-wide): 6 + 5 conditional sections = **11**
+- **Global placeholders** (instance-wide): 7 + 5 conditional sections = **12**
 - **Per-domain placeholders**: 17 per domain instance × N domains
 - **Cross-domain placeholders** (computed from full domain list): 5
 
