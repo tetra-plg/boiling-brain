@@ -6,83 +6,135 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 
 ---
 
+## [v1.0.3] — 2026-05-06
+
+Launch readiness pass: every file shipped at bootstrap or propagated by `/update-vault` is now in EN, plus a `{{vault_language}}` placeholder so wiki output language is decoupled from source language.
+
+### Added
+
+- **README "Who is this for?" section** placed before the FAQ. Frames visitor expectations (solo curators using Claude Code + Obsidian, opinionated-defaults audience, thinking-partner use case) and faux amis (team wikis, hosted SaaS, vector RAG, non-Claude-Code agents, no-code expectation).
+- **README graph screenshot** ([docs/graph.png](docs/graph.png)) inserted right after the badges. Visual proof that domain clusters auto-emerge from the linking structure.
+- **`{{vault_language}}` global placeholder** (29th placeholder, documented in `PLACEHOLDERS.md`). Captures the language detected at the bootstrap interview as a human label (`English`, `Français`, `Español`…), then injected into `CLAUDE.md` and every domain-expert agent so wiki pages are always written in the vault language regardless of source language.
+
+### Changed
+
+- **i18n template pass — every artifact translated to EN.** Every file shipped to a fresh vault at bootstrap, then propagated by `/update-vault`, is now in EN to remove the LLM mimicry risk where Claude was nudged toward FR by the surrounding prose. Files translated:
+  - `BOOTSTRAP.md` (700+ lines, end-to-end, with EN AskUserQuestion payloads)
+  - `CLAUDE.md.tpl`, `.claude/agents/domain-expert.md.tpl`, `.claude/agent-memory/domain-memory.md.tpl`
+  - The 5 `wiki/*.tpl` (index, log, overview, radar, domain hub)
+  - The 4 `.claude/rules/*.md` (frontmatter, pages-wiki, raw-vs-cache, sanitization-issues)
+  - The 9 `.claude/commands/*.md` (ingest, ingest-video, query, save, lint, evolve-agent, sync-repos, update-vault, create-issue)
+  - The `tracked-repos.config.json.tpl` schema_note
+  - The 3 wiki ADRs (tracked-repos-immutable-snapshots, ingest-video-modes-a-b-generalisation, extraction-frames-induction-runbook)
+  - Existing v1.0.1 and v1.0.2 changelog entries retro-translated to EN for consistency with the launch.
+  - Multilingual at runtime is preserved via the `Detect the user's language` directive in `BOOTSTRAP.md` and the `{{vault_language}}` placeholder injected into per-vault `CLAUDE.md` and agents.
+- **README polish** for the public launch: bootstrap command translated to EN (with italic note "Works in any language — the bootstrap interview adapts to your phrasing"); version label `(v1.0.0)` → `(v1.0)` (timeless); badge `status-experimental-orange` → `status-alpha-yellow` (humility was below reality); sections reordered so `What is an LLM Wiki?` and `How does this differ from Karpathy's LLM Wiki?` land before `Prerequisites` and `Quick start` (concept before installation for the Twitter visitor).
+
+### Fixed
+
+- **Source language vs vault language decoupling.** Before this fix, `CLAUDE.md.tpl` had `Français` hardcoded in its writing principles, and `domain-expert.md.tpl` had "titres en français". Consequence: an EN user bootstrapped a vault and every page produced by `/ingest` came out in French regardless of the source. The new `{{vault_language}}` placeholder + the explicit directive (*"Source language has no incidence on output language; quote sources verbatim, write commentary in the vault language"*) close that loop.
+- **`/ingest-video` visual-mention detection was FR-only.** The `visual_mentions` counter relied on a regex of FR phrases (`regardez`, `voilà`, `cette grille`…), so on EN transcripts the counter silently stayed at 0 and Mode B (cross-induction) was never recommended. The pattern list is now bilingual EN+FR (extensible to other languages), restoring the recommendation logic for non-FR transcripts.
+
+### Repo-level (post-merge, not in code)
+
+These actions happen at release time outside the PR diff but are part of the v1.0.3 launch readiness:
+
+- **Default branch** switched from `develop` to `main` (the v1.0.3 commit is the cutover point).
+- **GitHub description** updated to *"Opinionated implementation of Karpathy's LLM Wiki pattern — maintained by domain-expert agents (Claude Code)."* (mentions Karpathy for post-thread discoverability).
+- **GitHub topics** expanded to 8–10 covering `karpathy`, `llm-wiki`, `personal-knowledge-base`, `pkm`, `second-brain`, `claude-code`, `obsidian`, `agent-based`, `wiki-template`.
+- **Seed issues** opened to signal a live project (Bootstrap support for non-Claude-Code agents; "before/after" walkthrough; share-your-instance discussion).
+
+### Migration from v1.0.2
+
+`/update-vault` propagates `BOOTSTRAP.md`, the templates, `.claude/rules/` and `.claude/commands/` automatically. **However**, two artifacts are user-owned and stay untouched by `/update-vault`:
+
+- `CLAUDE.md` (your live one, derived from the template at bootstrap)
+- `.claude/agents/<domain>-expert.md` (one per domain you declared)
+
+To benefit from `{{vault_language}}` in an existing vault:
+
+1. Edit your `CLAUDE.md` writing principles section. Replace the hardcoded language line (`Français.` or whatever was substituted at bootstrap) with: `Vault language: **<your language label>** — every wiki page is written in this language, regardless of the source's original language. Technical terms in VO when the VO usage is dominant.`
+2. For each `<domain>-expert.md` in `.claude/agents/`, find the writing-language line ("Pages are in `kebab-case.md`, titles in <language>...") and replace with: `Pages are in `kebab-case.md`. Writing language: titles and bodies in the vault language declared in `CLAUDE.md`. The original source language has no incidence — quote sources verbatim, translate commentary into the vault language.`
+
+A migration script `scripts/migrations/v1.0.3-vault-language.md` may be added in a follow-up patch if demand warrants automation.
+
 ## [v1.0.2] — 2026-05-01
 
 ### Added
 
-- **`.claude/rules/`** : trois conventions transverses formalisées (frontmatter, pages-wiki, raw-vs-cache) avec frontmatter `paths:` qui permet l'auto-chargement par Claude Code quand un agent travaille sur un path matchant. Pattern documenté par Anthropic (Boris Cherny, 24 mars 2026). Propagé par `/update-vault` aux vaults existants.
-- **`.claude/template-version`** : fichier de versionning explicite du template (format `template-version: X.Y.Z` + `template-sha:` + `last-updated:`). Source de vérité unique pour la machine de migration de `/update-vault`. Créé au bootstrap (BOOTSTRAP 5.10), mis à jour à chaque `/update-vault` réussi.
-- **`scripts/migrations/`** : nouveau dossier pour les migrations breaking entre versions du template. Pattern `v<X.Y.Z>-<description>.md` (slash-commands Claude Code interactifs). Premier exemple : `v1.0.2-claude-md-slim.md`. Invoqués par `/update-vault` dans la chaîne entre version locale et cible.
-- **`/create-issue [bug|enhancement|docs|question]`** ([#4](https://github.com/tetra-plg/boiling-brain/issues/4)) : nouvelle slash-command pour remonter une issue vers le repo template upstream depuis le contexte de la session courante, avec **sanitization automatique** des données vault-specific (wikilinks, slugs de domaines, chemins privés `raw/notes/<date>-*`, emails, noms d'entités du wiki). Validation utilisateur obligatoire via `AskUserQuestion` avant `gh issue create`. Règles formalisées dans `.claude/rules/sanitization-issues.md` (auto-chargé par `paths:`). Workflow proactif : quand le radar contient une entrée concernant l'environnement template, le main context propose `/create-issue` à l'utilisateur (sans création silencieuse).
-- **`scripts/test-scan-raw.sh`** : fixture de test reproduisant les 3 cas du fix `scan-raw.sh` (apostrophe, parenthèses, espaces multiples) + un cas combiné. Asserte que tous reportent `SKIP` au scan. Exit code 1 si régression.
+- **`.claude/rules/`**: three transverse conventions formalized (frontmatter, pages-wiki, raw-vs-cache) with `paths:` frontmatter that lets Claude Code auto-load them when an agent works on a matching path. Pattern documented by Anthropic (Boris Cherny, 2026-03-24). Propagated by `/update-vault` to existing vaults.
+- **`.claude/template-version`**: explicit template-version file (format `template-version: X.Y.Z` + `template-sha:` + `last-updated:`). Single source of truth for the `/update-vault` migration machine. Created at bootstrap (BOOTSTRAP 5.10), updated at every successful `/update-vault`.
+- **`scripts/migrations/`**: new folder for breaking migrations between template versions. Pattern `v<X.Y.Z>-<description>.md` (interactive Claude Code slash-commands). First example: `v1.0.2-claude-md-slim.md`. Invoked by `/update-vault` in the chain between local and target version.
+- **`/create-issue [bug|enhancement|docs|question]`** ([#4](https://github.com/tetra-plg/boiling-brain/issues/4)): new slash-command to file an issue against the upstream template repo from the current session context, with **automatic sanitization** of vault-specific data (wikilinks, domain slugs, private paths `raw/notes/<date>-*`, emails, wiki entity names). Mandatory user validation via `AskUserQuestion` before `gh issue create`. Rules formalized in `.claude/rules/sanitization-issues.md` (auto-loaded via `paths:`). Proactive workflow: when the radar contains an entry concerning the template environment, the main context proposes `/create-issue` to the user (no silent creation).
+- **`scripts/test-scan-raw.sh`**: test fixture reproducing the 3 cases of the `scan-raw.sh` fix (apostrophe, parentheses, multiple spaces) + a combined case. Asserts that every case reports `SKIP` on scan. Exit code 1 on regression.
 
 ### Changed
 
-- **`CLAUDE.md.tpl` réduit à 112 lignes** (depuis 268, soit −58 %), conformément à la recommandation Anthropic « < 200 lignes » pour préserver l'adhérence aux instructions. Les sections Workflows détaillés (~143 lignes) sont remplacées par une table compacte qui pointe vers `.claude/commands/*.md`. La section Conventions (22 lignes) devient un pointeur vers `.claude/rules/`. Les sections instance-specific (Domaines, Agents experts, Architecture) restent inchangées.
-- **`/update-vault` refactoré en machine de migration versionnée** : lit `.claude/template-version` (avec fallback rétrocompat sur `.template-bootstrap-sha` pour v1.0.1 et sur le tag `v1.0.0` pour v1.0.0), compare avec la version cible upstream, propage les fichiers nouveaux (incluant `.claude/rules/**` et `scripts/migrations/**`), exécute la chaîne de migrations applicables, bumpe `.claude/template-version` à la fin si toutes les migrations sont acceptées.
-- **`BOOTSTRAP.md` section 5.10** : enrichit `.claude/template-version` avec le SHA et la date du bootstrap (en plus de `.template-bootstrap-sha` historique conservé pour rétrocompat).
+- **`CLAUDE.md.tpl` reduced to 112 lines** (from 268, −58%), per the Anthropic recommendation "< 200 lines" to preserve instruction adherence. The verbose Workflows sections (~143 lines) are replaced by a compact table pointing to `.claude/commands/*.md`. The Conventions section (22 lines) becomes a pointer to `.claude/rules/`. Instance-specific sections (Domains, Expert agents, Architecture) stay unchanged.
+- **`/update-vault` refactored as a versioned migration machine**: reads `.claude/template-version` (with backwards-compat fallback to `.template-bootstrap-sha` for v1.0.1 and to the `v1.0.0` tag for v1.0.0), compares with the upstream target version, propagates new files (including `.claude/rules/**` and `scripts/migrations/**`), runs the chain of applicable migrations, bumps `.claude/template-version` at the end if every migration was accepted.
+- **`BOOTSTRAP.md` section 5.10**: enriches `.claude/template-version` with the SHA and the bootstrap date (in addition to the historical `.template-bootstrap-sha`, kept for backwards compat).
 
 ### Fixed
 
-- **Trou de propagation des conventions vers les vaults existants** ([#5](https://github.com/tetra-plg/boiling-brain/issues/5)) : avant v1.0.2, toute évolution de convention (frontmatter, immutabilité `raw/`, etc.) vivait dans `CLAUDE.md.tpl` consommé au bootstrap, sans mécanisme de propagation. Cas concret : 18 pages du vault de référence ont eu `source_sha256` rempli avec un placeholder par les agents experts (batch 2026-04-29) — non corrigeable sans patch manuel par vault. Avec v1.0.2, la règle « `source_sha256` toujours via `shasum -a 256` » vit dans `.claude/rules/frontmatter.md` et est propagée automatiquement par `/update-vault`.
-- **`scripts/scan-raw.sh` : 3 bugs de parsing causant des faux `NEW`** ([#3](https://github.com/tetra-plg/boiling-brain/issues/3)) :
-  - **Bug 1 (apostrophes mangées)** : `tr -d '"'"'` aux lignes 79, 106, 126 supprimait à la fois les guillemets YAML et les apostrophes des chemins. Tout `source_path` contenant une apostrophe (ex: `2026-01-30-claude-code-obsidian-cpr.md` qui mentionnait `BotFather to 'Hello'`) était mal indexé. Remplacé par `sed 's/^"//; s/"$//'` qui ne touche qu'aux guillemets en début/fin de chaîne.
-  - **Bug 2 (parenthèses cassent les clés d'array assoc bash)** : un `source_path` ou `covered_paths` contenant `()` ou d'autres caractères spéciaux shell (`*`, `[`, `?`) cassait l'indexation. Neutralisé par une fonction `_safe_key` qui encode les clés via `printf '%q'` à l'écriture **et** au lookup, dans `path_to_slug`, `dir_to_slug` et `meta_to_slug`. Élimine toute la classe de bugs de quoting bash sans dépendance externe.
-  - **Bug 3 (espaces multiples)** : couvert par le même `printf '%q'` — les espaces sont maintenant préservés exactement.
-  - Tableau parallèle `indexed_paths` ajouté pour permettre l'itération sur les paths originaux (les clés encodées de `path_to_slug` ne sont pas réversibles).
+- **Convention propagation gap to existing vaults** ([#5](https://github.com/tetra-plg/boiling-brain/issues/5)): before v1.0.2, any convention evolution (frontmatter, `raw/` immutability, etc.) lived in `CLAUDE.md.tpl` consumed at bootstrap, with no propagation mechanism. Concrete case: 18 pages of the reference vault had `source_sha256` filled with a placeholder by expert agents (2026-04-29 batch) — not fixable without per-vault manual patch. With v1.0.2, the rule "`source_sha256` always via `shasum -a 256`" lives in `.claude/rules/frontmatter.md` and is propagated automatically by `/update-vault`.
+- **`scripts/scan-raw.sh`: 3 parsing bugs causing false `NEW` entries** ([#3](https://github.com/tetra-plg/boiling-brain/issues/3)):
+  - **Bug 1 (apostrophes eaten)**: `tr -d '"'"'` on lines 79, 106, 126 removed both YAML quotes and path apostrophes. Any `source_path` containing an apostrophe (e.g. `2026-01-30-claude-code-obsidian-cpr.md` mentioning `BotFather to 'Hello'`) was mis-indexed. Replaced by `sed 's/^"//; s/"$//'` which only touches leading/trailing quotes.
+  - **Bug 2 (parentheses break bash assoc array keys)**: a `source_path` or `covered_paths` containing `()` or other shell special chars (`*`, `[`, `?`) broke indexing. Neutralized via a `_safe_key` function that encodes keys with `printf '%q'` on write **and** lookup, in `path_to_slug`, `dir_to_slug` and `meta_to_slug`. Eliminates the entire class of bash quoting bugs without external dependency.
+  - **Bug 3 (multiple spaces)**: covered by the same `printf '%q'` — spaces are now preserved exactly.
+  - Parallel array `indexed_paths` added to allow iterating on the original paths (the encoded keys of `path_to_slug` are not reversible).
 
 ### Removed
 
-- **`RELEASE_NOTES.md`** : fichier supprimé. Il dupliquait le `CHANGELOG.md` et le body des releases GitHub, ce qui créait du drift à chaque release. La source unique pour les notes de release est désormais `CHANGELOG.md`. Le body GitHub est rédigé directement via `gh release create --notes-file <(extrait du CHANGELOG)` ou édité depuis l'interface.
+- **`RELEASE_NOTES.md`**: file removed. It duplicated `CHANGELOG.md` and the GitHub release body, which created drift at every release. The single source for release notes is now `CHANGELOG.md`. The GitHub body is written directly via `gh release create --notes-file <(extract from CHANGELOG)` or edited in the UI.
 
-### Migration depuis v1.0.x
+### Migration from v1.0.x
 
-La migration vers v1.0.2 est **gérée par `/update-vault`** :
+Migration to v1.0.2 is **handled by `/update-vault`**:
 
 ```bash
-# Dans ton vault bootstrappé :
+# In your bootstrapped vault:
 /update-vault
 ```
 
-`/update-vault` détecte automatiquement la version locale (via `.claude/template-version`, ou via fallback rétrocompat sur `.template-bootstrap-sha` pour v1.0.1, ou tag `v1.0.0` pour v1.0.0), propage les fichiers nouveaux (`.claude/rules/`, `scripts/migrations/`, `.claude/template-version`), puis invoque la migration `v1.0.2-claude-md-slim` qui :
+`/update-vault` automatically detects the local version (via `.claude/template-version`, or via backwards-compat fallback on `.template-bootstrap-sha` for v1.0.1, or tag `v1.0.0` for v1.0.0), propagates the new files (`.claude/rules/`, `scripts/migrations/`, `.claude/template-version`), then invokes the `v1.0.2-claude-md-slim` migration which:
 
-1. Lit le `CLAUDE.md` actuel.
-2. Identifie les sections à compacter (Workflows détaillés dupliqués, Conventions verbeuses).
-3. **Préserve les customizations utilisateur** (sections ajoutées hors template).
-4. Propose un diff via `AskUserQuestion` (3 options : appliquer / éditer manuellement / skip).
-5. Si appliqué : commit dédié `chore: migrate CLAUDE.md to v1.0.2 slim structure`.
+1. Reads the current `CLAUDE.md`.
+2. Identifies sections to compact (duplicated detailed Workflows, verbose Conventions).
+3. **Preserves user customizations** (sections added outside the template).
+4. Proposes a diff via `AskUserQuestion` (3 options: apply / edit manually / skip).
+5. If applied: dedicated commit `chore: migrate CLAUDE.md to v1.0.2 slim structure`.
 
-`CLAUDE.md` n'est jamais réécrit silencieusement — il est user-owned.
+`CLAUDE.md` is never silently rewritten — it's user-owned.
 
-Si tu préfères migrer manuellement, lis [scripts/migrations/v1.0.2-claude-md-slim.md](scripts/migrations/v1.0.2-claude-md-slim.md) qui décrit exactement quoi modifier.
+If you prefer to migrate manually, read [scripts/migrations/v1.0.2-claude-md-slim.md](scripts/migrations/v1.0.2-claude-md-slim.md) which describes exactly what to change.
 
 ## [v1.0.1] — hotfix
 
 ### Fixed
 
-- **`/update-vault` inutilisable après bootstrap** : le bootstrap réinitialise l'historique git (`rm -rf .git/ && git init`), laissant le vault sans ancêtre commun avec le template. `git log HEAD..template-upstream/main` retournait alors tout l'historique du template, et `git cherry-pick` échouait sur les fichiers `.tpl` consommés au bootstrap.
+- **`/update-vault` unusable after bootstrap**: bootstrap resets the git history (`rm -rf .git/ && git init`), leaving the vault with no common ancestor with the template. `git log HEAD..template-upstream/main` then returned the entire template history, and `git cherry-pick` failed on `.tpl` files consumed at bootstrap.
 
-- **`BOOTSTRAP.md` section 5.10** : enregistre désormais le SHA du template dans `.template-bootstrap-sha` avant de supprimer le `.git/`. Ce fichier sert de baseline pour les futures mises à jour via `/update-vault`.
+- **`BOOTSTRAP.md` section 5.10**: now records the template SHA into `.template-bootstrap-sha` before deleting the `.git/`. This file serves as the baseline for future updates via `/update-vault`.
 
-- **`/update-vault`** : remplace `cherry-pick` par une approche fichier par fichier (`git show template-upstream/main:<fichier> > <fichier>`), indépendante de l'historique git. Exclut automatiquement les fichiers consommés au bootstrap (`*.tpl`, `BOOTSTRAP.md`, `PLACEHOLDERS.md`, etc.).
+- **`/update-vault`**: replaces `cherry-pick` with a per-file approach (`git show template-upstream/main:<file> > <file>`), independent of git history. Automatically excludes files consumed at bootstrap (`*.tpl`, `BOOTSTRAP.md`, `PLACEHOLDERS.md`, etc.).
 
 ### Changed
 
-- **`BOOTSTRAP.md` language-adaptive** : le bootstrap n'est plus hardcodé en français. Détection automatique de la langue via les premiers messages utilisateur, génération de tous les fichiers (`CLAUDE.md`, `wiki/index.md`, `wiki/log.md`, agents, hubs…) dans la langue détectée.
+- **`BOOTSTRAP.md` language-adaptive**: bootstrap is no longer hardcoded to French. Automatic language detection via the user's first messages, generation of every file (`CLAUDE.md`, `wiki/index.md`, `wiki/log.md`, agents, hubs…) in the detected language.
 
 ### Removed
 
-- **`wiki/decisions/tiered-loading-wiki.md`** : la décision a été remplacée par l'implémentation directe dans `query.md` et les frontmatters `summary_l0` / `summary_l1`. La décision n'avait plus lieu d'exister en tant que document séparé.
+- **`wiki/decisions/tiered-loading-wiki.md`**: the decision was replaced by direct implementation in `query.md` and the `summary_l0` / `summary_l1` frontmatter. The decision no longer needed to exist as a separate document.
 
 ### Documentation
 
-- **README — section Prerequisites** : Claude Code, Obsidian (avec lien vers la graph view), gh CLI listés explicitement.
-- **README — FAQ Web Clipper** : workflow Obsidian Web Clipper → `raw/clippings/` → `/ingest` documenté.
-- **README — usage guidelines** : précisions sur la manière dont le repo est destiné à être utilisé (template, pas projet à cloner).
+- **README — Prerequisites section**: Claude Code, Obsidian (with link to graph view), gh CLI listed explicitly.
+- **README — Web Clipper FAQ**: Obsidian Web Clipper → `raw/clippings/` → `/ingest` workflow documented.
+- **README — usage guidelines**: clarifications on how the repo is meant to be used (template, not a project to clone).
 
-### Migration depuis v1.0.0
+### Migration from v1.0.0
 
-**Option A — automatique (recommandée) :**
+**Option A — automatic (recommended):**
 
 ```bash
 git remote add template-upstream https://github.com/tetra-plg/boiling-brain.git 2>/dev/null; true
@@ -93,9 +145,9 @@ git add .claude/commands/update-vault.md
 git commit -m "fix: update-vault retrocompat v1.0.0"
 ```
 
-Puis lance `/update-vault` — le fallback détecte l'absence de `.template-bootstrap-sha` et utilise le tag `v1.0.0` comme baseline automatiquement.
+Then run `/update-vault` — the fallback detects the absence of `.template-bootstrap-sha` and uses the `v1.0.0` tag as baseline automatically.
 
-**Option B — manuelle :**
+**Option B — manual:**
 
 ```bash
 git fetch template-upstream --tags
@@ -121,7 +173,7 @@ git commit -m "fix: add template bootstrap sha (retrocompat v1.0.0)"
 
 Everything from the v0.2.0 phase below is part of v1.0.0. Listed for clarity.
 
-## [v0.2.0] — 2026-04-30 (Phase 5c — feedback réel, internal)
+## [v0.2.0] — 2026-04-30 (Phase 5c — real feedback, internal)
 
 ### Added
 
@@ -143,8 +195,8 @@ Everything from the v0.2.0 phase below is part of v1.0.0. Listed for clarity.
 - Initial scaffolding for the LLM Wiki bootstrap template.
 - `BOOTSTRAP.md` portable prompt (~600 lines, language-adaptive) — 7-question interview, 6-heuristic deduction, per-domain validation, scaffolding, optional GitHub remote, onboarding recap.
 - `*.tpl` files with 28 documented placeholders (see `PLACEHOLDERS.md`): `CLAUDE.md.tpl`, `wiki/index.md.tpl`, `wiki/log.md.tpl`, `wiki/overview.md.tpl`, `wiki/radar.md.tpl`, `wiki/domains/domain.md.tpl`, `.claude/agents/domain-expert.md.tpl`, `.claude/agent-memory/domain-memory.md.tpl`, `tracked-repos.config.json.tpl`.
-- Generic slash-commands : `/ingest`, `/ingest-video`, `/query`, `/save`, `/lint`, `/evolve-agent`, optional `/sync-repos`.
-- Generic scripts : `scan-raw.sh`, `transcribe.sh`, `sample-frames.sh`, `extract-frames.sh`, `diff-frames.py`, `backfill-summaries.py`, `enrich-hub.py`, optional `sync-repos.sh`.
-- Architectural decisions in `wiki/decisions/` : `tracked-repos-immutable-snapshots.md`, `extraction-frames-induction-runbook.md`, `ingest-video-modes-a-b-generalisation.md`.
+- Generic slash-commands: `/ingest`, `/ingest-video`, `/query`, `/save`, `/lint`, `/evolve-agent`, optional `/sync-repos`.
+- Generic scripts: `scan-raw.sh`, `transcribe.sh`, `sample-frames.sh`, `extract-frames.sh`, `diff-frames.py`, `backfill-summaries.py`, `enrich-hub.py`, optional `sync-repos.sh`.
+- Architectural decisions in `wiki/decisions/`: `tracked-repos-immutable-snapshots.md`, `extraction-frames-induction-runbook.md`, `ingest-video-modes-a-b-generalisation.md`.
 - README.md with usage flow + FAQ.
 - MIT LICENSE.

@@ -4,54 +4,54 @@ description: Cherry-pick improvements from the upstream template into this vault
 
 # /update-vault
 
-Met à jour ce vault depuis le template `tetra-plg/boiling-brain` en amont. Depuis la v1.0.2, `/update-vault` est une **machine de migration versionnée** : il détecte la version du vault (via `.claude/template-version`), la compare à la version cible, propage les nouveaux fichiers, et exécute les migrations breaking entre les deux versions si nécessaire.
+Updates this vault from the upstream `tetra-plg/boiling-brain` template. Since v1.0.2, `/update-vault` is a **versioned migration machine**: it detects the vault's version (via `.claude/template-version`), compares it to the target version, propagates new files, and runs the breaking migrations between the two versions when needed.
 
-Utilise ce workflow pour récupérer les nouveaux scripts, slash-commands, rules ou décisions d'architecture publiés dans le template après ton bootstrap.
+Use this workflow to pull new scripts, slash-commands, rules or architectural decisions published in the template after your bootstrap.
 
-## Étapes
+## Steps
 
-### 1. Configure le remote `template-upstream` (une seule fois)
+### 1. Configure the `template-upstream` remote (one-time)
 
 ```bash
 git remote add template-upstream https://github.com/tetra-plg/boiling-brain.git 2>/dev/null \
-  && echo "remote template-upstream ajouté" \
-  || echo "remote template-upstream déjà configuré"
+  && echo "remote template-upstream added" \
+  || echo "remote template-upstream already configured"
 git fetch template-upstream --tags
 ```
 
-### 2. Détecter la version locale (avec rétrocompat v1.0.0 et v1.0.1)
+### 2. Detect the local version (with v1.0.0 and v1.0.1 backwards compatibility)
 
 ```bash
 LOCAL_VERSION=""
 LOCAL_SHA=""
 
 if [ -f .claude/template-version ]; then
-  # Cas standard : v1.0.2+
+  # Standard case: v1.0.2+
   LOCAL_VERSION=$(grep '^template-version:' .claude/template-version | awk '{print $2}')
   LOCAL_SHA=$(grep '^template-sha:' .claude/template-version | awk '{print $2}')
 elif [ -f .template-bootstrap-sha ]; then
-  # Rétrocompat v1.0.1 : a .template-bootstrap-sha mais pas .claude/template-version
+  # v1.0.1 backwards compat: has .template-bootstrap-sha but no .claude/template-version
   LOCAL_VERSION="1.0.1"
   LOCAL_SHA=$(cat .template-bootstrap-sha)
-  echo "Vault détecté en v1.0.1 (legacy). .claude/template-version sera créé pendant cette mise à jour."
+  echo "Vault detected at v1.0.1 (legacy). .claude/template-version will be created during this update."
 else
-  # Rétrocompat v1.0.0 : ni l'un ni l'autre. Utiliser le tag v1.0.0 comme baseline.
+  # v1.0.0 backwards compat: neither file. Use tag v1.0.0 as baseline.
   LOCAL_SHA=$(git -C . show template-upstream/main 2>/dev/null && git rev-list -n 1 v1.0.0 2>/dev/null || echo "")
   if [ -n "$LOCAL_SHA" ]; then
     LOCAL_VERSION="1.0.0"
-    echo "Vault détecté en v1.0.0 (legacy, pas de .template-bootstrap-sha). Baseline = tag v1.0.0."
+    echo "Vault detected at v1.0.0 (legacy, no .template-bootstrap-sha). Baseline = tag v1.0.0."
   else
     echo "BASELINE_MISSING"
-    echo "Aucun baseline trouvé (.claude/template-version, .template-bootstrap-sha, et tag v1.0.0 absents)."
-    echo "Crée le fichier manuellement (voir Notes en bas) puis relance /update-vault."
+    echo "No baseline found (.claude/template-version, .template-bootstrap-sha, and tag v1.0.0 all missing)."
+    echo "Create the file manually (see Notes at the bottom) then re-run /update-vault."
     exit 1
   fi
 fi
 
-echo "Version locale : $LOCAL_VERSION (SHA $LOCAL_SHA)"
+echo "Local version: $LOCAL_VERSION (SHA $LOCAL_SHA)"
 ```
 
-### 3. Détecter la version cible (depuis le remote)
+### 3. Detect the target version (from the remote)
 
 ```bash
 TARGET_VERSION=$(git show template-upstream/main:.claude/template-version 2>/dev/null \
@@ -59,16 +59,16 @@ TARGET_VERSION=$(git show template-upstream/main:.claude/template-version 2>/dev
 TARGET_SHA=$(git rev-parse template-upstream/main)
 
 if [ -z "$TARGET_VERSION" ]; then
-  echo "Le template upstream n'a pas de .claude/template-version (probablement < v1.0.2). Fallback sur le SHA."
+  echo "Upstream template has no .claude/template-version (probably < v1.0.2). Falling back to SHA."
   TARGET_VERSION="$TARGET_SHA"
 fi
 
-echo "Version cible : $TARGET_VERSION (SHA $TARGET_SHA)"
+echo "Target version: $TARGET_VERSION (SHA $TARGET_SHA)"
 ```
 
-### 4. Calculer la chaîne de migrations à appliquer
+### 4. Compute the migration chain to apply
 
-Lister toutes les migrations dans `template-upstream/main:scripts/migrations/v<X>-*.md` dont la version `X` est strictement supérieure à `LOCAL_VERSION` et inférieure ou égale à `TARGET_VERSION`. Ordonner par version croissante.
+List all migrations in `template-upstream/main:scripts/migrations/v<X>-*.md` whose version `X` is strictly greater than `LOCAL_VERSION` and less than or equal to `TARGET_VERSION`. Sort by ascending version.
 
 ```bash
 git ls-tree -r template-upstream/main --name-only \
@@ -76,15 +76,15 @@ git ls-tree -r template-upstream/main --name-only \
   | sort
 ```
 
-Pour chaque migration trouvée, extraire la version depuis le nom de fichier (ex: `scripts/migrations/v1.0.2-claude-md-slim.md` → `1.0.2`). Conserver uniquement celles avec `LOCAL_VERSION < migration_version <= TARGET_VERSION` (comparaison sémantique simple : `sort -V`).
+For each migration found, extract the version from the file name (e.g. `scripts/migrations/v1.0.2-claude-md-slim.md` → `1.0.2`). Keep only those with `LOCAL_VERSION < migration_version <= TARGET_VERSION` (simple semantic comparison: `sort -V`).
 
-Si aucune migration applicable et version locale == cible : « Ton vault est à jour. ».
+If no applicable migration and local version == target: "Your vault is up to date."
 
-Si aucune migration applicable mais version locale < cible : on propage seulement les fichiers (étape 5).
+If no applicable migration but local version < target: only propagate the files (step 5).
 
-### 5. Identifier et propager les fichiers modifiés
+### 5. Identify and propagate the changed files
 
-Lister les fichiers changés entre `LOCAL_SHA` et `TARGET_SHA`, en excluant les fichiers consommés au bootstrap :
+List the files changed between `LOCAL_SHA` and `TARGET_SHA`, excluding files consumed at bootstrap:
 
 ```bash
 git diff --name-only ${LOCAL_SHA} template-upstream/main \
@@ -95,54 +95,54 @@ git diff --name-only ${LOCAL_SHA} template-upstream/main \
   | grep -v '^CLAUDE\.md$'
 ```
 
-Notes :
+Notes:
 
-- **`.claude/rules/**`** est inclus naturellement (pas dans les exclusions).
-- **`scripts/migrations/**`** est inclus aussi : les migrations sont propagées dans le vault pour pouvoir être consommées au prochain `/update-vault`.
-- **`CLAUDE.md`** est exclu : c'est user-owned. Sa migration est gérée par les slash-commands `scripts/migrations/v<X>-*.md` interactifs, jamais par écrasement.
+- **`.claude/rules/**`** is included naturally (not in exclusions).
+- **`scripts/migrations/**`** is also included: migrations are propagated into the vault to be consumable at the next `/update-vault`.
+- **`CLAUDE.md`** is excluded: it's user-owned. Its migration is handled by the interactive `scripts/migrations/v<X>-*.md` slash-commands, never via overwrite.
 
-Pour les fichiers nouveaux dans le template (qui n'existent pas encore dans le vault — ex: `.claude/template-version`, `.claude/rules/*`, `scripts/migrations/*`), ne pas filtrer par `[ -e "$f" ]` : ils doivent être créés.
+For files newly added in the template (which don't exist yet in the vault — e.g. `.claude/template-version`, `.claude/rules/*`, `scripts/migrations/*`), don't filter by `[ -e "$f" ]`: they must be created.
 
-Présenter la liste à l'utilisateur via `AskUserQuestion` (multiSelect) : quels fichiers veut-il mettre à jour ? Pré-cocher tous les fichiers nouveaux et tous les fichiers `.claude/rules/`.
+Show the list to the user via `AskUserQuestion` (multiSelect): which files do they want to update? Pre-check all newly added files and all `.claude/rules/` files.
 
-Pour chaque fichier sélectionné :
+For each selected file:
 
 ```bash
 mkdir -p "$(dirname "$f")"
 git show template-upstream/main:"$f" > "$f"
 ```
 
-> **Pourquoi `git show` plutôt que `cherry-pick` ?**
-> Le bootstrap réinitialise l'historique git. Le vault n'a aucun ancêtre commun avec le template — `cherry-pick` échouerait. `git show` copie le contenu cible, sans dépendance à l'historique.
+> **Why `git show` rather than `cherry-pick`?**
+> Bootstrap resets the git history. The vault has no common ancestor with the template — `cherry-pick` would fail. `git show` copies the target content, no history dependency.
 
-Commit dédié :
+Dedicated commit:
 
 ```bash
-git add <fichiers mis à jour>
+git add <updated files>
 git commit -m "chore: propagate template files (${LOCAL_VERSION} → ${TARGET_VERSION})"
 ```
 
-### 6. Exécuter la chaîne de migrations
+### 6. Run the migration chain
 
-Pour chaque migration identifiée à l'étape 4, dans l'ordre de version croissante, **invoquer le slash-command** correspondant. Ex pour la v1.0.2 :
+For each migration identified at step 4, in ascending version order, **invoke the corresponding slash-command**. Example for v1.0.2:
 
 ```
 /v1.0.2-claude-md-slim
 ```
 
-Note : les fichiers de migration vivent dans `scripts/migrations/` (pas dans `.claude/commands/`), donc ils ne sont pas exposés comme slash-commands de premier niveau. `/update-vault` les invoque comme **sous-workflow** : tu lis le fichier `scripts/migrations/v<X>-*.md` et tu exécutes son workflow pas-à-pas, en suivant les instructions qu'il contient (lecture, détection, AskUserQuestion, écriture).
+Note: migration files live under `scripts/migrations/` (not `.claude/commands/`), so they are not exposed as top-level slash-commands. `/update-vault` invokes them as a **sub-workflow**: you read the `scripts/migrations/v<X>-*.md` file and execute its workflow step-by-step, following the instructions it contains (read, detect, AskUserQuestion, write).
 
-Chaque migration peut décider de son propre verdict :
+Each migration can pick its own verdict:
 
-- **Appliquée** : le fichier est mis à jour, commit dédié par la migration elle-même.
-- **Édition manuelle demandée par l'utilisateur** : la migration ne touche rien, l'utilisateur prendra le relais. Dans ce cas, **ne pas bumper `.claude/template-version`** à l'étape 7 — la migration sera reproposée au prochain `/update-vault`.
-- **Skippée** : idem, ne pas bumper.
+- **Applied**: the file is updated, dedicated commit by the migration itself.
+- **Manual edit requested by the user**: the migration touches nothing, the user takes over. In this case, **don't bump `.claude/template-version`** at step 7 — the migration will be re-proposed at the next `/update-vault`.
+- **Skipped**: same, don't bump.
 
-Tracker l'état de chaque migration appliquée dans une variable mémoire pour décider du bump final.
+Track the state of each applied migration in a memory variable to decide on the final bump.
 
 ### 7. Bump `.claude/template-version`
 
-**Seulement si toutes les migrations applicables ont été acceptées (pas d'édition manuelle ni de skip).**
+**Only if all applicable migrations were accepted (no manual edit, no skip).**
 
 ```bash
 TODAY=$(date +%Y-%m-%d)
@@ -156,21 +156,21 @@ git add .claude/template-version
 git commit -m "chore: bump template-version to ${TARGET_VERSION}"
 ```
 
-Si une migration a été skippée ou édition manuelle : afficher un message clair :
+If a migration was skipped or manually edited: show a clear message:
 
-> ⚠️ Certaines migrations n'ont pas été appliquées automatiquement. `.claude/template-version` reste sur `${LOCAL_VERSION}`. Relance `/update-vault` quand tu auras finalisé les migrations manuelles.
+> ⚠️ Some migrations were not applied automatically. `.claude/template-version` stays at `${LOCAL_VERSION}`. Re-run `/update-vault` once you've finalized the manual migrations.
 
-### 8. Cas particulier : vault legacy v1.0.0 ou v1.0.1 (pas de `.claude/template-version`)
+### 8. Edge case: legacy v1.0.0 or v1.0.1 vault (no `.claude/template-version`)
 
-Si `.claude/template-version` n'existait pas en début de session (rétrocompat détectée à l'étape 2), il faut le **créer** à la fin de cette première mise à jour, même si toutes les migrations n'ont pas été acceptées. La création initiale fixe la baseline.
+If `.claude/template-version` did not exist at session start (backwards compat detected at step 2), it must be **created** at the end of this first update, even if not all migrations were accepted. The initial creation pins the baseline.
 
-Cas A — toutes les migrations acceptées : `.claude/template-version` est créé à l'étape 7 avec `template-version: ${TARGET_VERSION}` (cas standard).
+Case A — all migrations accepted: `.claude/template-version` is created at step 7 with `template-version: ${TARGET_VERSION}` (standard case).
 
-Cas B — au moins une migration skippée ou en édition manuelle : créer `.claude/template-version` avec **la version d'avant les migrations skippées** :
+Case B — at least one migration skipped or under manual edit: create `.claude/template-version` with **the version from before the skipped migrations**:
 
 ```bash
-# Trouver la dernière migration appliquée avec succès, sinon utiliser LOCAL_VERSION
-LAST_APPLIED_VERSION="$LOCAL_VERSION"  # à mettre à jour si migrations partielles appliquées
+# Find the last migration successfully applied, otherwise use LOCAL_VERSION
+LAST_APPLIED_VERSION="$LOCAL_VERSION"  # update if partial migrations applied
 TODAY=$(date +%Y-%m-%d)
 cat > .claude/template-version <<EOF
 template-version: ${LAST_APPLIED_VERSION}
@@ -181,24 +181,24 @@ git add .claude/template-version
 git commit -m "chore: initialize .claude/template-version (${LAST_APPLIED_VERSION})"
 ```
 
-Ainsi le vault legacy bénéficie du nouveau mécanisme de versionning même si la migration n'est pas terminée.
+This way the legacy vault gains the new versioning mechanism even if migration is unfinished.
 
 ## Notes
 
-**Fichiers jamais mis à jour automatiquement :**
+**Files never updated automatically:**
 
-- `*.tpl`, `BOOTSTRAP.md`, `PLACEHOLDERS.md`, `CONTRIBUTING.md` — consommés au bootstrap.
-- `CLAUDE.md` — user-owned, migré seulement via `scripts/migrations/v<X>-*.md` interactifs.
+- `*.tpl`, `BOOTSTRAP.md`, `PLACEHOLDERS.md`, `CONTRIBUTING.md` — consumed at bootstrap.
+- `CLAUDE.md` — user-owned, migrated only through interactive `scripts/migrations/v<X>-*.md`.
 
-**Fichiers propres à ton instance (jamais dans le template) :**
+**Files specific to your instance (never in the template):**
 
-Tes agents (`.claude/agents/<domain>-expert.md`), tes hubs (`wiki/domains/*.md`), `wiki/overview.md`, `wiki/log.md`, `wiki/radar.md`, `wiki/index.md`, etc. ont des noms distincts des fichiers template — ils ne seront jamais écrasés.
+Your agents (`.claude/agents/<domain>-expert.md`), your hubs (`wiki/domains/*.md`), `wiki/overview.md`, `wiki/log.md`, `wiki/radar.md`, `wiki/index.md`, etc. have names distinct from template files — they will never be overwritten.
 
-**`.claude/rules/`** est upstream-tracké : tout ajout ou modification d'une rule dans le template sera propagé dans le vault à chaque `/update-vault`.
+**`.claude/rules/`** is upstream-tracked: any addition or modification of a rule in the template will be propagated to the vault at every `/update-vault`.
 
-**Baseline manquant (vault pré-v1.0.0 hypothétique) :**
+**Missing baseline (hypothetical pre-v1.0.0 vault):**
 
-Si ni `.claude/template-version`, ni `.template-bootstrap-sha`, ni le tag `v1.0.0` ne sont trouvés, crée le fichier manuellement :
+If neither `.claude/template-version`, `.template-bootstrap-sha`, nor the `v1.0.0` tag is found, create the file manually:
 
 ```bash
 git fetch template-upstream --tags
@@ -207,4 +207,4 @@ git add .template-bootstrap-sha
 git commit -m "fix: add template bootstrap sha (retrocompat)"
 ```
 
-Puis relance `/update-vault` — la rétrocompat v1.0.0 prendra le relais.
+Then re-run `/update-vault` — the v1.0.0 backwards compat will take over.

@@ -4,78 +4,78 @@ domains: [meta]
 created: 2026-04-29
 updated: 2026-04-30
 sources: []
-summary_l0: "Généralisation frames vidéo : modes A/B pour tous agents experts, scripts packagés, transcription markdown obligatoire"
+summary_l0: "Video frames generalization: A/B modes for every expert agent, packaged scripts, mandatory markdown transcription"
 summary_l1: |
-  La décision unifie la capacité d'extraction vidéo sur tous les agents via deux modes complémentaires : mode A léger (« frame requests » déclarées par l'agent) pour vidéos pauvres en visuel, mode B lourd (induction croisée en 9 étapes) pour vidéos denses. Le main context propose dynamiquement le mode adapté selon densité et durée. Chaque agent reçoit une section « Frames visuelles » avec déclencheurs verbaux domaine-spécifiques. Scripts d'extraction packagés (sample-frames.sh, diff-frames.py). Toute frame promue doit être transcrite en markdown pour rendre le contenu queryable sans re-vision.
+  The decision unifies video extraction across all agents through two complementary modes: light mode A ("frame requests" declared by the agent) for visual-poor videos, heavy mode B (cross-induction in 9 steps) for visual-dense videos. The main context dynamically proposes the right mode based on density and duration. Each agent receives a "Visual frames" section with domain-specific verbal triggers. Extraction scripts packaged (sample-frames.sh, diff-frames.py). Every promoted frame must be transcribed as markdown to make content queryable without re-viewing.
 ---
-# Décision — Généralisation `/ingest-video` & extraction de frames à tous les agents
+# Decision — Generalize `/ingest-video` & frame extraction across all agents
 
-## Problème
+## Problem
 
-Avant cette décision, deux pipelines d'extraction de frames vidéo coexistaient mais aucun n'était utilisable proprement par les agents experts :
+Before this decision, two video frame-extraction pipelines coexisted but neither was usable cleanly by the expert agents:
 
-1. **Mode léger ("frame requests")** — l'agent déclare des timestamps depuis le transcript via un bloc `## Frame requests`. Implémenté dans [.claude/commands/ingest-video.md](../../.claude/commands/ingest-video.md). Section `## Frames visuelles` historiquement absente chez la plupart des agents.
+1. **Light mode ("frame requests")** — the agent declares timestamps from the transcript via a `## Frame requests` block. Implemented in [.claude/commands/ingest-video.md](../../.claude/commands/ingest-video.md). The `## Visual frames` section was historically absent from most agents.
 
-2. **Mode lourd ("induction croisée")** — pipeline en 8 étapes documenté dans [[decisions/extraction-frames-induction-runbook]]. Aucune intégration dans `/ingest-video`, aucun script packagé (commandes ffmpeg/Python en inline dans le runbook), runbook initialement orienté un seul cas d'usage.
+2. **Heavy mode ("cross-induction")** — 8-step pipeline documented in [[decisions/extraction-frames-induction-runbook]]. No integration into `/ingest-video`, no packaged script (ffmpeg/Python commands inline in the runbook), runbook initially scoped to a single use case.
 
-Conséquences :
-- Plusieurs agents ne pouvaient rien capter de visuel sur leurs vidéos.
-- Le mode lourd restait un sous-cas, alors que des vidéos denses en visuels existent dans tous les domaines (démos logicielles, captures d'outils, dashboards, schémas).
-- Pas d'outillage pour reproduire le mode lourd hors du contexte d'un humain qui copie-colle des commandes ffmpeg.
-- **Frames orphelines** : une frame promue sans transcription markdown oblige les futures `/query` à ré-analyser l'image à chaque appel — coût récurrent, perte d'indexation grep/search.
+Consequences:
+- Several agents could capture nothing visual from their videos.
+- Heavy mode stayed a sub-case, while visually dense videos exist in every domain (software demos, tool captures, dashboards, schemas).
+- No tooling to reproduce the heavy mode outside of a human copy-pasting ffmpeg commands.
+- **Orphan frames**: a frame promoted without markdown transcription forces every future `/query` to re-analyze the image at every call — recurring cost, loss of grep/search indexability.
 
-## Options écartées
+## Discarded options
 
-- **Mode lourd seulement, abandonner le mode léger** : on perdrait le réflexe simple « 2-4 frames sur talk de 1 h » sans devoir lancer un pipeline en 8 étapes. Trop coûteux pour des vidéos pauvres en visuel.
-- **Mode léger seulement, ne pas généraliser le mode lourd** : on garderait la sous-extraction systématique sur les vidéos denses (≥30 min, ≥10 visuels).
-- **Auto-trigger silencieux du mode A vs B** : le main context bascule sans demander. Risqué — investit du compute lourd sur des vidéos qui ne le valaient pas, ou rate des frames en restant sur mode léger.
-- **`AskUserQuestion` systématique avant chaque vidéo** : ajoute une interruption à chaque ingest, même sur des podcasts évidents.
+- **Heavy mode only, drop the light mode**: we'd lose the simple "2-4 frames on a 1-hour talk" reflex without having to spin up an 8-step pipeline. Too costly for visual-poor videos.
+- **Light mode only, don't generalize the heavy mode**: we'd keep systematic under-extraction on dense videos (≥30 min, ≥10 visuals).
+- **Silent auto-trigger of mode A vs B**: the main context switches without asking. Risky — invests heavy compute on videos that didn't deserve it, or misses frames by staying on light mode.
+- **Systematic `AskUserQuestion` before every video**: adds an interruption to every ingest, even on obvious podcasts.
 
-## Décision retenue
+## Retained decision
 
-### A. Les deux modes coexistent et sont utilisables par tous les agents
+### A. The two modes coexist and are usable by every agent
 
-- **Mode A (léger, frame requests)** : section `## Frames visuelles` insérée dans tous les prompts d'agents experts générés depuis le template, avec déclencheurs verbaux propres au domaine.
-- **Mode B (lourd, induction croisée)** : runbook [[decisions/extraction-frames-induction-runbook]] *domain-agnostic*, particularités domaine en **Annexes domaine**. Le pipeline est piloté par `/ingest-video` et le main context, pas par l'agent — donc aucun prompt d'agent ne change pour le mode B.
+- **Mode A (light, frame requests)**: `## Visual frames` section inserted into every expert agent prompt generated from the template, with domain-specific verbal triggers.
+- **Mode B (heavy, cross-induction)**: [[decisions/extraction-frames-induction-runbook]] runbook *domain-agnostic*, domain specifics moved to **Domain annexes**. The pipeline is driven by `/ingest-video` and the main context, not by the agent — so no agent prompt changes for mode B.
 
-### B. `/ingest-video` propose le mode adapté, l'utilisateur tranche
+### B. `/ingest-video` proposes the right mode, the user picks
 
-Après transcription + ingest standard, `/ingest-video` calcule des signaux (durée, densité de mentions visuelles dans le transcript, nombre de frames demandées par l'agent) et propose A / B / Skip via `AskUserQuestion` avec une recommandation justifiée. Pas d'auto-trigger silencieux. Overrides explicites disponibles : `--induction`, `--mode-a`, `--skip-frames`.
+After transcription + standard ingest, `/ingest-video` computes signals (duration, density of visual mentions in the transcript, number of frames declared by the agent) and proposes A / B / Skip via `AskUserQuestion` with a justified recommendation. No silent auto-trigger. Explicit overrides available: `--induction`, `--mode-a`, `--skip-frames`.
 
-### C. Scripts du pipeline lourd packagés
+### C. Heavy-pipeline scripts packaged
 
-- [scripts/sample-frames.sh](../../scripts/sample-frames.sh) : sampling dense ffmpeg avec cadence paramétrable (défaut 20 s).
-- [scripts/diff-frames.py](../../scripts/diff-frames.py) : image-diff ROI optionnel (défaut plein cadre `0,0,1,1`), seuil paramétrable, sortie markdown des transitions.
+- [scripts/sample-frames.sh](../../scripts/sample-frames.sh): dense ffmpeg sampling with parameterizable cadence (default 20 s).
+- [scripts/diff-frames.py](../../scripts/diff-frames.py): optional ROI image-diff (default full frame `0,0,1,1`), parameterizable threshold, markdown output of transitions.
 
-### D. Transcription markdown obligatoire après promotion (Étape 9 du runbook)
+### D. Mandatory markdown transcription after promotion (Step 9 of the runbook)
 
-Chaque frame promue (mode A comme mode B) **doit** être transcrite en markdown structuré dans la page wiki qui la consomme — pour rendre le contenu interrogeable par `/query` sans re-vision. Format selon le type de visuel (tableau / Mermaid / code / liste KPIs / description sémantique). Une frame sans transcription markdown est un défaut d'ingest.
+Every promoted frame (mode A as well as mode B) **must** be transcribed as structured markdown into the wiki page that consumes it — to make the content queryable by `/query` without re-viewing. Format depends on the visual type (table / Mermaid / code / KPI list / semantic description). A frame without markdown transcription is an ingest defect.
 
-## Pourquoi
+## Why
 
-- **Cohérence wiki** : tous les agents avec la même primitive frames, sinon les domaines hors du sous-cas d'origine resteraient aveugles.
-- **Respect du coût** : le mode B vaut son investissement uniquement sur des vidéos suffisamment denses ; la proposition utilisateur évite la sur-extraction silencieuse.
-- **Pas de défaut implicite douteux** : ROI plein cadre par défaut, pas de géométrie spécifique imposée à toutes les vidéos.
-- **Index queryable** : la transcription markdown au moment de la promotion paie immédiatement à chaque `/query` future. Sans elle, on accumule de la dette d'indexation.
+- **Wiki coherence**: every agent gets the same frames primitive, otherwise domains outside the original sub-case stay blind.
+- **Cost respect**: mode B is worth the investment only on sufficiently dense videos; the user proposal avoids silent over-extraction.
+- **No dubious implicit default**: full-frame ROI by default, no specific geometry imposed on every video.
+- **Queryable index**: markdown transcription at promotion time pays off immediately on every future `/query`. Without it, indexing debt accumulates.
 
-## Périmètre des changements
+## Scope of changes
 
-| Fichier | Action |
+| File | Action |
 |---|---|
-| [[decisions/extraction-frames-induction-runbook]] | Réécriture domain-agnostic + Annexes domaine (squelettes vides à enrichir au fil des ingests) + Étape 9 |
-| `.claude/agents/<domain>-expert.md` (tous) | Section `## Frames visuelles` (mode A) avec déclencheurs domaine + transcription markdown obligatoire |
-| [scripts/sample-frames.sh](../../scripts/sample-frames.sh), [scripts/diff-frames.py](../../scripts/diff-frames.py) | Packagés dans le template |
-| [.claude/commands/ingest-video.md](../../.claude/commands/ingest-video.md) | Dispatcher A/B (proposition utilisateur) + branche pipeline mode B |
-| [CLAUDE.md](../../CLAUDE.md) | Section INGEST-VIDEO mise à jour |
-| `wiki/domains/<d>.md` | Cross-ref vers le runbook |
+| [[decisions/extraction-frames-induction-runbook]] | Domain-agnostic rewrite + Domain annexes (empty skeletons to enrich as ingests come in) + Step 9 |
+| `.claude/agents/<domain>-expert.md` (all) | `## Visual frames` section (mode A) with domain triggers + mandatory markdown transcription |
+| [scripts/sample-frames.sh](../../scripts/sample-frames.sh), [scripts/diff-frames.py](../../scripts/diff-frames.py) | Packaged in the template |
+| [.claude/commands/ingest-video.md](../../.claude/commands/ingest-video.md) | A/B dispatcher (user proposal) + mode B pipeline branch |
+| [CLAUDE.md](../../CLAUDE.md) | INGEST-VIDEO section updated |
+| `wiki/domains/<d>.md` | Cross-ref to the runbook |
 
-## Questions ouvertes
+## Open questions
 
-- **Affiner les déclencheurs verbaux par domaine** : les listes initiales (insérées dans chaque agent au bootstrap) sont des propositions de départ. Elles doivent évoluer avec les premières ingestions vidéo dans chaque domaine.
-- **Annexes domaine du runbook** : aujourd'hui des squelettes. À enrichir au fil des ingests réels (pas d'invention prématurée).
-- **Performance transcription markdown** : un agent expert est-il toujours capable de transcrire fidèlement un schéma complexe ? À mesurer sur des cas réels et ajuster (peut-être un livrable spécialisé pour les diagrammes complexes).
-- **Mode batch full-multiSelect Étape 6** : sur des batchs de 50+ frames sans ambiguïté, un mode batch sans question par frame serait acceptable. À tester.
+- **Refine domain-specific verbal triggers**: the initial lists (inserted into each agent at bootstrap) are starter proposals. They should evolve with the first video ingests in each domain.
+- **Runbook domain annexes**: today they're skeletons. To be enriched from real ingests (no premature invention).
+- **Markdown transcription performance**: is an expert agent always capable of faithfully transcribing a complex schema? To measure on real cases and tune (maybe a specialized deliverable for complex diagrams).
+- **Full-multiSelect batch mode at Step 6**: on batches of 50+ unambiguous frames, a batch mode without per-frame question would be acceptable. To test.
 
-## Cross-réfs
+## Cross-refs
 
-- [[decisions/extraction-frames-induction-runbook|Runbook induction croisée]] (le pipeline lourd lui-même)
+- [[decisions/extraction-frames-induction-runbook|Cross-induction runbook]] (the heavy pipeline itself)

@@ -4,6 +4,6 @@ type: log
 
 # Log
 
-> Journal chronologique des actions sur le wiki — `/ingest`, `/query`, `/save`, `/lint`, `/evolve-agent`. Une entrée par action, format `## [YYYY-MM-DD] <verbe> | <résumé>`. Les agents et slash-commands ajoutent ici leurs traces ; tu peux relire pour reconstituer l'histoire du vault.
+> Chronological journal of wiki actions — `/ingest`, `/query`, `/save`, `/lint`, `/evolve-agent`. One entry per action, format `## [YYYY-MM-DD] <verb> | <summary>`. Agents and slash-commands append their traces here; you can re-read to reconstruct the vault's history.
 
-<!-- Première entrée à venir au premier /ingest. -->
+<!-- First entry will land at the first /ingest. -->

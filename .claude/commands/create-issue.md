@@ -1,214 +1,214 @@
 ---
-description: Crée une issue sanitizée sur le repo template upstream à partir du contexte de la session courante (sanitization automatique des données vault-specific)
-argument-hint: [bug|enhancement|docs|question] [<courte description optionnelle>]
+description: File a sanitized issue on the upstream template repo from the current session context (auto-sanitizes vault-specific data)
+argument-hint: [bug|enhancement|docs|question] [<short optional description>]
 ---
 
 Run the CREATE-ISSUE workflow on: $ARGUMENTS
 
-Cette commande remonte un bug, une amélioration, une question doc ou une question générale vers le repo **template upstream** (`tetra-plg/boiling-brain` par défaut). Elle génère un draft depuis le contexte de la conversation, **sanitize** les données vault-specific via les règles de `.claude/rules/sanitization-issues.md`, propose la prévisualisation, puis crée l'issue via `gh issue create`.
+This command files a bug, an enhancement, a docs request or a general question to the **upstream template repo** (`tetra-plg/boiling-brain` by default). It generates a draft from the conversation context, **sanitizes** vault-specific data via the rules in `.claude/rules/sanitization-issues.md`, shows a preview, then creates the issue via `gh issue create`.
 
-Aucune création silencieuse : la dernière étape est toujours une validation utilisateur via `AskUserQuestion`.
+No silent creation: the final step is always a user validation via `AskUserQuestion`.
 
-## 1. Pré-requis
+## 1. Pre-requisites
 
-Vérifier dans cet ordre, stopper au premier échec avec un message clair :
+Check in this order, stop at the first failure with a clear message:
 
 ```bash
-# 1.1 — gh CLI authentifié
+# 1.1 — gh CLI authenticated
 gh auth status 2>&1 | head -5
-# Si échec : "Lance `gh auth login` puis relance /create-issue."
+# On failure: "Run `gh auth login` then re-run /create-issue."
 
-# 1.2 — Remote template-upstream configuré (si absent, le proposer)
+# 1.2 — template-upstream remote configured (if missing, propose it)
 TEMPLATE_REMOTE_URL=$(git remote get-url template-upstream 2>/dev/null)
 if [ -z "$TEMPLATE_REMOTE_URL" ]; then
-  echo "Le remote template-upstream n'est pas configuré."
-  echo "Configure-le via :"
+  echo "The template-upstream remote is not configured."
+  echo "Configure it via:"
   echo "  git remote add template-upstream https://github.com/tetra-plg/boiling-brain.git"
 fi
 ```
 
-Extraire `<owner/repo>` depuis l'URL du remote (parser `https://github.com/<owner>/<repo>.git` ou `git@github.com:<owner>/<repo>.git`). Stocker dans `TEMPLATE_REPO`.
+Extract `<owner/repo>` from the remote URL (parse `https://github.com/<owner>/<repo>.git` or `git@github.com:<owner>/<repo>.git`). Store in `TEMPLATE_REPO`.
 
-## 2. Détermination du type d'issue
+## 2. Issue type determination
 
-Parser `$ARGUMENTS` :
-- Premier token = type, parmi `bug`, `enhancement` (alias `feature`), `docs`, `question`.
-- Reste = description courte optionnelle pour pré-remplir le titre.
+Parse `$ARGUMENTS`:
+- First token = type, among `bug`, `enhancement` (alias `feature`), `docs`, `question`.
+- Rest = optional short description to pre-fill the title.
 
-Si type absent ou invalide → `AskUserQuestion` :
+If type missing or invalid → `AskUserQuestion`:
 
 ```json
 {
   "questions": [{
-    "question": "Quel type d'issue veux-tu créer ?",
+    "question": "Which issue type do you want to create?",
     "header": "Type",
     "multiSelect": false,
     "options": [
-      {"label": "bug", "description": "Quelque chose ne marche pas comme attendu (sections : Contexte, Reproduction, Fix proposé, Test plan, Impact)"},
-      {"label": "enhancement", "description": "Proposition d'amélioration ou nouvelle feature (sections : Problème, Proposition, Alternatives, Out-of-scope, Critères de done)"},
-      {"label": "docs", "description": "Manque ou imprécision dans la doc du template (sections : Section concernée, Manque constaté, Suggestion)"},
-      {"label": "question", "description": "Question d'usage ou de design (sections : Contexte, Question, Ce qui a déjà été essayé)"}
+      {"label": "bug", "description": "Something doesn't work as expected (sections: Context, Reproduction, Proposed fix, Test plan, Impact)"},
+      {"label": "enhancement", "description": "Improvement or new feature (sections: Problem, Proposal, Alternatives, Out-of-scope, Done criteria)"},
+      {"label": "docs", "description": "Gap or imprecision in template docs (sections: Section concerned, Gap observed, Suggestion)"},
+      {"label": "question", "description": "Usage or design question (sections: Context, Question, What was already tried)"}
     ]
   }]
 }
 ```
 
-Mapping label GitHub : `bug` → `bug`, `enhancement` / `feature` → `enhancement`, `docs` → `documentation`, `question` → `question`. Vérifier que le label existe sur le repo cible :
+GitHub label mapping: `bug` → `bug`, `enhancement` / `feature` → `enhancement`, `docs` → `documentation`, `question` → `question`. Verify the label exists on the target repo:
 
 ```bash
 gh label list --repo "$TEMPLATE_REPO" --json name --jq '.[].name'
 ```
 
-Si le label n'existe pas, créer l'issue sans label (signaler à l'utilisateur dans la prévisualisation).
+If the label doesn't exist, create the issue without label (signal in the preview to the user).
 
-## 3. Collecte du contexte
+## 3. Context collection
 
-Lire la conversation courante pour identifier le sujet de l'issue :
-- Quel fichier / quel comportement / quel scénario est en jeu ?
-- Quelle erreur observée vs attendue (pour bug) / quel manque (pour enhancement / docs) / quel point de confusion (pour question) ?
-- Y a-t-il des extraits de code, traces d'erreur, ou commandes pertinentes ?
+Read the current conversation to identify the issue subject:
+- Which file / behavior / scenario is at stake?
+- Which observed-vs-expected error (for bug) / which gap (for enhancement / docs) / which point of confusion (for question)?
+- Are there relevant code excerpts, error traces, or commands?
 
-Si la description du `$ARGUMENTS` est fournie, l'utiliser comme **titre candidat** mais la reformuler si elle contient des références internes (slugs, wikilinks).
+If the description from `$ARGUMENTS` is provided, use it as a **candidate title** but rephrase if it contains internal references (slugs, wikilinks).
 
-## 4. Rédaction du draft selon template
+## 4. Drafting per template
 
-### Structure par type
+### Structure by type
 
-**bug** :
+**bug**:
 ```markdown
-## Contexte
+## Context
 
-<2-3 phrases : où, dans quel scénario, depuis quand>
+<2-3 sentences: where, in which scenario, since when>
 
 ## Reproduction
 
-<Étapes minimales reproductibles. Snippet de commande / fichier si pertinent.>
+<Minimal reproducible steps. Command / file snippet if relevant.>
 
-## Fix proposé
+## Proposed fix
 
-<Hypothèse de correction. Liste de fichiers / lignes / approche.>
+<Correction hypothesis. List of files / lines / approach.>
 
 ## Test plan
 
-- [ ] <cas test 1>
-- [ ] <cas test 2>
+- [ ] <test case 1>
+- [ ] <test case 2>
 
 ## Impact
 
-<Bloquant ? Cosmétique ? Combien de vaults touchés ?>
+<Blocking? Cosmetic? How many vaults affected?>
 ```
 
-**enhancement** :
+**enhancement**:
 ```markdown
-## Problème
+## Problem
 
-<Pourquoi le statu quo est insuffisant>
+<Why the status quo is insufficient>
 
-## Proposition
+## Proposal
 
-<Description de la solution proposée>
+<Description of the proposed solution>
 
-## Alternatives considérées
+## Alternatives considered
 
-<Autres approches, pourquoi écartées>
+<Other approaches, why discarded>
 
 ## Out-of-scope (v1)
 
-<Ce qu'on ne fait PAS dans cette première version>
+<What is NOT done in this first version>
 
-## Critères de done
+## Done criteria
 
-- [ ] <critère 1>
-- [ ] <critère 2>
+- [ ] <criterion 1>
+- [ ] <criterion 2>
 ```
 
-**docs** :
+**docs**:
 ```markdown
-## Section concernée
+## Section concerned
 
-<Fichier + section précise (ex: README.md "Workflow loop")>
+<File + precise section (e.g. README.md "Workflow loop")>
 
-## Manque constaté
+## Gap observed
 
-<Ce qui n'est pas clair, manquant, ou faux>
+<What is unclear, missing, or wrong>
 
 ## Suggestion
 
-<Ce qu'on pourrait ajouter ou reformuler>
+<What could be added or rephrased>
 ```
 
-**question** :
+**question**:
 ```markdown
-## Contexte
+## Context
 
-<Configuration / scénario>
+<Configuration / scenario>
 
 ## Question
 
-<La question, formulée précisément>
+<The question, precisely formulated>
 
-## Ce qui a déjà été essayé
+## What was already tried
 
-<Ressources lues, tests effectués>
+<Resources read, tests run>
 ```
 
 ## 5. Sanitization
 
-Appliquer les règles de `.claude/rules/sanitization-issues.md` au titre **et** au body du draft :
+Apply the rules of `.claude/rules/sanitization-issues.md` to the title **and** body of the draft:
 
-- **Strip silencieux** : wikilinks `[[...]]`, chemins `raw/notes/YYYY-MM-DD-*`, slugs de domaines listés dans `wiki/index.md`, chemins `wiki/sources/<date>-<slug>.md`, emails.
-- **Flag pour review** : noms propres en milieu de phrase (hors liste blanche `Claude`, `Anthropic`, `GitHub`, etc.), noms d'entités lues depuis `wiki/entities/*.md`, handles `@xxx`.
-- **Anonymisation des cas concrets** : reformuler « 18 pages BB ont eu X » en « N pages affected (figure measured on the BoilingBrain reference vault) » ou « Some vault pages had X ».
+- **Silent strip**: wikilinks `[[...]]`, `raw/notes/YYYY-MM-DD-*` paths, domain slugs listed in `wiki/index.md`, `wiki/sources/<date>-<slug>.md` paths, emails.
+- **Flag for review**: proper nouns mid-sentence (excluding whitelist `Claude`, `Anthropic`, `GitHub`, etc.), entity names read from `wiki/entities/*.md`, `@xxx` handles.
+- **Anonymization of concrete cases**: rephrase "18 BB pages had X" as "N pages affected (figure measured on the BoilingBrain reference vault)" or "Some vault pages had X".
 
-Construire un **rapport de sanitization** avec :
-- Liste des transformations silencieuses appliquées (qui peut être copiée pour audit).
-- Liste des éléments flaggés à confirmer par l'utilisateur.
+Build a **sanitization report** with:
+- List of silent transformations applied (can be copied for audit).
+- List of flagged elements awaiting user confirmation.
 
-## 6. Prévisualisation et validation
+## 6. Preview and validation
 
-Afficher au format :
+Display in the format:
 
 ```
 === Issue draft (sanitized) ===
 
-Repo cible : tetra-plg/boiling-brain
-Label : bug
+Target repo: tetra-plg/boiling-brain
+Label: bug
 
-Titre :
-<titre sanitizé>
+Title:
+<sanitized title>
 
-Body :
-<body sanitizé>
+Body:
+<sanitized body>
 
 === Sanitization ===
-Transformations silencieuses :
-- <wikilink> → <terme générique>
+Silent transformations:
+- <wikilink> → <generic term>
 - <slug> → domain X
 - ...
 
-À confirmer (flaggé) :
-- Nom propre détecté : "<token>" — confirmer ou éditer
+To confirm (flagged):
+- Proper noun detected: "<token>" — confirm or edit
 - ...
 ```
 
-Puis `AskUserQuestion` :
+Then `AskUserQuestion`:
 
 ```json
 {
   "questions": [{
-    "question": "Que faire avec ce draft ?",
+    "question": "What do you want to do with this draft?",
     "header": "Issue",
     "multiSelect": false,
     "options": [
-      {"label": "✅ Créer l'issue", "description": "Crée l'issue via gh issue create. Affichera l'URL en retour."},
-      {"label": "✏️ Éditer manuellement", "description": "N'crée rien. Affiche le draft prêt à copier-coller dans l'UI GitHub."},
-      {"label": "❌ Annuler", "description": "Abandonne sans rien créer."}
+      {"label": "✅ Create the issue", "description": "Creates the issue via gh issue create. Will return the URL."},
+      {"label": "✏️ Edit manually", "description": "Doesn't create anything. Shows the draft ready to copy-paste into the GitHub UI."},
+      {"label": "❌ Cancel", "description": "Aborts without creating anything."}
     ]
   }]
 }
 ```
 
-## 7. Création (si validé)
+## 7. Creation (if validated)
 
 ```bash
 gh issue create \
@@ -218,38 +218,38 @@ gh issue create \
   --label "$LABEL"
 ```
 
-Capturer l'URL retournée (stdout). En cas d'échec (réseau, label inconnu, droits insuffisants) : afficher l'erreur + le draft copy-pastable comme fallback.
+Capture the returned URL (stdout). On failure (network, unknown label, insufficient rights): show the error + the copy-pastable draft as fallback.
 
-## 8. Suite (radar)
+## 8. Follow-up (radar)
 
-Après création réussie, proposer via `AskUserQuestion` :
+After successful creation, propose via `AskUserQuestion`:
 
 ```json
 {
   "questions": [{
-    "question": "Ajouter un suivi dans wiki/radar.md ?",
+    "question": "Add a tracker in wiki/radar.md?",
     "header": "Radar",
     "multiSelect": false,
     "options": [
-      {"label": "✅ Oui, suivi dans le radar", "description": "Ajoute une entrée `- [ ] **[Template · YYYY-MM-DD]** <description courte>. → <URL>` dans wiki/radar.md catégorie « À surveiller »"},
-      {"label": "❌ Non, pas de suivi local", "description": "L'issue vit sa vie sur GitHub uniquement"}
+      {"label": "✅ Yes, track in the radar", "description": "Adds an entry `- [ ] **[Template · YYYY-MM-DD]** <short description>. → <URL>` in wiki/radar.md \"To watch\" category"},
+      {"label": "❌ No, no local follow-up", "description": "The issue lives its life on GitHub only"}
     ]
   }]
 }
 ```
 
-Si oui : ajouter l'entrée à `wiki/radar.md`, commit dédié `chore(radar): track upstream issue <#N>`.
+If yes: append the entry to `wiki/radar.md`, dedicated commit `chore(radar): track upstream issue <#N>`.
 
-Logger dans `wiki/log.md` : `## [YYYY-MM-DD] create-issue | <type> #<numéro> <titre court>`.
+Log in `wiki/log.md`: `## [YYYY-MM-DD] create-issue | <type> #<number> <short title>`.
 
-## Cas d'usage proactif depuis le radar
+## Proactive use case from the radar
 
-`/create-issue` peut aussi être déclenchée **proactivement** par le main context lors de l'affichage du radar (« montre le radar » / « qu'est-ce qu'il y a à faire aujourd'hui »). Quand une entrée du radar concerne **l'environnement template** (typiquement un bug ou manque touchant `scripts/scan-raw.sh`, `.claude/commands/*.md`, `BOOTSTRAP.md`, ou tout fichier propagé par `/update-vault`), le main context propose à l'utilisateur :
+`/create-issue` can also be triggered **proactively** by the main context when the radar is shown ("show me the radar" / "what's on the agenda today"). When a radar entry concerns the **template environment** (typically a bug or gap touching `scripts/scan-raw.sh`, `.claude/commands/*.md`, `BOOTSTRAP.md`, or any file propagated by `/update-vault`), the main context proposes to the user:
 
-> Cette entrée du radar concerne le template upstream. Veux-tu la remonter via `/create-issue <type>` ?
+> This radar entry concerns the upstream template. Want to file it via `/create-issue <type>`?
 
-Le main context **ne crée pas l'issue tout seul** — il propose juste la commande, l'utilisateur valide, le workflow standard ci-dessus prend le relais.
+The main context **does not create the issue itself** — it just suggests the command, the user validates, and the standard workflow above takes over.
 
-## Fallback `gh auth login` manquant
+## Fallback if `gh auth login` is missing
 
-Si à l'étape 1.1 `gh auth status` échoue, ne pas continuer. Afficher le draft sanitizé prêt à copier-coller (sans même faire la sanitization complète — juste un draft brut). L'utilisateur peut alors `gh auth login` puis relancer, ou copier-coller dans l'UI GitHub.
+If at step 1.1 `gh auth status` fails, do not continue. Show the sanitized draft ready to copy-paste (without even running full sanitization — just a raw draft). The user can then `gh auth login` and re-run, or copy-paste into the GitHub UI.

@@ -1,130 +1,133 @@
 ---
 description: Ingest a video (local file or YouTube URL) via audio extraction, transcription, then domain-expert ingest
-argument-hint: <chemin-ou-url> [--induction|--mode-a|--skip-frames|--resume]
+argument-hint: <path-or-url> [--induction|--mode-a|--skip-frames|--resume]
 ---
 
 Run the INGEST-VIDEO workflow from CLAUDE.md on: $ARGUMENTS
 
 ## Pipeline
 
-### 1. Acquisition audio + transcription
+### 1. Audio acquisition + transcription
 
-**Si `--resume <slug>` est passé** : skip cette étape. Vérifier la présence de `raw/transcripts/YYYY-MM-DD-<slug>.md` (et meta associée) — si présent, passer directement à l'étape 2. Si absent → erreur explicite. Le mode `--resume` est utilisé quand la transcription a déjà été produite par un pipeline en amont (transcription distante, intervention manuelle, etc.).
+**If `--resume <slug>` is passed**: skip this step. Check that `raw/transcripts/YYYY-MM-DD-<slug>.md` (and associated meta) is present — if so, jump straight to step 2. If absent → explicit error. The `--resume` mode is used when transcription was produced by an upstream pipeline (remote transcription, manual intervention, etc.).
 
-**Sinon (flux standard)** :
+**Otherwise (standard flow)**:
 
-- Si URL YouTube : `yt-dlp -x --audio-format m4a -o "cache/audio/<slug>.%(ext)s" <url>`.
-- Si fichier local : déplacer dans `${LLMWIKI_VIDEO_CACHE:-cache/videos}/`, puis `ffmpeg -i <video> -vn -acodec copy cache/audio/<slug>.m4a`.
-- Transcription locale (whisper.cpp ou mlx-whisper) → `raw/transcripts/YYYY-MM-DD-<slug>.md` avec timestamps. Utiliser `scripts/transcribe.sh` qui couvre déjà ces étapes pour les deux cas.
-- Créer `raw/videos-meta/YYYY-MM-DD-<slug>.meta.md` (URL, durée, hash, emplacement).
-- Purger `cache/audio/<slug>.m4a`.
+- If YouTube URL: `yt-dlp -x --audio-format m4a -o "cache/audio/<slug>.%(ext)s" <url>`.
+- If local file: move into `${LLMWIKI_VIDEO_CACHE:-cache/videos}/`, then `ffmpeg -i <video> -vn -acodec copy cache/audio/<slug>.m4a`.
+- Local transcription (whisper.cpp or mlx-whisper) → `raw/transcripts/YYYY-MM-DD-<slug>.md` with timestamps. Use `scripts/transcribe.sh` which already covers these steps for both cases.
+- Create `raw/videos-meta/YYYY-MM-DD-<slug>.meta.md` (URL, duration, hash, location).
+- Purge `cache/audio/<slug>.m4a`.
 
-#### Convention de stockage vidéo : `LLMWIKI_VIDEO_CACHE`
+#### Video storage convention: `LLMWIKI_VIDEO_CACHE`
 
-Variable d'environnement utilisée par `scripts/transcribe.sh`, `scripts/sample-frames.sh` et `scripts/extract-frames.sh` pour localiser les vidéos téléchargées :
+Environment variable used by `scripts/transcribe.sh`, `scripts/sample-frames.sh` and `scripts/extract-frames.sh` to locate downloaded videos:
 
-- **Défaut** : `cache/videos/` (disque interne, à l'intérieur du vault).
-- **Override** : exporter `LLMWIKI_VIDEO_CACHE` vers un disque externe ou un dossier dédié si le volume vidéo dépasse la capacité du disque interne.
+- **Default**: `cache/videos/` (internal disk, inside the vault).
+- **Override**: export `LLMWIKI_VIDEO_CACHE` to an external disk or dedicated folder if video volume exceeds internal disk capacity.
 
-Pour les vidéos non-YouTube téléchargées manuellement (extension navigateur, drag-and-drop), drop le fichier dans `cache/videos/inbox/` puis invoquer le pipeline avec ce chemin local.
+For non-YouTube videos downloaded manually (browser extension, drag-and-drop), drop the file into `cache/videos/inbox/` then invoke the pipeline with that local path.
 
-#### Fallback Mode A si vidéo entière indisponible
+#### Mode A fallback if full video unavailable
 
-Si la vidéo entière n'a pas pu être téléchargée (cas d'un cache externe non monté au moment d'un clip), le Mode A (frame requests, étape 4a) peut récupérer chaque frame à la demande via `yt-dlp --download-sections "*HH:MM:SS-HH:MM:SS+15"` (segment court de ~15s) puis `ffmpeg`. Le Mode B (induction croisée) requiert la vidéo entière — non possible en fallback.
+If the full video couldn't be downloaded (e.g. external cache not mounted at clip time), Mode A (frame requests, step 4a) can fetch each frame on demand via `yt-dlp --download-sections "*HH:MM:SS-HH:MM:SS+15"` (~15s short segment) then `ffmpeg`. Mode B (cross-induction) requires the full video — not possible in fallback.
 
-### 2. Ingest standard sur le transcript
+### 2. Standard ingest on the transcript
 
-Enchaîner sur `/ingest <transcript_path>` → dispatch vers l'agent expert du domaine.
+Chain to `/ingest <transcript_path>` → dispatch to the domain-expert agent.
 
-L'agent reçoit en plus du contexte standard la convention frames :
+The agent receives, in addition to the standard context, the frames convention:
 
 ```
-Convention frames (extrait CLAUDE.md) :
+Frames convention (excerpt from CLAUDE.md):
 ## Frame requests
-- FRAME: HH:MM:SS | slug | Description précise du visuel attendu
-Critères cumulatifs :
-(1) Confirmation verbale explicite dans le transcript qu'un visuel est affiché.
-(2) Un visuel = une frame : regrouper les références multiples au même visuel, ne déclarer qu'un seul timestamp (premier affichage complet).
-Résultat attendu : 2-4 frames max par heure de vidéo (variable selon densité visuelle du domaine).
+- FRAME: HH:MM:SS | slug | Precise description of the expected visual
+Cumulative criteria:
+(1) Explicit verbal confirmation in the transcript that a visual is on display.
+(2) One visual = one frame: group multiple references to the same visual, declare only one timestamp (first complete display).
+Expected outcome: 2-4 frames max per hour of video (variable by visual density of the domain).
 ```
 
-Tous les agents experts disposent d'une section `## Frames visuelles` dans leur prompt — ils peuvent donc retourner un bloc `## Frame requests` quel que soit le domaine.
+All expert agents have a `## Visual frames` section in their prompt — they can therefore return a `## Frame requests` block regardless of domain.
 
-### 3. Choix du mode d'extraction (proposition à l'utilisateur)
+### 3. Extraction-mode choice (proposal to the user)
 
-Après que l'agent expert a renvoyé son rapport, **proposer** le mode d'extraction adapté à cette vidéo via `AskUserQuestion`. Pas de bascule silencieuse.
+After the expert agent has returned its report, **propose** the extraction mode best suited to this video via `AskUserQuestion`. No silent switch.
 
-**Override flags** (consommés en priorité, pas de proposition affichée) :
-- `--induction` → force mode B (induction croisée).
-- `--mode-a` → force mode A (frame requests de l'agent).
-- `--skip-frames` → saute l'extraction.
+**Override flags** (consumed in priority, no proposal shown):
+- `--induction` → force mode B (cross-induction).
+- `--mode-a` → force mode A (frame requests from the agent).
+- `--skip-frames` → skip extraction.
 
-**Signaux à calculer** avant la proposition :
-- `duration_min` : durée de la vidéo en minutes (depuis le frontmatter `duration` du `.meta.md`).
-- `visual_mentions` : count des occurrences de patterns visuels dans le transcript : `regardez`, `voilà`, `vous voyez`, `ce schéma`, `ce tableau`, `cette grille`, `ce diagramme`, `cette image`, `à l'écran`, `cette capture`, `ce dashboard`, `ce flux`, `cette pipeline`, `ce code`, `ce slide`, `ce graphique`, `cette courbe`, `cette photo`. Insensible à la casse.
-- `mentions_per_min` : `visual_mentions / duration_min`.
-- `frame_requests_count` : nombre d'entrées dans le bloc `## Frame requests` du rapport agent (0 si bloc absent).
+**Signals to compute** before the proposal:
+- `duration_min`: video duration in minutes (from the `duration` field of the `.meta.md` frontmatter).
+- `visual_mentions`: count of visual-pattern occurrences in the transcript. **Bilingual EN+FR list** (extend with other languages as needed depending on the source-transcript language):
+  - **EN patterns**: `look at`, `here's`, `here is`, `you can see`, `you'll see`, `this diagram`, `this table`, `this chart`, `this graph`, `this figure`, `this slide`, `this image`, `this dashboard`, `this pipeline`, `this code`, `on screen`, `on the screen`, `take a look`, `notice this`.
+  - **FR patterns**: `regardez`, `voilà`, `vous voyez`, `ce schéma`, `ce tableau`, `cette grille`, `ce diagramme`, `cette image`, `à l'écran`, `cette capture`, `ce dashboard`, `ce flux`, `cette pipeline`, `ce code`, `ce slide`, `ce graphique`, `cette courbe`, `cette photo`.
+  - Case-insensitive matching for both lists.
+- `mentions_per_min`: `visual_mentions / duration_min`.
+- `frame_requests_count`: number of entries in the agent's `## Frame requests` report block (0 if block absent).
 
-**Recommandation calculée** :
-- **Recommander Mode A** si : `frame_requests_count` > 0 et cohérent avec `visual_mentions` (cas typique : agent a déclaré 2-4 frames sur une vidéo conceptuelle, ou plus sur vidéo dense de configurations multiples).
-- **Recommander Mode B** si :
-  - `duration_min ≥ 30` ET `mentions_per_min ≥ 0.3` ET `frame_requests_count` ≤ 30 % du compte « attendu » (`visual_mentions / 3` comme heuristique grossière) → suspicion sous-extraction.
-  - OU `visual_mentions ≥ 10` ET `frame_requests_count` == 0 (agent n'a déclaré aucune frame mais le transcript signale beaucoup de visuels).
-- **Recommander Skip** si : `duration_min < 15` ET `visual_mentions == 0`.
+**Computed recommendation**:
+- **Recommend Mode A** if: `frame_requests_count` > 0 and consistent with `visual_mentions` (typical case: agent declared 2-4 frames on a conceptual video, or more on a dense video with many configurations).
+- **Recommend Mode B** if:
+  - `duration_min ≥ 30` AND `mentions_per_min ≥ 0.3` AND `frame_requests_count` ≤ 30% of the "expected" count (`visual_mentions / 3` as a rough heuristic) → suspected under-extraction.
+  - OR `visual_mentions ≥ 10` AND `frame_requests_count` == 0 (agent declared no frames but transcript signals many visuals).
+- **Recommend Skip** if: `duration_min < 15` AND `visual_mentions == 0`.
 
-**Présentation** (`AskUserQuestion`, single-select 3 options) :
+**Presentation** (`AskUserQuestion`, single-select 3 options):
 
 ```
-Question : « Quel mode d'extraction de frames pour cette vidéo ?
-Signaux : durée Xm · Y mentions visuelles · Z frame requests par l'agent
-→ Recommandation : <Mode X> »
+Question: "Which frame-extraction mode for this video?
+Signals: duration Xm · Y visual mentions · Z frame requests from the agent
+→ Recommendation: <Mode X>"
 
-Options :
-- Mode A — frame requests de l'agent (Z frames)
-- Mode B — induction croisée (sampling + image-diff + transcript)
-- Skip — pas d'extraction de frames
+Options:
+- Mode A — agent's frame requests (Z frames)
+- Mode B — cross-induction (sampling + image-diff + transcript)
+- Skip — no frame extraction
 ```
 
-L'option recommandée est marquée « (Recommandé) » et placée en première position.
+The recommended option is marked "(Recommended)" and placed first.
 
-**Logging** : la décision finale (mode + signaux + override éventuel) est journalisée dans `wiki/log.md` sur la même ligne que l'ingest :
+**Logging**: the final decision (mode + signals + any override) is journaled in `wiki/log.md` on the same line as the ingest:
 ```
-## [YYYY-MM-DD] ingest-video | <titre> (agent: <nom>, mode: A|B|skip, durée Xm, Y mentions, Z frames)
+## [YYYY-MM-DD] ingest-video | <title> (agent: <name>, mode: A|B|skip, duration Xm, Y mentions, Z frames)
 ```
 
-### 4a. Mode A — frame requests directes (pipeline existant)
+### 4a. Mode A — direct frame requests (existing pipeline)
 
-Pour chaque ligne `FRAME: HH:MM:SS | slug | description` du bloc `## Frame requests` :
+For each `FRAME: HH:MM:SS | slug | description` line of the `## Frame requests` block:
 
-1. Extraire la frame : `./scripts/extract-frames.sh <video_path> <timestamp> cache/frames/<slug>.png`.
-2. Afficher toutes les frames extraites à l'utilisateur en batch via `AskUserQuestion`.
-3. Sur validation → `cp cache/frames/<slug>.png raw/frames/YYYY-MM-DD-<source-slug>-<slug>.png`.
-4. Sur rejet → proposer retentative à timestamp ±X s ou annoter `> [!question] Frame non extraite` dans la page source.
-5. **Re-spawn de l'agent expert** sur la page source en re-ingest forcé, avec la liste des frames promues + leur citation transcript ±30 s. L'agent doit transcrire chaque frame en markdown dans la page wiki concernée (cf. section « Frames visuelles » de son prompt + Étape 9 du runbook).
-6. Rapport : `Frames mode A : N promues · M rejetées`.
+1. Extract the frame: `./scripts/extract-frames.sh <video_path> <timestamp> cache/frames/<slug>.png`.
+2. Show all extracted frames to the user as a batch via `AskUserQuestion`.
+3. On validation → `cp cache/frames/<slug>.png raw/frames/YYYY-MM-DD-<source-slug>-<slug>.png`.
+4. On rejection → propose a retry at timestamp ±X s, or annotate `> [!question] Frame not extracted` in the source page.
+5. **Re-spawn the expert agent** on the source page in forced re-ingest mode, with the list of promoted frames + their transcript citation ±30 s. The agent must transcribe each frame as markdown in the relevant wiki page (cf. "Visual frames" section of its prompt + Step 9 of the runbook).
+6. Report: `Mode A frames: N promoted · M rejected`.
 
-### 4b. Mode B — induction croisée
+### 4b. Mode B — cross-induction
 
-Suit le runbook [wiki/decisions/extraction-frames-induction-runbook.md](../../wiki/decisions/extraction-frames-induction-runbook.md) :
+Follows the runbook [wiki/decisions/extraction-frames-induction-runbook.md](../../wiki/decisions/extraction-frames-induction-runbook.md):
 
-1. **Sampling dense** : `scripts/sample-frames.sh <video> /tmp/<slug>-samples/ <cadence>`. Cadence selon le type de vidéo (cf. tableau du runbook, défaut 20 s pour les vidéos denses, 30 s pour les talks, 60 s pour les quiz).
-2. **Image-diff** : `scripts/diff-frames.py /tmp/<slug>-samples/ [--roi …] [--threshold …] --output /tmp/<slug>-transitions.md`. Le ROI n'est appliqué que si une **annexe domaine** du runbook le justifie pour ce type de vidéo ; sinon plein cadre par défaut.
-3. **Catalogage visuel** : spawner un agent `Explore` avec le tableau de transitions et le prompt de l'Étape 3 du runbook → tableau classé `GARDER / DOUBLON / SKIP`.
-4. **Induction transcript** : pour chaque frame `GARDER`, extraire la fenêtre transcript `[t-30s, t+30s]` et l'annoter (citation, concept, justification). Downgrade en `SKIP` si pas de justification pédagogique. Output : `/tmp/<slug>-induction.md`.
-5. **Validation manuelle batch** : afficher le tableau d'induction à l'utilisateur en un seul `AskUserQuestion` multiSelect (Promouvoir / Doublon / Skip / Re-extraire). Le main context lit chaque PNG candidate et présente une description textuelle pour chaque option.
-6. **Extraction 1080p** : pour chaque frame `Promouvoir` : `ffmpeg -nostdin -i <video> -ss <ts> -frames:v 1 -q:v 1 /tmp/<slug>-finals/<slug>.png -y`.
-7. **Promotion** : `cp /tmp/<slug>-finals/<slug>.png raw/frames/YYYY-MM-DD-<source-slug>-<slug>.png`.
-8. **Re-spawn de l'agent expert** sur la page source en re-ingest forcé, avec : liste des frames promues, citation transcript ±30 s par frame, instruction explicite de **transcrire chaque frame en markdown** (Étape 9 du runbook) dans `wiki/sources/`, `wiki/concepts/`, `wiki/cheatsheets/`, `wiki/syntheses/` selon les livrables de l'agent.
-9. Rapport : `Frames mode B : N promues · M skipped · K re-extraites`.
+1. **Dense sampling**: `scripts/sample-frames.sh <video> /tmp/<slug>-samples/ <cadence>`. Cadence depends on video type (cf. runbook table, default 20 s for dense videos, 30 s for talks, 60 s for quizzes).
+2. **Image-diff**: `scripts/diff-frames.py /tmp/<slug>-samples/ [--roi …] [--threshold …] --output /tmp/<slug>-transitions.md`. ROI is only applied if a **domain annex** of the runbook justifies it for this video type; otherwise full frame by default.
+3. **Visual cataloging**: spawn an `Explore` agent with the transitions table and the prompt of Step 3 of the runbook → table classified `KEEP / DUPLICATE / SKIP`.
+4. **Transcript induction**: for each `KEEP` frame, extract the `[t-30s, t+30s]` transcript window and annotate it (citation, concept, justification). Downgrade to `SKIP` if no pedagogical justification. Output: `/tmp/<slug>-induction.md`.
+5. **Manual batch validation**: show the induction table to the user in a single `AskUserQuestion` multiSelect (Promote / Duplicate / Skip / Re-extract). The main context reads each candidate PNG and presents a textual description per option.
+6. **1080p extraction**: for each `Promote` frame: `ffmpeg -nostdin -i <video> -ss <ts> -frames:v 1 -q:v 1 /tmp/<slug>-finals/<slug>.png -y`.
+7. **Promotion**: `cp /tmp/<slug>-finals/<slug>.png raw/frames/YYYY-MM-DD-<source-slug>-<slug>.png`.
+8. **Re-spawn the expert agent** on the source page in forced re-ingest, with: list of promoted frames, transcript citation ±30 s per frame, explicit instruction to **transcribe each frame as markdown** (Step 9 of the runbook) into `wiki/sources/`, `wiki/concepts/`, `wiki/cheatsheets/`, `wiki/syntheses/` depending on the agent's deliverables.
+9. Report: `Mode B frames: N promoted · M skipped · K re-extracted`.
 
-### 5. Mode SKIP
+### 5. SKIP mode
 
-Si SKIP retenu : pas d'extraction de frames. Annoter dans la page source : `> [!info] Extraction de frames sautée — vidéo jugée non visuelle ou trop courte.`. Logger dans `wiki/log.md`.
+If SKIP is retained: no frame extraction. Annotate in the source page: `> [!info] Frame extraction skipped — video judged non-visual or too short.`. Log in `wiki/log.md`.
 
-### 6. Sort de la vidéo locale
+### 6. Disposition of the local video
 
-Pour les vidéos locales (pas YouTube) : proposer suppression / archivage hors-vault (`~/Archive/llm-wiki-videos/`) / conservation (déconseillé). **Cette étape a lieu après l'extraction des frames** (mode A, mode B ou skip).
+For local videos (not YouTube): propose deletion / out-of-vault archiving (`~/Archive/llm-wiki-videos/`) / retention (discouraged). **This step happens after frame extraction** (mode A, mode B or skip).
 
 ---
 
-**Note** : le dispatch vers l'agent expert de domaine se fait via `/ingest` standard — aucun chemin court-circuit. L'agent reçoit la convention frames dans son contexte de spawn ; il dispose d'une section `## Frames visuelles` dans tous les domaines.
+**Note**: dispatch to the domain-expert agent goes through standard `/ingest` — no shortcut path. The agent receives the frames convention in its spawn context; it has a `## Visual frames` section across all domains.

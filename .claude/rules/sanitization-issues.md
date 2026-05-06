@@ -1,80 +1,80 @@
 ---
-description: Règles dures de sanitization avant publication d'une issue sur le repo template upstream (évite la fuite de données du vault)
+description: Hard sanitization rules before publishing an issue to the upstream template repo (avoids leaking vault data)
 paths:
   - ".claude/commands/create-issue.md"
   - "scripts/migrations/*-create-issue*.md"
 ---
 
-# Sanitization avant `gh issue create` vers le template
+# Sanitization before `gh issue create` to the upstream template
 
-Quand l'utilisateur invoque `/create-issue` pour remonter un bug ou une amélioration vers le template upstream, le draft est généré depuis le contexte de la session Claude Code en cours. Ce contexte est susceptible de contenir des données spécifiques au vault de l'utilisateur (slugs de domaines, noms propres, chemins de contenu privé, références internes). Ces règles définissent ce qui doit être stripé, transformé ou flaggé pour review humaine **avant** la création de l'issue.
+When the user invokes `/create-issue` to file a bug or improvement upstream, the draft is generated from the current Claude Code session context. That context can contain user-vault-specific data (domain slugs, proper nouns, paths to private content, internal references). These rules define what must be stripped, transformed or flagged for human review **before** the issue is created.
 
-## Règles strip (transformation silencieuse)
+## Strip rules (silent transformation)
 
-Les patterns suivants sont **transformés systématiquement** dans le titre et le body du draft :
+The following patterns are **systematically transformed** in the draft's title and body:
 
-### 1. Wikilinks Obsidian
+### 1. Obsidian wikilinks
 
-- Pattern : `\[\[.+?\]\]` (avec ou sans alias `|`).
-- Action : strip complet, **ou** remplacement par un terme générique si le contexte est explicite (ex: `[[concepts/llm-wiki]]` → `the LLM wiki concept`).
-- Justification : les wikilinks sont des références internes au vault, sans valeur en dehors.
+- Pattern: `\[\[.+?\]\]` (with or without `|` alias).
+- Action: full strip, **or** replace with a generic term if the context is explicit (e.g. `[[concepts/llm-wiki]]` → `the LLM wiki concept`).
+- Justification: wikilinks are vault-internal references with no value outside.
 
-### 2. Chemins de contenu privé
+### 2. Private-content paths
 
-- Pattern : `raw/notes/YYYY-MM-DD-<anything>.md`, `raw/transcripts/YYYY-MM-DD-<anything>.md`, `raw/clippings/<anything>.md`.
-- Action : remplacer par un placeholder générique (`raw/notes/<example>.md`, `raw/transcripts/<example>.md`).
-- Justification : les noms de fichiers révèlent souvent le sujet de la note privée.
+- Pattern: `raw/notes/YYYY-MM-DD-<anything>.md`, `raw/transcripts/YYYY-MM-DD-<anything>.md`, `raw/clippings/<anything>.md`.
+- Action: replace with a generic placeholder (`raw/notes/<example>.md`, `raw/transcripts/<example>.md`).
+- Justification: file names often reveal the topic of a private note.
 
-### 3. Slugs de domaines vault-specific
+### 3. Vault-specific domain slugs
 
-- Lire la liste des domaines depuis `wiki/index.md` (section `## Domaines`) ou les noms de fichiers `wiki/domains/*.md`.
-- Pour chaque slug détecté dans le draft (mention textuelle ou path `wiki/domains/<slug>.md`), remplacer par `domain X`, `domain Y`, etc., **sauf si** le slug correspond à un terme générique attendu dans le template (`metier`, `tech`, `ia` peuvent rester si le contexte l'exige — mais c'est rare).
-- Justification : les domaines sont une projection personnelle du vault.
+- Read the list of domains from `wiki/index.md` (`## Domains` section) or the `wiki/domains/*.md` file names.
+- For every slug detected in the draft (textual mention or path `wiki/domains/<slug>.md`), replace with `domain X`, `domain Y`, etc., **unless** the slug matches a generic term expected in the template (`work`, `tech`, `ai` may stay if context demands — but rarely).
+- Justification: domains are a personal projection of the vault.
 
-### 4. Chemins `wiki/sources/<date>-<slug>.md`
+### 4. `wiki/sources/<date>-<slug>.md` paths
 
-- Pattern : `wiki/sources/[0-9]{4}-[0-9]{2}-[0-9]{2}-<slug>.md`.
-- Action : remplacer par `wiki/sources/<example>.md` ou par une description fonctionnelle (`a source page about X`).
-- Justification : révèle ce que l'utilisateur a ingéré récemment.
+- Pattern: `wiki/sources/[0-9]{4}-[0-9]{2}-[0-9]{2}-<slug>.md`.
+- Action: replace with `wiki/sources/<example>.md` or with a functional description (`a source page about X`).
+- Justification: reveals what the user has ingested recently.
 
-## Règles flag (review humaine obligatoire)
+## Flag rules (mandatory human review)
 
-Les patterns suivants ne sont **pas stripés silencieusement** mais signalés à l'utilisateur dans la prévisualisation, qui doit les valider ou les éditer :
+The following patterns are **not silently stripped** but flagged to the user in the preview, who must validate or edit them:
 
-### 5. Noms propres de personnes
+### 5. Person names
 
-- Heuristique : tout token capitalisé en **milieu de phrase** (hors début), sauf liste blanche connue (`Claude`, `Anthropic`, `GitHub`, `Linux`, noms de produits OSS standards).
-- Action : surligner dans la prévisualisation avec un avertissement « Nom propre détecté : `<token>` — confirmer ou éditer ».
-- Justification : un nom propre peut être une vraie personne du vault (collègue, formateur, sujet d'étude). La détection automatique aurait trop de faux positifs pour strip silencieusement.
+- Heuristic: any capitalized token in the **middle of a sentence** (excluding sentence start), except known whitelist (`Claude`, `Anthropic`, `GitHub`, `Linux`, standard OSS product names).
+- Action: highlight in the preview with a warning "Person name detected: `<token>` — confirm or edit".
+- Justification: a proper noun may be a real person from the vault (colleague, trainer, study subject). Automatic detection would have too many false positives for silent stripping.
 
-### 6. Noms d'entités externes spécifiques au vault
+### 6. Vault-specific external entity names
 
-- Pattern : noms d'entreprises, produits internes, projets non-publics référencés dans `wiki/entities/`.
-- Action : lire les noms d'entités depuis `wiki/entities/*.md` et flagger toute occurrence dans le draft.
-- Justification : un produit interne ou un client du vault ne doit jamais sortir publiquement.
+- Pattern: company names, internal products, non-public projects referenced in `wiki/entities/`.
+- Action: read entity names from `wiki/entities/*.md` and flag every occurrence in the draft.
+- Justification: an internal product or vault client must never go out publicly.
 
-### 7. Identifiants utilisateur (emails, handles)
+### 7. User identifiers (emails, handles)
 
-- Pattern : `[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+`, `@[a-zA-Z0-9_]+` (handles potentiels).
-- Action : strip silencieux pour les emails. Flag pour les handles (peuvent être des références publiques légitimes comme `@anthropics`).
+- Pattern: `[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+`, `@[a-zA-Z0-9_]+` (potential handles).
+- Action: silent strip for emails. Flag for handles (may be legitimate public references like `@anthropics`).
 
-## Règles de structure
+## Structural rules
 
-### 8. Anonymisation des cas concrets
+### 8. Anonymizing concrete cases
 
-Si le draft cite un cas concret (« 18 pages BB ont eu... »), proposer une formulation neutre : « Some vault pages had... » ou « N pages affected (figure measured on the BoilingBrain reference vault) ». Le mainteneur du template peut choisir de préciser dans le contexte de l'issue, mais la formulation par défaut est anonyme.
+If the draft cites a concrete case ("18 BB pages had..."), propose a neutral wording: "Some vault pages had..." or "N pages affected (figure measured on the BoilingBrain reference vault)". The template maintainer can choose to add the precision in the issue context, but the default wording is anonymous.
 
-### 9. Templates par type d'issue
+### 9. Templates per issue type
 
-- **bug** : sections `## Contexte`, `## Reproduction`, `## Fix proposé`, `## Test plan`, `## Impact`.
-- **enhancement** (alias `feature`) : sections `## Problème`, `## Proposition`, `## Alternatives considérées`, `## Out-of-scope`, `## Critères de done`.
-- **docs** : sections `## Section concernée`, `## Manque constaté`, `## Suggestion`.
-- **question** : sections `## Contexte`, `## Question`, `## Ce qui a déjà été essayé`.
+- **bug**: `## Context`, `## Reproduction`, `## Proposed fix`, `## Test plan`, `## Impact` sections.
+- **enhancement** (alias `feature`): `## Problem`, `## Proposal`, `## Alternatives considered`, `## Out-of-scope`, `## Done criteria` sections.
+- **docs**: `## Section concerned`, `## Gap observed`, `## Suggestion` sections.
+- **question**: `## Context`, `## Question`, `## What was already tried` sections.
 
-Le draft suit l'un de ces templates selon le type. Pas de section narrative libre.
+The draft follows one of these templates depending on the type. No free narrative section.
 
-## Verdict final
+## Final verdict
 
-La création de l'issue est **toujours validée par l'utilisateur** via `AskUserQuestion` avec 3 options : créer, éditer manuellement, annuler. Aucune création silencieuse, même si toutes les règles strip/flag passent. Le filet de sécurité humain reste obligatoire.
+Issue creation is **always validated by the user** via `AskUserQuestion` with 3 options: create, edit manually, cancel. No silent creation, even if all strip/flag rules pass. The human safety net stays mandatory.
 
-Si l'utilisateur choisit « éditer manuellement », l'issue n'est pas créée — un draft copy-pastable est affiché pour qu'il l'utilise dans l'UI GitHub.
+If the user picks "edit manually", the issue is not created — a copy-pastable draft is shown for them to use in the GitHub UI.

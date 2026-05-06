@@ -5,8 +5,8 @@ argument-hint: <question>
 
 Run the QUERY workflow from CLAUDE.md on: $ARGUMENTS
 
-1. Lire `wiki/index.md` pour identifier les pages pertinentes à la question.
-2. Lire ces pages, suivre les `[[wikilinks]]` nécessaires.
-3. Synthétiser la réponse avec citations `[[page]]`.
-4. Si la réponse est substantielle, proposer de l'archiver dans `wiki/syntheses/<slug>.md`.
-5. Ajouter dans `wiki/log.md` : `## [YYYY-MM-DD] query | <question courte>`.
+1. Read `wiki/index.md` to identify the pages relevant to the question.
+2. Read those pages, follow the necessary `[[wikilinks]]`.
+3. Synthesize the answer with `[[page]]` citations.
+4. If the answer is substantial, suggest archiving it into `wiki/syntheses/<slug>.md`.
+5. Append to `wiki/log.md`: `## [YYYY-MM-DD] query | <short question>`.
