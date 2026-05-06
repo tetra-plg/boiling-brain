@@ -165,6 +165,25 @@ This lets agents (and you, via `/query`) navigate the wiki without paying the fu
 4. After a few ingestions in a domain, run `/evolve-agent <domain>` to fold accumulated suggestions back into the expert's prompt.
 5. Use `/query` whenever you need to answer something from the corpus. Substantial answers can be archived via `/save`.
 
+## Who is this for?
+
+**For you if:**
+
+- You're a **solo dev, researcher, PM or writer** building a personal knowledge base across 3-6 domains.
+- You already use **Claude Code** (CLI, desktop app, IDE extension, or claude.ai/code) and **Obsidian** — or want to.
+- You want a **thinking partner** that grounds its answers in *your* sources (with citations), not a chatbot guessing from training data.
+- You'd rather **have an opinion than a blank page**: hash-keyed `raw/`, one expert agent per domain, mandatory frontmatter — these constraints feel like a feature, not a friction.
+- You want a vault that **scales past a few weeks** without falling into the "200 unlinked notes" trap.
+- You enjoy **owning your wiki layer** (the LLM writes it, you curate the prompts and the diff).
+
+**Probably not for you if:**
+
+- You want a **team or shared wiki** — BoilingBrain is single-tenant by design (one agent set per vault).
+- You want a **one-click hosted product** (Mem, NotebookLM, ChatGPT projects) where you upload notes and the storage is abstracted away — here the wiki is yours, plain markdown, you read and edit it directly.
+- You're expecting a **vector embeddings / RAG** retrieval layer — there's none, on purpose. For a personal knowledge base at this scale, hash-keyed sources + LLM-maintained wikilinks are simpler and effective; full RAG is overkill.
+- You don't use Claude Code (Codex, Cursor, Aider support is on the roadmap — contributions welcome, see open issues).
+- You want a **no-code, no-config** experience — every action goes through a slash command and you'll edit YAML frontmatter.
+
 ## FAQ
 
 ### Do I need to know which domains I want before bootstrapping?
