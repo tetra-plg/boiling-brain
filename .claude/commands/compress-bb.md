@@ -9,6 +9,18 @@ Save the current session journal into `raw/notes/sessions/YYYY-MM-DD-<slug>.md` 
 
 Use this workflow at the end of a substantive work session: analysis, decisions, explorations, learnings.
 
+## When NOT to use
+
+If the session already produced a substantive `raw/notes/<topic>.md`, don't duplicate the content into a session journal.
+
+| Situation | Session journal | `.pending-ingest` |
+|-----------|-----------------|-------------------|
+| Existing note covers everything | skip | `grep -qFx <note> \|\| echo <note> >> .pending-ingest` |
+| Note + valuable uncaptured meta | 3-5 line pointer to the note | append the pointer (normal flow) |
+| No substantive note | normal flow (steps below) | normal flow |
+
+The session journal is reserved for meta that would be lost otherwise: scope pivots, tooling friction, verbal decision reasoning. `cache/.session-pending` is orthogonal (SESSION START signal, deleted right after the proposal).
+
 ## Steps
 
 ### 1. Determine the slug
