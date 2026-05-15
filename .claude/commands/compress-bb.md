@@ -5,63 +5,63 @@ argument-hint: <slug>
 
 # /compress-bb
 
-Sauvegarde le journal de la session courante dans `raw/notes/sessions/YYYY-MM-DD-<slug>.md` pour ingestion ultérieure via `/ingest`.
+Save the current session journal into `raw/notes/sessions/YYYY-MM-DD-<slug>.md` for later ingestion via `/ingest`.
 
-Utilise ce workflow à la fin d'une session de travail substantielle : analyse, décisions, explorations, apprentissages.
+Use this workflow at the end of a substantive work session: analysis, decisions, explorations, learnings.
 
-## Étapes
+## Steps
 
-### 1. Déterminer le slug
+### 1. Determine the slug
 
-Si `$ARGUMENTS` est fourni, l'utiliser comme slug (kebab-case, sans date).
-Sinon, inférer un slug court et descriptif depuis les thèmes de la session.
+If `$ARGUMENTS` is provided, use it as the slug (kebab-case, no date).
+Otherwise, infer a short and descriptive slug from the themes of the session.
 
-### 2. Construire le contenu
+### 2. Build the content
 
-Le fichier doit capturer ce qui s'est passé dans la session, **pas l'historique brut** :
+The file must capture what happened during the session, **not the raw history**:
 
 ```markdown
 ---
 type: session-journal
 date: YYYY-MM-DD
 slug: <slug>
-themes: [liste des thèmes abordés]
+themes: [list of themes covered]
 ---
 
 # Session — <slug> (YYYY-MM-DD)
 
-## Contexte
-<Ce qui était en cours avant la session : état du projet, objectif de départ.>
+## Context
+<What was ongoing before the session: project state, starting goal.>
 
-## Ce qui a été fait
-<Liste des actions concrètes : fichiers créés/modifiés, décisions prises, problèmes résolus.>
+## What was done
+<List of concrete actions: files created/modified, decisions made, problems solved.>
 
-## Apprentissages & insights
-<Ce qui a émergé de la session : nouvelles compréhensions, patterns observés, surprises.>
+## Learnings & insights
+<What emerged from the session: new understandings, observed patterns, surprises.>
 
-## Questions ouvertes
-<Ce qui reste flou ou à résoudre lors de la prochaine session.>
+## Open questions
+<What remains unclear or to resolve in the next session.>
 
-## Prochaines étapes
-<Actions concrètes identifiées pour la suite.>
+## Next steps
+<Concrete actions identified for follow-up.>
 ```
 
-### 3. Écrire le fichier
-
-```
-raw/notes/sessions/YYYY-MM-DD-<slug>.md
-```
-
-### 4. Mettre à jour le signal pending-ingest
-
-Ajouter le chemin dans `cache/.pending-ingest` (créer le fichier si absent) :
+### 3. Write the file
 
 ```
 raw/notes/sessions/YYYY-MM-DD-<slug>.md
 ```
 
-### 5. Confirmer à l'utilisateur
+### 4. Update the pending-ingest signal
 
-Afficher le chemin créé et rappeler :
-- Le fichier sera proposé à l'ingestion au prochain démarrage de session (via hook SessionStart).
-- L'ingestion manuelle est possible immédiatement : `/ingest raw/notes/sessions/YYYY-MM-DD-<slug>.md`.
+Add the path to `cache/.pending-ingest` (create the file if absent):
+
+```
+raw/notes/sessions/YYYY-MM-DD-<slug>.md
+```
+
+### 5. Confirm to the user
+
+Show the path created and remind:
+- The file will be proposed for ingestion at the next session start (via the SessionStart hook).
+- Manual ingestion is available immediately: `/ingest raw/notes/sessions/YYYY-MM-DD-<slug>.md`.
