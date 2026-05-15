@@ -142,10 +142,9 @@ while IFS= read -r source_file; do
     fi
   done < "$source_file"
 
-  # SHA stocké (uniquement pour le premier source_path scalaire)
+  # `source_sha256_composite:` ignoré : non comparable au sha d'un fichier individuel.
   if [ -n "$first_sp" ]; then
-    sha_line=$(grep "^source_sha256:" "$source_file" 2>/dev/null | head -1 | sed 's/^source_sha256:[[:space:]]*//')
-    # Ignore si c'est aussi une liste YAML (commence par vide → valeur vide)
+    sha_line=$(grep "^source_sha256:" "$source_file" 2>/dev/null | head -1 | sed 's/^source_sha256:[[:space:]]*//' || true)
     if [ -n "$sha_line" ] && [[ "$sha_line" != -* ]]; then
       path_to_sha["$(_safe_key "$first_sp")"]="$sha_line"
     fi
