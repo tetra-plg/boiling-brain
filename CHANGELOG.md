@@ -17,6 +17,15 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 - **`/query` tiered loading**: L0 scan first, then L1/L2 descent only when relevant — reduces context consumption for broad questions.
 - **`scripts/migrations/v1.1.0-mcp-setup.md`**: interactive migration invoked by `/update-vault` for vaults < 1.1.0. Runs `setup-mcp.sh` (MCP + global Stop hook) and patches the vault's `CLAUDE.md` to add the "Session start" section that drives the reading of `cache/.pending-ingest` and `cache/.session-pending` signals.
 
+### Fixed (alpha feedback)
+
+- **`/compress-bb`**: document "When NOT to use" to avoid redundancy with substantive `raw/notes/` (#22).
+- **`scripts/scan-raw.sh`**: avoid silent kill under `set -euo pipefail` when `source_sha256` absent on composite pages (#23).
+
+### Changed
+
+- **`.claude/commands/compress-bb.md`**: translated to EN (v1.0.3 alignment, no functional change).
+
 ### Migration from v1.0.x
 
 Migration to v1.1.0 is **handled by `/update-vault`**:
