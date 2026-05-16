@@ -69,7 +69,9 @@ Ingestion is **delegated to a domain-expert agent** matching the source. Agents 
 
 {{agents_section}}
 
-Each agent has a **deliberately open** prompt (not a closed checklist) and **writes directly** into the wiki. It concludes with two parsable blocks: `## Ingest summary` and `## Evolution suggestions`. Suggestions accumulate in `.claude/agents/<domain>-expert.suggestions.md` to feed `/evolve-agent`.
+Each agent has a **deliberately open** prompt (not a closed checklist) and **writes directly** into `wiki/` pages it owns (sources, concepts, entities, etc.). It concludes with three parsable blocks per `.claude/agent-output-contract.md`: `## Ingest summary`, `## Radar items`, `## Evolution suggestions`. The **main context** (not the agent) appends those blocks to `wiki/log.md`, `wiki/radar.md`, and `.claude/agents/<domain>-expert.suggestions.md` to feed `/evolve-agent`.
+
+Operational memory lives in `.claude/agent-memory/<domain>/` (`MEMORY.md` + `patterns_pending.md` + free-form notes): the agent reads it at startup and updates it at ingest end. Distinct from `.suggestions.md` (behavioral rules for `/evolve-agent`). No `.claude/rules/agent-memory.md` — subagents don't load `.claude/rules/` from the main context.
 
 The agent dispatch in `/ingest` proposes an agent with a confidence level + justification, then the user validates via `AskUserQuestion`. See `.claude/commands/ingest.md` for details.
 
@@ -100,7 +102,7 @@ Structural choices about the vault (workflows, conventions, tooling — not know
 
 At the start of each session, check the signals left in `cache/`:
 
-- **`cache/.pending-ingest`**: one or more paths awaiting ingestion (dropped via the `drop_to_raw` MCP or by another vault). Suggest `/ingest <path>` for each entry. Don't delete the file — wait for user confirmation.
+- **`cache/.pending-ingest`**: paths awaiting ingestion. Run `bash scripts/scan-raw.sh` first — purge silently the `SKIP` (stale, already ingested), suggest `/ingest <path>` for `NEW` / `MODIFIED` entries. Remove the file if empty.
 - **`cache/.session-pending`**: the previous session had unjournaled changes (commits + modified files detected by the `Stop` hook). Suggest `/compress-bb <slug>` to archive the journal into `raw/notes/sessions/`. Delete the file after the proposal.
 
 These checks are silent if the files are absent.

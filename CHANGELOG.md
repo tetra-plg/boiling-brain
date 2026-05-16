@@ -18,6 +18,14 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 - **`scripts/migrations/v1.1.0-mcp-setup.md`**: interactive migration invoked by `/update-vault` for vaults < 1.1.0. Runs `setup-mcp.sh` (MCP + global Stop hook) and patches the vault's `CLAUDE.md` to add the "Session start" section that drives the reading of `cache/.pending-ingest` and `cache/.session-pending` signals.
 - **`/update-vault`**: optional `target-branch` argument to test pre-release feat branches before merge (e.g. `/update-vault feat/v1.2.0`). Default behavior unchanged (target `main`). (#30)
 
+### Added (ingest + agent surface)
+
+- **`.claude/agent-output-contract.md`**: factorized contract specifying the three output blocks every expert agent returns (`## Ingest summary`, `## Radar items`, `## Evolution suggestions`) with the conceptual derivation rule. Injected into agent prompts at spawn by `/ingest`. (#19)
+- **`/ingest`**: parses `## Radar items` from agent reports and propagates them to `wiki/radar.md`; purges processed and stale entries from `cache/.pending-ingest` at end of run. (#19, #24)
+- **`.claude/agents/domain-expert.md.tpl`**: section "How you report back" refactored — references the contract, clarifies that the main context (not the agent) writes downstream files. (#19, #25)
+- **`/evolve-agent`**: reads `.claude/agent-memory/<domain>/patterns_pending.md` in read-only mode to disambiguate suggestions. (#26)
+- **`CLAUDE.md.tpl`**: section "Per-domain expert agents" documents the agent-output-contract and the agent-memory convention (no separate rule — subagents do not see `.claude/rules/`). (#26)
+
 ### Added (L3 readiness)
 
 - **ADR template** (`wiki/decisions/decision.md.tpl`): frontmatter fields `verdict`, `verdict_date`, `verdict_evidence` (all opt-in, null by default) + `## Real feedback` section with T+30/60/90d placeholders. (#18)

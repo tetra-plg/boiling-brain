@@ -14,6 +14,7 @@ Evolve the prompt of the expert agent `$ARGUMENTS-expert` from the suggestions i
 - **Current prompt**: `.claude/agents/$ARGUMENTS-expert.md`.
 - **Accumulated suggestions**: `.claude/agents/$ARGUMENTS-expert.suggestions.md` (append-only, timestamped by `/ingest`).
 - **Previous archive** (if it exists): `.claude/agents/$ARGUMENTS-expert.suggestions.archive.md` — to see what's already been integrated in the past.
+- **Operational memory** (read-only, for context): `.claude/agent-memory/$ARGUMENTS/MEMORY.md` and `.claude/agent-memory/$ARGUMENTS/patterns_pending.md` if they exist. These document the project state — use them to disambiguate suggestions but **do not modify** them.
 
 If the suggestions file doesn't exist or is empty → tell the user, suggest they trigger one or more domain ingests first.
 
