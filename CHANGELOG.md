@@ -18,6 +18,12 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 - **`scripts/migrations/v1.1.0-mcp-setup.md`**: interactive migration invoked by `/update-vault` for vaults < 1.1.0. Runs `setup-mcp.sh` (MCP + global Stop hook) and patches the vault's `CLAUDE.md` to add the "Session start" section that drives the reading of `cache/.pending-ingest` and `cache/.session-pending` signals.
 - **`/update-vault`**: optional `target-branch` argument to test pre-release feat branches before merge (e.g. `/update-vault feat/v1.2.0`). Default behavior unchanged (target `main`). (#30)
 
+### Added (L3 readiness)
+
+- **ADR template** (`wiki/decisions/decision.md.tpl`): frontmatter fields `verdict`, `verdict_date`, `verdict_evidence` (all opt-in, null by default) + `## Real feedback` section with T+30/60/90d placeholders. (#18)
+- **`revisit_after` frontmatter field** on `type: decision` and `type: concept` pages (opt-in). (#18)
+- **`/lint`**: flag ADRs ≥ 90 days without `verdict`, and pages whose `revisit_after` is past. (#18)
+
 ### Fixed (alpha feedback)
 
 - **`/compress-bb`**: document "When NOT to use" to avoid redundancy with substantive `raw/notes/` (#22).

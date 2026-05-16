@@ -180,6 +180,10 @@ Five tools are exposed:
 4. After a few ingestions in a domain, run `/evolve-agent <domain>` to fold accumulated suggestions back into the expert's prompt.
 5. Use `/query` whenever you need to answer something from the corpus. Substantial answers can be archived via `/save`.
 
+## L3 readiness
+
+The template ships with **opt-in scaffolding** for the L3 layer of personal knowledge management (model revision via real-world feedback): `verdict` frontmatter on ADRs, `revisit_after` on decisions and concepts, `## Real feedback` section in the ADR template. The template does not enforce L3 — only you can judge if a decision held up — but `/lint` surfaces stale ADRs (≥ 90 days without verdict) and overdue revisits to prompt confrontation with reality.
+
 ## Who is this for?
 
 **For you if:**
