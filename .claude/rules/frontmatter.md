@@ -53,6 +53,25 @@ shasum -a 256 raw/<folder>/<file>.md | awk '{print $1}'
 
 If the file cannot be hashed (invalid path, access error), the ingestion fails — no silent fallback.
 
+## Fields specific to `type: decision` pages
+
+```yaml
+status: pending | accepted                            # mandatory
+verdict: null | validated | invalidated | partial     # optional, null until reality validates
+verdict_date: null | YYYY-MM-DD                       # optional, must accompany verdict
+verdict_evidence: null | "short narrative"            # optional, must accompany verdict
+```
+
+ADRs without `verdict` after **90 days** are flagged by `/lint` (forces L3 confrontation — see [[decisions/template-l3-optims-v1.1x]]).
+
+## Optional `revisit_after` field
+
+```yaml
+revisit_after: YYYY-MM-DD     # on type: decision and type: concept pages
+```
+
+`/lint` flags pages whose `revisit_after` date has passed. Use this to schedule a re-read of a concept or decision (e.g. after a related project ships, after a major external change).
+
 ## `summary_l0` and `summary_l1` fields (tiered loading)
 
 Mandatory for `domains/`, `cheatsheets/`, `concepts/`, `syntheses/`. Recommended for `sources/`, `entities/`.

@@ -16,6 +16,9 @@ Report on:
 - Concepts mentioned without their own page
 - Missing cross-references
 - Data gaps worth researching
+- **L3 readiness**:
+  - ADRs (`wiki/decisions/*.md`) older than 90 days without `verdict` (status confirmation overdue).
+  - Pages whose `revisit_after` date has passed (decisions and concepts).
 
 Suggest next sources to ingest.
 
