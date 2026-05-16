@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# check-session-activity.sh — Hook Stop : détecte l'activité de la session.
+# check-session-activity.sh — Stop hook: detects session activity.
 #
-# Si la session a produit des commits ou des fichiers modifiés dans raw/ ou wiki/,
-# écrit cache/.session-pending pour que le hook SessionStart propose un /compress-bb.
+# If the session produced commits or modified files in raw/ or wiki/,
+# writes cache/.session-pending so the SessionStart hook can propose /compress-bb.
 #
-# Usage (dans ~/.claude/settings.json hooks.Stop) :
-#   bash /chemin/vers/vault/scripts/check-session-activity.sh
+# Usage (in ~/.claude/settings.json hooks.Stop):
+#   bash /path/to/vault/scripts/check-session-activity.sh
 #
-# Variables d'environnement :
-#   VAULT_PATH — chemin du vault (défaut : répertoire parent de ce script)
+# Environment variables:
+#   VAULT_PATH — vault directory (default: parent of this script)
 
 set -euo pipefail
 
@@ -20,12 +20,12 @@ mkdir -p "$CACHE_DIR"
 
 HAS_ACTIVITY=0
 
-# Commits depuis le début de session (au moins 1 commit dans les 12 dernières heures)
+# Commits within the session window (at least 1 commit in the last 12 hours)
 if git -C "$VAULT_PATH" log --since="12 hours ago" --oneline 2>/dev/null | grep -q .; then
   HAS_ACTIVITY=1
 fi
 
-# Fichiers modifiés dans raw/ ou wiki/ (non commités)
+# Uncommitted modified files in raw/ or wiki/
 if git -C "$VAULT_PATH" status --short 2>/dev/null | grep -qE "^.M (raw|wiki)/"; then
   HAS_ACTIVITY=1
 fi

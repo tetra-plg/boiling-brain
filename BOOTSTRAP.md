@@ -586,7 +586,7 @@ Ask:
 }
 ```
 
-- **Yes**: run `bash scripts/setup-mcp.sh` (from the vault root). On pip error, show the error message + manual fallback: `pip install "fastmcp>=2.14,<3"` then re-run.
+- **Yes**: run `bash scripts/setup-mcp.sh` (from the vault root). On pip error, show the error message + manual fallback: `pip install "fastmcp>=2.14"` then re-run.
 - **No**: skip.
 
 ---
