@@ -1,5 +1,6 @@
 ---
 description: Cherry-pick improvements from the upstream template into this vault, with versioned migrations
+argument-hint: [target-branch]
 ---
 
 # /update-vault
@@ -7,6 +8,10 @@ description: Cherry-pick improvements from the upstream template into this vault
 Updates this vault from the upstream `tetra-plg/boiling-brain` template. Since v1.0.2, `/update-vault` is a **versioned migration machine**: it detects the vault's version (via `.claude/template-version`), compares it to the target version, propagates new files, and runs the breaking migrations between the two versions when needed.
 
 Use this workflow to pull new scripts, slash-commands, rules or architectural decisions published in the template after your bootstrap.
+
+## Arguments
+
+`$ARGUMENTS` — optional target branch ref on `template-upstream` (default: `main`). Use this to test a pre-release feat branch before its release, e.g. `/update-vault feat/v1.2.0`.
 
 ## Steps
 
@@ -54,24 +59,25 @@ echo "Local version: $LOCAL_VERSION (SHA $LOCAL_SHA)"
 ### 3. Detect the target version (from the remote)
 
 ```bash
-TARGET_VERSION=$(git show template-upstream/main:.claude/template-version 2>/dev/null \
+TARGET_BRANCH="${ARGUMENTS:-main}"
+TARGET_VERSION=$(git show "template-upstream/${TARGET_BRANCH}:.claude/template-version" 2>/dev/null \
   | grep '^template-version:' | awk '{print $2}')
-TARGET_SHA=$(git rev-parse template-upstream/main)
+TARGET_SHA=$(git rev-parse "template-upstream/${TARGET_BRANCH}")
 
 if [ -z "$TARGET_VERSION" ]; then
   echo "Upstream template has no .claude/template-version (probably < v1.0.2). Falling back to SHA."
   TARGET_VERSION="$TARGET_SHA"
 fi
 
-echo "Target version: $TARGET_VERSION (SHA $TARGET_SHA)"
+echo "Target branch: ${TARGET_BRANCH} — version: $TARGET_VERSION (SHA $TARGET_SHA)"
 ```
 
 ### 4. Compute the migration chain to apply
 
-List all migrations in `template-upstream/main:scripts/migrations/v<X>-*.md` whose version `X` is strictly greater than `LOCAL_VERSION` and less than or equal to `TARGET_VERSION`. Sort by ascending version.
+List all migrations in `template-upstream/${TARGET_BRANCH}:scripts/migrations/v<X>-*.md` whose version `X` is strictly greater than `LOCAL_VERSION` and less than or equal to `TARGET_VERSION`. Sort by ascending version.
 
 ```bash
-git ls-tree -r template-upstream/main --name-only \
+git ls-tree -r "template-upstream/${TARGET_BRANCH}" --name-only \
   | grep '^scripts/migrations/v[0-9]' \
   | sort
 ```
@@ -87,7 +93,7 @@ If no applicable migration but local version < target: only propagate the files 
 List the files changed between `LOCAL_SHA` and `TARGET_SHA`, excluding files consumed at bootstrap:
 
 ```bash
-git diff --name-only ${LOCAL_SHA} template-upstream/main \
+git diff --name-only ${LOCAL_SHA} "template-upstream/${TARGET_BRANCH}" \
   | grep -v '\.tpl$' \
   | grep -v '^BOOTSTRAP\.md$' \
   | grep -v '^PLACEHOLDERS\.md$' \
@@ -109,7 +115,7 @@ For each selected file:
 
 ```bash
 mkdir -p "$(dirname "$f")"
-git show template-upstream/main:"$f" > "$f"
+git show "template-upstream/${TARGET_BRANCH}:$f" > "$f"
 ```
 
 > **Why `git show` rather than `cherry-pick`?**
