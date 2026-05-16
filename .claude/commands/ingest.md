@@ -93,7 +93,7 @@ If the agent's report contains a `## Frame requests` block, handle **before** th
 
 ### 4c. Pending-ingest purge
 
-Remove from `cache/.pending-ingest` the paths processed in this run (NEW + MODIFIED) and the stale SKIP entries detected at step 1. The main context accumulates `PROCESSED_PATHS` and `STALE_SKIP_PATHS` during the run.
+Remove from `cache/.pending-ingest` the paths processed in this run (NEW + MODIFIED) and the stale SKIP entries detected at step 1. The main context accumulates these throughout the run: `PROCESSED_PATHS` = all NEW + MODIFIED paths from step 1; `STALE_SKIP_PATHS` = SKIP entries that were already present in `.pending-ingest` at step 1.
 
 ```bash
 PENDING="cache/.pending-ingest"
