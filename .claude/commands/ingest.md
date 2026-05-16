@@ -54,27 +54,29 @@ If video/audio/URL not transcribed → chain `scripts/transcribe.sh` first.
 
 ### 3. Spawning the expert agent
 
+Read `.claude/agent-output-contract.md` once at the start of the run; inject it integrally into every spawn prompt below.
+
 For each validated agent, launch an `Agent` call with:
 - `subagent_type`: the chosen agent.
 - **Prompt** containing:
   - Path of the raw file to ingest.
   - List of titles of existing pages in the domain (`wiki/entities/`, `wiki/concepts/`, `wiki/cheatsheets/`, etc. depending on the agent's deliverables).
   - Path of `wiki/domains/<d>.md`.
-  - Instruction: execute the ingest end-to-end, then return the report in `## Ingest summary` + `## Evolution suggestions` format (cf. agent prompt).
+  - The full content of `.claude/agent-output-contract.md`.
+  - Instruction: execute the ingest end-to-end, then return the three blocks (`## Ingest summary`, `## Radar items`, `## Evolution suggestions`) per the contract. The agent **does not write** to `wiki/log.md`, `wiki/radar.md`, or `.claude/agents/*.suggestions.md` — the main context handles propagation.
 
 Cross-domain → multiple agents in parallel (same multi-tool call).
 
 ### 4. Collection and journaling
 
-When the agent(s) have returned their report:
+When the agent(s) have returned their report, the **main context** writes (never the agent):
 
-1. Append to `wiki/log.md`:
-   ```
-   ## [YYYY-MM-DD] ingest | <source title> (agent: <name>)
-   <summary of the Ingest summary block — pages created/updated, deliverables>
-   ```
-2. Append the `## Evolution suggestions` block to `.claude/agents/<domain>-expert.suggestions.md` (create if needed) with a `### [YYYY-MM-DD HH:MM] source: <path>` timestamp.
-3. Update `wiki/index.md` if the agent didn't already.
+1. **`wiki/log.md`** ← append summary line from `## Ingest summary` (`## [YYYY-MM-DD] ingest | <source title> (agent: <name>)` + 2-3 lines on pages created/updated/deliverables).
+2. **`wiki/radar.md`** ← append entries from `## Radar items` under the relevant thematic section. If no section matches, append to a `## Triage` block at the top of the file and flag this in the final report.
+3. **`.claude/agents/<domain>-expert.suggestions.md`** ← append the `## Evolution suggestions` block (timestamped `### [YYYY-MM-DD HH:MM] source: <path>`). Skip if the block is "N/A".
+4. **`wiki/index.md`** ← update if the agent's pages aren't already linked.
+
+Centralizing writes in the main context prevents drift and inconsistent formatting across agents.
 
 ### 4b. Frame extraction (if present)
 
@@ -88,6 +90,20 @@ If the agent's report contains a `## Frame requests` block, handle **before** th
    d. On rejection → propose 3 quick alternatives without re-asking the user to specify an offset: extract at T-10s (`offset=-5`), T+0s (`offset=0`) and T+20s (`offset=15`) via `./scripts/extract-frames.sh <video> <timestamp> cache/frames/<slug>-altN.png <offset>`, show all 3 as a batch, validate or annotate `> [!question] Frame not extracted` if none works.
 3. If no video in cache: tell the user the declared timestamps with the expected description — they can re-run manually or annotate the frames as `> [!question]`.
 4. Include in the final report: `Frames: N promoted · M rejected` (or `Frame requests: N declared — video not available in cache`).
+
+### 4c. Pending-ingest purge
+
+Remove from `cache/.pending-ingest` the paths processed in this run (NEW + MODIFIED) and the stale SKIP entries detected at step 1. The main context accumulates `PROCESSED_PATHS` and `STALE_SKIP_PATHS` during the run.
+
+```bash
+PENDING="cache/.pending-ingest"
+[ -f "$PENDING" ] || exit 0
+printf '%s\n' "${PROCESSED_PATHS[@]}" "${STALE_SKIP_PATHS[@]}" \
+  | sort -u \
+  | grep -vFxf - "$PENDING" > "$PENDING.tmp" || true
+mv "$PENDING.tmp" "$PENDING"
+[ -s "$PENDING" ] || rm -f "$PENDING"
+```
 
 ### 5. Final overall report
 
