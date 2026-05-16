@@ -4,7 +4,7 @@ domains: [<domain1>]
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 sources: []
-status: pending | accepted
+status: pending              # pending | accepted
 verdict: null            # null | validated | invalidated | partial — fill after T+30/60/90d
 verdict_date: null       # YYYY-MM-DD when verdict was assigned
 verdict_evidence: null   # short text: what actually happened

@@ -62,7 +62,7 @@ verdict_date: null | YYYY-MM-DD                       # optional, must accompany
 verdict_evidence: null | "short narrative"            # optional, must accompany verdict
 ```
 
-ADRs without `verdict` after **90 days** are flagged by `/lint` (forces L3 confrontation — see [[decisions/template-l3-optims-v1.1x]]).
+ADRs without `verdict` after **90 days** are flagged by `/lint` (forces L3 confrontation with reality).
 
 ## Optional `revisit_after` field
 
