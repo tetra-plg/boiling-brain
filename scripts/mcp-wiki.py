@@ -135,9 +135,13 @@ def preview_page(page_path: str) -> str:
         return f"Erreur de lecture : {e}"
     fm, body = _parse_front(content)
     lines = [f"# Preview : {page_path}\n"]
-    for k, v in fm.items():
-        if k != "summary_l1":
-            lines.append(f"**{k}**: {v}")
+    # Whitelisted frontmatter fields — caps output verbosity with ADR L3 fields
+    # (verdict_evidence, verdict_date, revisit_after are skipped on purpose).
+    preview_fields = ("type", "domains", "created", "updated", "summary_l0",
+                      "sources", "status", "verdict")
+    for k in preview_fields:
+        if k in fm:
+            lines.append(f"**{k}**: {fm[k]}")
     l1 = fm.get("summary_l1", "")
     if l1:
         lines.append(f"\n## summary_l1\n{l1}")
