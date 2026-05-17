@@ -67,6 +67,12 @@ Neither `~/.claude/settings.json`, `~/.claude/CLAUDE.md`, nor `<vault>/CLAUDE.md
 
 If you prefer to migrate manually, read [scripts/migrations/v1.1.0-mcp-setup.md](scripts/migrations/v1.1.0-mcp-setup.md) which describes exactly what to change. Full rollback (vault + global + remote) is documented in [docs/local-pre-release-testing.md](docs/local-pre-release-testing.md) Phase 5.
 
+**Post-update actions** (one-time, after `/update-vault` completes):
+
+- **Restart Claude Code** to reload the MCP server subprocess with the updated `scripts/mcp-wiki.py` (otherwise `scan_domain` still runs with the previously loaded code).
+- **Optional — refresh the vault's `CLAUDE.md`**: PR-B enriches the "Per-domain expert agents" section of `CLAUDE.md.tpl` with references to `.claude/agent-output-contract.md` and `.claude/agent-memory/`. Existing vaults can re-align manually by diffing their `CLAUDE.md` against the new `CLAUDE.md.tpl`. Not blocking — `/ingest` reads the contract directly from disk.
+- **Optional — re-run `setup-mcp.sh` if your vault path contains special characters** (`"`, `\`): the pre-PR-E heredoc could corrupt the Stop hook registration silently. Re-run `bash scripts/setup-mcp.sh --vault-path "$(pwd)"` to re-register with the fixed quoting.
+
 ## [v1.0.3] — 2026-05-06
 
 Launch readiness pass: every file shipped at bootstrap or propagated by `/update-vault` is now in EN, plus a `{{vault_language}}` placeholder so wiki output language is decoupled from source language.
