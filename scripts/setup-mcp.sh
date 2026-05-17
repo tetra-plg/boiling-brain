@@ -59,7 +59,7 @@ if python3 -c "import fastmcp" 2>/dev/null; then
   echo "✅ fastmcp déjà disponible pour python3 système."
 elif command -v pipx &>/dev/null; then
   echo "📦 Installation de fastmcp via pipx…"
-  pipx install fastmcp 2>/dev/null || pipx upgrade fastmcp || true
+  pipx install fastmcp || pipx upgrade fastmcp || true
   PIPX_VENVS="$(pipx environment --value PIPX_LOCAL_VENVS 2>/dev/null || echo "$HOME/.local/pipx/venvs")"
   CANDIDATE="$PIPX_VENVS/fastmcp/bin/python"
   if [[ -x "$CANDIDATE" ]] && "$CANDIDATE" -c "import fastmcp" 2>/dev/null; then
@@ -94,12 +94,13 @@ else
 fi
 
 # --- Hook Stop dans ~/.claude/settings.json ---
-python3 - <<PYEOF
+CLAUDE_SETTINGS="$CLAUDE_SETTINGS" VAULT_PATH="$VAULT_PATH" python3 - <<'PYEOF'
 import json
+import os
 from pathlib import Path
 
-settings_path = Path("$CLAUDE_SETTINGS")
-vault_path = "$VAULT_PATH"
+settings_path = Path(os.environ["CLAUDE_SETTINGS"])
+vault_path = os.environ["VAULT_PATH"]
 
 if settings_path.exists():
     try:
