@@ -27,7 +27,6 @@ WIKI_DIR = WIKI_PATH / "wiki"
 RAW_DIR = WIKI_PATH / "raw"
 CACHE_DIR = WIKI_PATH / "cache"
 
-MAX_PAGES = 80
 MAX_OUTPUT_TOKENS_APPROX = 10_000
 
 FRONT_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
@@ -76,11 +75,12 @@ def _domain_pages(domain: str) -> list[Path]:
         "Use FIRST before answering any question about the user's knowledge domains. "
         "Lists wiki pages for a given domain with their summary_l0 (one-line synopsis). "
         "domain: one of poker, ia, factory, metier, tech, astro. "
-        "Returns a compact index (up to 80 pages, sorted by last updated) — "
-        "use preview_page or read_page for details."
+        "Returns ALL pages by default (sorted by last updated). "
+        "Pass limit=N to cap output (e.g. on very large domains > 5000 pages). "
+        "Use preview_page or read_page for details."
     )
 )
-def scan_domain(domain: str) -> str:
+def scan_domain(domain: str, limit: int = 0) -> str:
     pages = _domain_pages(domain)
     if not pages:
         return f"Aucune page trouvée pour le domaine « {domain} »."
@@ -94,9 +94,14 @@ def scan_domain(domain: str) -> str:
             return ("", "")
 
     pages.sort(key=sort_key, reverse=True)
-    pages = pages[:MAX_PAGES]
+    total = len(pages)
+    if limit > 0:
+        pages = pages[:limit]
 
-    lines = [f"# Domaine : {domain} ({len(pages)} pages)\n"]
+    if limit > 0 and total > limit:
+        lines = [f"# Domaine : {domain} ({len(pages)} / {total} pages, capped at limit={limit})\n"]
+    else:
+        lines = [f"# Domaine : {domain} ({len(pages)} pages)\n"]
     for p in pages:
         try:
             fm, _ = _parse_front(p.read_text(encoding="utf-8"))
@@ -130,9 +135,12 @@ def preview_page(page_path: str) -> str:
         return f"Erreur de lecture : {e}"
     fm, body = _parse_front(content)
     lines = [f"# Preview : {page_path}\n"]
-    for k, v in fm.items():
-        if k != "summary_l1":
-            lines.append(f"**{k}**: {v}")
+    # Whitelist: caps verbosity — verdict_evidence, verdict_date, revisit_after intentionally skipped.
+    preview_fields = ("type", "domains", "created", "updated", "summary_l0",
+                      "sources", "status", "verdict")
+    for k in preview_fields:
+        if k in fm:
+            lines.append(f"**{k}**: {fm[k]}")
     l1 = fm.get("summary_l1", "")
     if l1:
         lines.append(f"\n## summary_l1\n{l1}")
