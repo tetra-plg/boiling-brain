@@ -37,10 +37,14 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 - **`/compress-bb`**: document "When NOT to use" to avoid redundancy with substantive `raw/notes/` (#22).
 - **`scripts/scan-raw.sh`**: avoid silent kill under `set -euo pipefail` when `source_sha256` absent on composite pages (#23).
 - **`/update-vault`**: track applied migrations individually via `applied-migrations:` field in `.claude/template-version` — fixes silent skip of migrations added retroactively (after a version bump). Vaults pre-v1.1.0 auto-populate the field at first run post-upgrade. (#31)
+- **`scripts/setup-mcp.sh`**: quote heredoc delimiter and pass shell vars via `os.environ` — vault paths containing `"` or `\` no longer corrupt the Python hook registration silently (review finding A).
+- **`scripts/setup-mcp.sh`**: surface pipx install errors instead of swallowing stderr — real cause visible when fastmcp installation fails (review finding C).
+- **`scripts/mcp-wiki.py`**: `scan_domain` now accepts an optional `limit` parameter (default `0` = no limit) and surfaces capping in the output (`X / Y pages`) — large domains no longer lose pages silently (#36, review finding D).
 
 ### Changed
 
 - **`.claude/commands/compress-bb.md`**: translated to EN (v1.0.3 alignment, no functional change).
+- **`scripts/mcp-wiki.py`**: `preview_page` outputs a whitelisted set of frontmatter fields (`type`, `domains`, `created`, `updated`, `summary_l0`, `sources`, `status`, `verdict`) instead of every field — controls verbosity with the new ADR L3 fields (review finding B).
 
 ### Migration from v1.0.x
 
