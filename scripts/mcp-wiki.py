@@ -135,8 +135,7 @@ def preview_page(page_path: str) -> str:
         return f"Erreur de lecture : {e}"
     fm, body = _parse_front(content)
     lines = [f"# Preview : {page_path}\n"]
-    # Whitelisted frontmatter fields — caps output verbosity with ADR L3 fields
-    # (verdict_evidence, verdict_date, revisit_after are skipped on purpose).
+    # Whitelist: caps verbosity — verdict_evidence, verdict_date, revisit_after intentionally skipped.
     preview_fields = ("type", "domains", "created", "updated", "summary_l0",
                       "sources", "status", "verdict")
     for k in preview_fields:
