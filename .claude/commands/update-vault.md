@@ -37,7 +37,7 @@ if [ -f .claude/template-version ]; then
   # applied-migrations field (introduced v1.1.0+) — list of migration slugs applied locally
   APPLIED_MIGRATIONS=$(awk '
     /^applied-migrations:/{flag=1; next}
-    /^[a-z]/{flag=0}
+    /^[^[:space:]]/{flag=0}
     flag && /^[[:space:]]*-/{gsub(/^[[:space:]]*-[[:space:]]*/, ""); print}
   ' .claude/template-version)
 elif [ -f .template-bootstrap-sha ]; then
