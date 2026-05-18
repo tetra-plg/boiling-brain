@@ -65,9 +65,10 @@ When the source brings up a new kind of angle this list doesn't cover, **integra
 - Archive entries > 90 days into `## Expired patterns`.
 - Update domain state sections (recent concepts, sub-series in progress, etc.) where relevant.
 
-**Memory vs Evolution suggestions distinction**:
-- Memory = **project state** (patterns awaiting, progress, existing structural pages).
-- Evolution suggestions = **behavioral rules** for the prompt, via `/evolve-agent`.
+**Memory vs Suggestions vs Radar distinction**:
+- `agent-memory/{{domain_slug}}/MEMORY.md` = **project state** (patterns awaiting their 2nd occurrence, recent concepts, sub-series in progress). You read at startup, update at ingest end.
+- `## Evolution suggestions` (returned to main context) = **behavioral rules** for the prompt, consumed by `/evolve-agent`.
+- `## Radar items` (returned to main context) = **specific observations** to investigate, propagated to `wiki/radar.md`.
 
 ## Visual frames
 
@@ -78,7 +79,7 @@ When you ingest a **video transcript**, you can request a frame capture if two c
 
 {{domain_slug}}-specific triggers: {{trigger_examples}}.
 
-Declare your requests at the end of the report, **after** `## Ingest summary` and `## Evolution suggestions`:
+Declare your requests at the end of the report, **after** the three blocks (`## Ingest summary`, `## Radar items`, `## Evolution suggestions`):
 
 ```
 ## Frame requests
@@ -101,30 +102,22 @@ When `source_sha256` is identical but the ingest is forced: behavior is **additi
 
 ## How you report back to the main context
 
-At the end of your turn, return **two parsable markdown blocks**:
+At the end of your turn, return **three parsable markdown blocks** per the contract in `.claude/agent-output-contract.md`:
 
 ```markdown
 ## Ingest summary
-- Pages created: [[wiki/sources/...]], [[wiki/concepts/...]], …
-- Pages updated: …
-- Deliverables produced: …
-- Contradictions detected: …
-- Open questions: …
-- Cross-domain: […]  ← domains outside {{domain_label}} touched by this source — empty if none
+- Pages created/updated, deliverables, contradictions, cross-domain.
+
+## Radar items
+- Specific observations, missing facts, thresholds not met (cf. contract).
 
 ## Evolution suggestions
-- Recurring pattern detected: <description + pointer(s)>
-- Suspected blind spot: <description>
-- Proposed addition / modification to my prompt: <concrete text>
-- Proposed new deliverable category: <description>
+- Transverse rules only. "N/A" if nothing notable.
 ```
 
-Be concrete in `Evolution suggestions`: these are your raw materials for `/evolve-agent {{domain_slug}}` which will improve your prompt later. Flag:
-- what comes back often and would deserve to be codified,
-- what you almost missed for lack of a prepared angle,
-- a new kind of deliverable that would be useful.
+The **main context** appends these blocks to `wiki/log.md`, `wiki/radar.md`, and `.claude/agents/{{domain_slug}}-expert.suggestions.md`. **You never write to those files directly** — this avoids drift across agents.
 
-If nothing notable, write "N/A" — don't force invention.
+For `Evolution suggestions`, apply the **decisive test** from the contract: *"Would this rule still hold if the source was about another actor in the domain?"* If no → it's a `Radar item`, not an Evolution suggestion.
 
 ## Posture
 

@@ -69,7 +69,9 @@ Ingestion is **delegated to a domain-expert agent** matching the source. Agents 
 
 {{agents_section}}
 
-Each agent has a **deliberately open** prompt (not a closed checklist) and **writes directly** into the wiki. It concludes with two parsable blocks: `## Ingest summary` and `## Evolution suggestions`. Suggestions accumulate in `.claude/agents/<domain>-expert.suggestions.md` to feed `/evolve-agent`.
+Each agent has a **deliberately open** prompt (not a closed checklist) and **writes directly** into `wiki/` pages it owns (sources, concepts, entities, etc.). It concludes with three parsable blocks per `.claude/agent-output-contract.md`: `## Ingest summary`, `## Radar items`, `## Evolution suggestions`. The **main context** (not the agent) appends those blocks to `wiki/log.md`, `wiki/radar.md`, and `.claude/agents/<domain>-expert.suggestions.md` to feed `/evolve-agent`.
+
+Operational memory lives in `.claude/agent-memory/<domain>/` (`MEMORY.md` + `patterns_pending.md` + free-form notes): the agent reads it at startup and updates it at ingest end. Distinct from `.suggestions.md` (behavioral rules for `/evolve-agent`). No `.claude/rules/agent-memory.md` — subagents don't load `.claude/rules/` from the main context.
 
 The agent dispatch in `/ingest` proposes an agent with a confidence level + justification, then the user validates via `AskUserQuestion`. See `.claude/commands/ingest.md` for details.
 
@@ -88,12 +90,22 @@ Detailed workflows live in `.claude/commands/`. Summary table:
 | `/evolve-agent <domain>` | Curated evolution of an agent's prompt from its accumulated suggestions |
 | `/update-vault` | Pull upstream template improvements (versioned migration machine) |
 | `/create-issue [type]` | Open a sanitized issue on the upstream template repo from the current context |
+| `/compress-bb [slug]` | Save the current session journal into `raw/notes/sessions/YYYY-MM-DD-<slug>.md` |
 
 For the radar: "show me the radar" / "what's on the agenda today" → read `wiki/radar.md` + extract accumulated agent suggestions (≥2 occurrences OR judged structural). **If a radar entry concerns the template environment** (bug or gap touching `scripts/`, `.claude/commands/`, `BOOTSTRAP.md`, or any file propagated by `/update-vault`), suggest the user file it via `/create-issue <type>` — don't create the issue yourself, just surface the command.
 
 ## Architectural decisions
 
 Structural choices about the vault (workflows, conventions, tooling — not knowledge domains) go to `wiki/decisions/` in ADR-lite format: Problem → Discarded options → Decision → Why → Open questions. No numbering, descriptive slug. If a decision is revised, create a new one that cites and supersedes the old.
+
+## Session start (signals from `cache/`)
+
+At the start of each session, check the signals left in `cache/`:
+
+- **`cache/.pending-ingest`**: paths awaiting ingestion. Run `bash scripts/scan-raw.sh` first — purge silently the `SKIP` (stale, already ingested), suggest `/ingest <path>` for `NEW` / `MODIFIED` entries. Remove the file if empty.
+- **`cache/.session-pending`**: the previous session had unjournaled changes (commits + modified files detected by the `Stop` hook). Suggest `/compress-bb <slug>` to archive the journal into `raw/notes/sessions/`. Delete the file after the proposal.
+
+These checks are silent if the files are absent.
 
 ## Writing principles
 

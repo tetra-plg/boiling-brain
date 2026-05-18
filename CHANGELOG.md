@@ -6,6 +6,73 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 
 ---
 
+## [v1.1.0] — unreleased
+
+### Added
+
+- **`scripts/mcp-wiki.py`**: stdio MCP server (FastMCP ≥ 2.14) exposing 5 tools — `scan_domain` (tiered loading L0), `preview_page` (L1), `read_page` (L2), `search_wiki`, `drop_to_raw`. The server reads `WIKI_PATH` to locate the vault.
+- **`scripts/setup-mcp.sh`**: standalone installer — installs `fastmcp` (pipx first, pip --user fallback), registers the server via `claude mcp add -s user` (cross-project), adds the `Stop` hook to `~/.claude/settings.json`, and appends the instructions block to `~/.claude/CLAUDE.md` (idempotent via marker).
+- **`/compress-bb`**: slash-command to save the current session journal into `raw/notes/sessions/YYYY-MM-DD-<slug>.md`, ready for `/ingest`.
+- **Hooks**: `Stop` hook (`scripts/check-session-activity.sh`) detects commits + modified files → writes `cache/.session-pending`; `SessionStart` hook detects `.pending-ingest` and `.session-pending` and proposes the follow-up actions.
+- **`/query` tiered loading**: L0 scan first, then L1/L2 descent only when relevant — reduces context consumption for broad questions.
+- **`scripts/migrations/v1.1.0-mcp-setup.md`**: interactive migration invoked by `/update-vault` for vaults < 1.1.0. Runs `setup-mcp.sh` (MCP + global Stop hook) and patches the vault's `CLAUDE.md` to add the "Session start" section that drives the reading of `cache/.pending-ingest` and `cache/.session-pending` signals.
+- **`/update-vault`**: optional `target-branch` argument to test pre-release feat branches before merge (e.g. `/update-vault feat/v1.2.0`). Default behavior unchanged (target `main`). (#30)
+
+### Added (ingest + agent surface)
+
+- **`.claude/agent-output-contract.md`**: factorized contract specifying the three output blocks every expert agent returns (`## Ingest summary`, `## Radar items`, `## Evolution suggestions`) with the conceptual derivation rule. Injected into agent prompts at spawn by `/ingest`. (#19)
+- **`/ingest`**: parses `## Radar items` from agent reports and propagates them to `wiki/radar.md`; purges processed and stale entries from `cache/.pending-ingest` at end of run. (#19, #24)
+- **`.claude/agents/domain-expert.md.tpl`**: section "How you report back" refactored — references the contract, clarifies that the main context (not the agent) writes downstream files. (#19, #25)
+- **`/evolve-agent`**: reads `.claude/agent-memory/<domain>/patterns_pending.md` in read-only mode to disambiguate suggestions. (#26)
+- **`CLAUDE.md.tpl`**: section "Per-domain expert agents" documents the agent-output-contract and the agent-memory convention (no separate rule — subagents do not see `.claude/rules/`). (#26)
+
+### Added (L3 readiness)
+
+- **ADR template** (`wiki/decisions/decision.md.tpl`): frontmatter fields `verdict`, `verdict_date`, `verdict_evidence` (all opt-in, null by default) + `## Real feedback` section with T+30/60/90d placeholders. (#18)
+- **`revisit_after` frontmatter field** on `type: decision` and `type: concept` pages (opt-in). (#18)
+- **`/lint`**: flag ADRs ≥ 90 days without `verdict`, and pages whose `revisit_after` is past. (#18)
+
+### Fixed (alpha feedback)
+
+- **`/compress-bb`**: document "When NOT to use" to avoid redundancy with substantive `raw/notes/` (#22).
+- **`scripts/scan-raw.sh`**: avoid silent kill under `set -euo pipefail` when `source_sha256` absent on composite pages (#23).
+- **`/update-vault`**: track applied migrations individually via `applied-migrations:` field in `.claude/template-version` — fixes silent skip of migrations added retroactively (after a version bump). Vaults pre-v1.1.0 auto-populate the field at first run post-upgrade. (#31)
+- **`scripts/setup-mcp.sh`**: quote heredoc delimiter and pass shell vars via `os.environ` — vault paths containing `"` or `\` no longer corrupt the Python hook registration silently (review finding A).
+- **`scripts/setup-mcp.sh`**: surface pipx install errors instead of swallowing stderr — real cause visible when fastmcp installation fails (review finding C).
+- **`scripts/mcp-wiki.py`**: `scan_domain` now accepts an optional `limit` parameter (default `0` = no limit) and surfaces capping in the output (`X / Y pages`) — large domains no longer lose pages silently (#36, review finding D).
+
+### Changed
+
+- **`.claude/commands/compress-bb.md`**: translated to EN (v1.0.3 alignment, no functional change).
+- **`scripts/mcp-wiki.py`**: `preview_page` outputs a whitelisted set of frontmatter fields (`type`, `domains`, `created`, `updated`, `summary_l0`, `sources`, `status`, `verdict`) instead of every field — controls verbosity with the new ADR L3 fields (review finding B).
+
+### Migration from v1.0.x
+
+Migration to v1.1.0 is **handled by `/update-vault`**:
+
+```bash
+# In your bootstrapped vault:
+/update-vault
+```
+
+`/update-vault` detects the local version (1.0.x) → target 1.1.0, propagates the new files (`scripts/mcp-wiki.py`, `scripts/setup-mcp.sh`, `scripts/check-session-activity.sh`, `.claude/commands/compress-bb.md`, `scripts/migrations/v1.1.0-mcp-setup.md`, `/query` updated), then invokes the `v1.1.0-mcp-setup` migration which:
+
+1. Announces the additions and what it will mutate (`~/.claude/settings.json`, `~/.claude/CLAUDE.md`, `<vault>/CLAUDE.md`).
+2. Proposes 3 options via `AskUserQuestion`: **Enable** (full setup) / **Patch vault CLAUDE.md only** (skip global mutations) / **Skip**.
+3. If **Enable**: runs `bash scripts/setup-mcp.sh --vault-path <vault>` (idempotent — pip-installs `fastmcp` if missing, merges mcpServers + Stop hook, appends a marker-bounded block to `~/.claude/CLAUDE.md`).
+4. Patches the vault's `CLAUDE.md` to insert the `## Session start (signals from cache/)` section (idempotent — title-based detection).
+5. Dedicated commit, then bumps `.claude/template-version` to 1.1.0.
+
+Neither `~/.claude/settings.json`, `~/.claude/CLAUDE.md`, nor `<vault>/CLAUDE.md` is ever rewritten — only content is added or merged.
+
+If you prefer to migrate manually, read [scripts/migrations/v1.1.0-mcp-setup.md](scripts/migrations/v1.1.0-mcp-setup.md) which describes exactly what to change.
+
+**Post-update actions** (one-time, after `/update-vault` completes):
+
+- **Restart Claude Code** to reload the MCP server subprocess with the updated `scripts/mcp-wiki.py` (otherwise `scan_domain` still runs with the previously loaded code).
+- **Optional — refresh the vault's `CLAUDE.md`**: PR-B enriches the "Per-domain expert agents" section of `CLAUDE.md.tpl` with references to `.claude/agent-output-contract.md` and `.claude/agent-memory/`. Existing vaults can re-align manually by diffing their `CLAUDE.md` against the new `CLAUDE.md.tpl`. Not blocking — `/ingest` reads the contract directly from disk.
+- **Optional — re-run `setup-mcp.sh` if your vault path contains special characters** (`"`, `\`): the pre-PR-E heredoc could corrupt the Stop hook registration silently. Re-run `bash scripts/setup-mcp.sh --vault-path "$(pwd)"` to re-register with the fixed quoting.
+
 ## [v1.0.3] — 2026-05-06
 
 Launch readiness pass: every file shipped at bootstrap or propagated by `/update-vault` is now in EN, plus a `{{vault_language}}` placeholder so wiki output language is decoupled from source language.

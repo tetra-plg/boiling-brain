@@ -568,6 +568,27 @@ git add -A
 git commit -m "initial vault — generated via BOOTSTRAP.md on {{bootstrap_date}}"
 ```
 
+### 5.11 Optional MCP setup
+
+Ask:
+
+```json
+{
+  "questions": [{
+    "question": "Do you want to enable the MCP server to access your wiki from any Claude Code instance?",
+    "header": "MCP Wiki",
+    "multiSelect": false,
+    "options": [
+      {"label": "✅ Yes, set it up now", "description": "Runs bash scripts/setup-mcp.sh. Prerequisites: Python 3 + internet connection for pip."},
+      {"label": "❌ No, I'll do it later", "description": "Run bash scripts/setup-mcp.sh from the vault whenever you want."}
+    ]
+  }]
+}
+```
+
+- **Yes**: run `bash scripts/setup-mcp.sh` (from the vault root). On pip error, show the error message + manual fallback: `pip install "fastmcp>=2.14"` then re-run.
+- **No**: skip.
+
 ---
 
 ## Section 6 — Step 5, Optional GitHub remote
@@ -616,7 +637,7 @@ Show a clean text message:
 
 Identity: {{name}} — {{role}}
 Active domains ({{N}}): {{ domain_1, domain_2, ... }}
-Available pipeline: /ingest, /query, /save, /lint, /evolve-agent{{ ", /ingest-video" if ingest_video_enabled }}{{ ", /sync-repos" if has_tracked_repos }}, /update-vault
+Available pipeline: /ingest, /query, /save, /lint, /evolve-agent{{ ", /ingest-video" if ingest_video_enabled }}{{ ", /sync-repos" if has_tracked_repos }}, /update-vault, /compress-bb
 
 Three guided next actions:
 
