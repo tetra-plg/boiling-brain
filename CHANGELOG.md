@@ -65,7 +65,7 @@ Migration to v1.1.0 is **handled by `/update-vault`**:
 
 Neither `~/.claude/settings.json`, `~/.claude/CLAUDE.md`, nor `<vault>/CLAUDE.md` is ever rewritten — only content is added or merged.
 
-If you prefer to migrate manually, read [scripts/migrations/v1.1.0-mcp-setup.md](scripts/migrations/v1.1.0-mcp-setup.md) which describes exactly what to change. Full rollback (vault + global + remote) is documented in [docs/local-pre-release-testing.md](docs/local-pre-release-testing.md) Phase 5.
+If you prefer to migrate manually, read [scripts/migrations/v1.1.0-mcp-setup.md](scripts/migrations/v1.1.0-mcp-setup.md) which describes exactly what to change.
 
 **Post-update actions** (one-time, after `/update-vault` completes):
 
