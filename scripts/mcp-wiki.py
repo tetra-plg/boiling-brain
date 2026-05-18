@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-mcp-wiki.py — MCP server (stdio) exposant le wiki BoilingBrain via FastMCP.
+mcp-wiki.py — MCP server (stdio) exposing the BoilingBrain wiki via FastMCP.
 
-Outils disponibles :
-  scan_domain   — liste les pages d'un domaine avec summary_l0 (tiered loading L0)
-  preview_page  — lit le frontmatter + summary_l1 d'une page (tiered loading L1)
-  read_page     — lit le corps complet d'une page (tiered loading L2)
-  search_wiki   — recherche full-text dans wiki/
-  drop_to_raw   — écrit un fichier dans raw/ et crée cache/.pending-ingest
+Tools:
+  scan_domain   — list domain pages with summary_l0 (tiered loading L0)
+  preview_page  — read frontmatter + summary_l1 of a page (tiered loading L1)
+  read_page     — read full body of a page (tiered loading L2)
+  search_wiki   — full-text search across wiki/
+  drop_to_raw   — write a file to raw/ and signal it via cache/.pending-ingest
 
-Usage :
-  Lancé automatiquement par Claude Code via ~/.claude/settings.json.
-  Variable d'environnement WIKI_PATH pour overrider le chemin du vault.
+Usage:
+  Launched automatically by Claude Code (registered via `claude mcp add`).
+  Set WIKI_PATH env var to override the vault root path.
 """
 
 import os
