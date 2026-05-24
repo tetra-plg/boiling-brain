@@ -29,6 +29,8 @@ Avant tout dispatch :
   }
   ```
 
+  L'URL fallback pointe sur le template officiel `tetra-plg/boiling-brain`. Si le vault a été bootstrappé depuis un **fork**, configurer manuellement `template-upstream` vers le fork avant de lancer `/domain add` (sinon les `.tpl` viendront du template officiel, pas du fork).
+
 ### 2. Détecter les conventions du vault
 
 Capture dans des variables, à réutiliser plus bas :
