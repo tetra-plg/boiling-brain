@@ -13,7 +13,7 @@ This vault is an **LLM Wiki**: a knowledge ecosystem maintained by an LLM, cente
 .claude/
   agents/        # Claude Code subagents — one expert per domain (+ accumulated suggestions for evolution)
   agent-memory/  # cross-session memories per agent (domain state, pending patterns)
-  commands/      # slash commands (/ingest, /ingest-video, /query, /save, /lint, /evolve-agent, /update-vault, /create-issue{{slash_commands_extras}})
+  commands/      # slash commands (/ingest, /ingest-video, /query, /save, /lint, /evolve-agent, /domain, /update-vault, /create-issue{{slash_commands_extras}})
   rules/         # conventions auto-loaded by Claude Code via the `paths` field in their frontmatter
   template-version  # template version this vault is aligned with
 
@@ -88,6 +88,7 @@ Detailed workflows live in `.claude/commands/`. Summary table:
 | `/save <slug>` | Archive the latest synthesis into `wiki/syntheses/` |
 | `/lint` | Detect contradictions, orphans, gaps |
 | `/evolve-agent <domain>` | Curated evolution of an agent's prompt from its accumulated suggestions |
+| `/domain <add\|rename\|remove> <slug>` | Manage a domain's lifecycle post-bootstrap (instantiate / rename / strip across all canonical declarations + frontmatters + wikilinks, with bucketed validation) |
 | `/update-vault` | Pull upstream template improvements (versioned migration machine) |
 | `/create-issue [type]` | Open a sanitized issue on the upstream template repo from the current context |
 | `/compress-bb [slug]` | Save the current session journal into `raw/notes/sessions/YYYY-MM-DD-<slug>.md` |
