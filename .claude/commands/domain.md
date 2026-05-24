@@ -35,7 +35,11 @@ Avant tout dispatch :
 
 Capture dans des variables, à réutiliser plus bas :
 
-- **`VAULT_LANGUAGE`** : `grep -oE 'Vault language[^*]*\*\*[A-Za-z]+\*\*' CLAUDE.md` puis extraire le mot ; fallback `grep 'vault_language' CLAUDE.md`. Défaut si introuvable : `English`.
+- **`VAULT_LANGUAGE`** : la valeur peut être non-ASCII (`Français`, `Español`, `Deutsch`, `日本語`…) **et** la clé peut être traduite (le bullet est localisé pendant le bootstrap : `Langue du vault` en FR, `Idioma del vault` en ES, etc.). Cascade de détection :
+  1. `grep -oE '(Vault language|Langue du vault|Idioma del vault|Sprache des Tresors|Vault言語)[^*]*\*\*[^*]+\*\*' CLAUDE.md` — couvre les labels connus, classe valeur `[^*]+` autorise tout caractère Unicode entre les `**`.
+  2. Si rien trouvé, fallback générique : `grep -nE '^\s*-\s*\*\*[^*]+\*\*.*language|^\s*-\s*\*\*[^*]+\*\*.*langue|^\s*-\s*\*\*[^*]+\*\*.*idioma' CLAUDE.md`.
+  3. Si toujours rien, **demander à l'utilisateur** via `AskUserQuestion` (« Quelle est la langue de ce vault ? ») au lieu de défaulter silencieusement à `English` (qui ferait rendre un agent EN dans un vault FR/ES/…). Cf. issue #43 review : le default silencieux a été le bug détecté pendant l'update-vault test sur BB.
+  4. Stocker la valeur exactement comme trouvée (préserver `Français`, pas `Francais`).
 - **`MEMORY_CONVENTION`** : lister `.claude/agent-memory/` et observer si les sous-dossiers ont le suffixe `-expert` ou non.
   - Si `.claude/agent-memory/<slug>-expert/` existe pour ≥1 domaine → convention `with-suffix`.
   - Si `.claude/agent-memory/<slug>/` (sans suffixe) → convention `bare`.
