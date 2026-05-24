@@ -153,6 +153,7 @@ This lets agents (and you, via `/query`) navigate the wiki without paying the fu
 | `/save <slug>` | Archive the current synthesis into `wiki/syntheses/<slug>.md`. |
 | `/lint [domain]` | Detect contradictions, orphans, missing cross-references, gaps. |
 | `/evolve-agent <domain>` | Curated update to a domain expert's prompt, fed by accumulated `.suggestions.md`. |
+| `/domain <add\|rename\|remove> <slug>` | Manage a domain's lifecycle post-bootstrap. Scans the vault, presents impact by bucket (canonical / frontmatter / wikilink / alias / composed / prose / log-tag / historical / drift), validates ambiguous cases case-by-case. |
 | `/sync-repos [names]` *(optional)* | Snapshot GitHub repos by SHA into `raw/tracked-repos/` (or any `dest` declared per source). |
 | `/update-vault` | Cherry-pick improvements from the upstream template into your vault instance (versioned migration machine). |
 | `/create-issue [type]` | Sanitize a draft and open an issue on the upstream template repo (auto-strips wikilinks, vault-specific slugs, private paths). Always validated by you before `gh issue create`. |
