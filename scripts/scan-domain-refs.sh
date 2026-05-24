@@ -25,6 +25,11 @@
 
 set -euo pipefail
 
+if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ]; then
+  echo "ERREUR : bash 4+ requis (version actuelle : ${BASH_VERSION:-inconnue}). Sur macOS : brew install bash" >&2
+  exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # VAULT_PATH override permet de cibler un autre vault (utile pour les tests
 # depuis le repo template avant propagation). Défaut : parent du script
@@ -351,7 +356,11 @@ _scan_body() {
 
 while IFS= read -r f; do
   [ -f "$f" ] || continue
-  [ "$f" = ".claude/commands/ingest.md" ] && continue # déjà couvert par CANONICAL si pertinent
+  # Skip les fichiers canoniques : leurs occurrences sont déjà émises en CANONICAL (B1).
+  # Sans ce filtre, wiki/index.md et wiki/overview.md seraient double-émis (B1 + B6).
+  case "$f" in
+    ".claude/commands/ingest.md"|"wiki/index.md"|"wiki/overview.md") continue ;;
+  esac
   while IFS=: read -r lineno content; do
     [ -z "$lineno" ] && continue
 
