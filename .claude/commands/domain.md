@@ -5,22 +5,22 @@ argument-hint: <add|rename|remove> <slug> [<new-slug>] [--archive|--purge] [--in
 
 # /domain
 
-Gère le cycle de vie d'un domaine dans un vault BoilingBrain **après le bootstrap initial**. La commande dispatche sur le premier mot de `$ARGUMENTS` :
+Manage a domain's lifecycle in a BoilingBrain vault **after the initial bootstrap**. The command dispatches on the first word of `$ARGUMENTS`:
 
-- `/domain add <slug>` — instancie un nouveau domaine (agent, mémoire, hub) et l'insère dans toutes les déclarations canoniques.
-- `/domain rename <old-slug> <new-slug>` — renomme un domaine partout, en disambiguant les cas ambigus (slugs composés, mot en prose, aliases de wikilinks).
-- `/domain remove <slug>` — supprime un domaine de l'actif du vault. `--archive` (défaut) préserve l'historique ; `--purge` propose la suppression case-by-case dans l'historique aussi.
+- `/domain add <slug>` — instantiate a new domain (agent, memory, hub) and insert it into every canonical declaration.
+- `/domain rename <old-slug> <new-slug>` — rename a domain everywhere, disambiguating tricky cases (composed slugs, prose word, wikilink aliases).
+- `/domain remove <slug>` — strip a domain from the vault's active surface. `--archive` (default) preserves history; `--purge` proposes case-by-case sweeps through history too.
 
-**Hors scope** (cf. issue #38) : migration cross-domain de sources entre domaines existants, merge de domaines, split de domaines, slugs non-latins.
+**Out of scope** (cf. issue #38): cross-domain source migration between existing domains, domain merging, domain splitting, non-Latin slugs.
 
-## Préliminaires (toujours)
+## Preliminaries (always)
 
-Avant tout dispatch :
+Before any dispatch:
 
-### 1. Vérifier le contexte
+### 1. Verify the context
 
-- Le cwd doit être la racine d'un vault instancié (pas le repo template). Si `CLAUDE.md.tpl` existe à la racine → STOP, expliquer à l'utilisateur que la commande ne s'exécute que dans un vault clôné.
-- Le remote `template-upstream` doit être configuré (sinon le fetch des `.tpl` pour `add` échoue) :
+- The cwd must be the root of an instantiated vault (not the template repo). If `CLAUDE.md.tpl` exists at the root → STOP, explain to the user that the command only runs inside a cloned vault.
+- The `template-upstream` remote must be configured (otherwise the `.tpl` fetch for `add` fails):
 
   ```bash
   git remote get-url template-upstream 2>/dev/null || {
@@ -29,61 +29,61 @@ Avant tout dispatch :
   }
   ```
 
-  L'URL fallback pointe sur le template officiel `tetra-plg/boiling-brain`. Si le vault a été bootstrappé depuis un **fork**, configurer manuellement `template-upstream` vers le fork avant de lancer `/domain add` (sinon les `.tpl` viendront du template officiel, pas du fork).
+  The fallback URL points to the official template `tetra-plg/boiling-brain`. If the vault was bootstrapped from a **fork**, configure `template-upstream` manually toward the fork before running `/domain add` (otherwise the `.tpl` files will come from the official template, not the fork).
 
-### 2. Détecter les conventions du vault
+### 2. Detect the vault's conventions
 
-Capture dans des variables, à réutiliser plus bas :
+Capture into variables, to reuse below:
 
-- **`VAULT_LANGUAGE`** : la valeur peut être non-ASCII (`Français`, `Español`, `Deutsch`, `日本語`…) **et** la clé peut être traduite (le bullet est localisé pendant le bootstrap : `Langue du vault` en FR, `Idioma del vault` en ES, etc.). Cascade de détection :
-  1. `grep -oE '(Vault language|Langue du vault|Idioma del vault|Sprache des Tresors|Vault言語)[^*]*\*\*[^*]+\*\*' CLAUDE.md` — couvre les labels connus, classe valeur `[^*]+` autorise tout caractère Unicode entre les `**`.
-  2. Si rien trouvé, fallback générique : `grep -nE '^\s*-\s*\*\*[^*]+\*\*.*language|^\s*-\s*\*\*[^*]+\*\*.*langue|^\s*-\s*\*\*[^*]+\*\*.*idioma' CLAUDE.md`.
-  3. Si toujours rien, **demander à l'utilisateur** via `AskUserQuestion` (« Quelle est la langue de ce vault ? ») au lieu de défaulter silencieusement à `English` (qui ferait rendre un agent EN dans un vault FR/ES/…). Cf. issue #43 review : le default silencieux a été le bug détecté pendant l'update-vault test sur BB.
-  4. Stocker la valeur exactement comme trouvée (préserver `Français`, pas `Francais`).
-- **`MEMORY_CONVENTION`** : lister `.claude/agent-memory/` et observer si les sous-dossiers ont le suffixe `-expert` ou non.
-  - Si `.claude/agent-memory/<slug>-expert/` existe pour ≥1 domaine → convention `with-suffix`.
-  - Si `.claude/agent-memory/<slug>/` (sans suffixe) → convention `bare`.
-  - Si mixte → demander à l'utilisateur via `AskUserQuestion` quelle convention appliquer (et flagger un Radar item pour cohérence future).
-- **`EXISTING_DOMAINS`** : `ls wiki/domains/*.md` filtré, excluant les hubs hors-domaine éventuels (préfixe `_`). Le slug d'un domaine = le basename sans `.md`.
-- **`EXISTING_AGENTS`** : `ls .claude/agents/*-expert.md` (suffixe `-expert.md` obligatoire pour le dispatch dynamique de `/ingest`).
-- **`INGEST_IS_HARDCODED`** : `grep -E '(<[a-z-]+-expert>|recommended.*<[a-z-]+>)' .claude/commands/ingest.md`. Si le grep trouve un mapping explicite → `true`. Défaut depuis bootstrap : `false` (dispatch dynamique, cf. ingest.md L48 « propose one or more expert agents from those present in .claude/agents/ »).
+- **`VAULT_LANGUAGE`**: the value can be non-ASCII (`Français`, `Español`, `Deutsch`, `日本語`…) **and** the key can be translated (the bullet is localized at bootstrap time: `Langue du vault` in FR, `Idioma del vault` in ES, etc.). Detection cascade:
+  1. `grep -oE '(Vault language|Langue du vault|Idioma del vault|Sprache des Tresors|Vault言語)[^*]*\*\*[^*]+\*\*' CLAUDE.md` — covers known labels; the value class `[^*]+` allows any Unicode character between the `**`.
+  2. If nothing matched, generic fallback: `grep -nE '^\s*-\s*\*\*[^*]+\*\*.*language|^\s*-\s*\*\*[^*]+\*\*.*langue|^\s*-\s*\*\*[^*]+\*\*.*idioma' CLAUDE.md`.
+  3. If still nothing, **ask the user** via `AskUserQuestion` ("What language is this vault written in?") instead of silently defaulting to `English` (which would render an EN agent inside a FR/ES/… vault). Cf. issue #43 review: silent fallback was the bug detected during the `/update-vault` test on BB.
+  4. Store the value exactly as found (preserve `Français`, not `Francais`).
+- **`MEMORY_CONVENTION`**: list `.claude/agent-memory/` and observe whether subdirectories have the `-expert` suffix or not.
+  - If `.claude/agent-memory/<slug>-expert/` exists for ≥1 domain → convention `with-suffix`.
+  - If `.claude/agent-memory/<slug>/` (no suffix) → convention `bare`.
+  - If mixed → ask the user via `AskUserQuestion` which convention to apply (and flag a Radar item for future consistency).
+- **`EXISTING_DOMAINS`**: `ls wiki/domains/*.md` filtered, excluding any non-domain hubs (prefix `_`). A domain's slug = basename minus `.md`.
+- **`EXISTING_AGENTS`**: `ls .claude/agents/*-expert.md` (the `-expert.md` suffix is required for `/ingest`'s dynamic dispatch).
+- **`INGEST_IS_HARDCODED`**: `grep -E '(<[a-z-]+-expert>|recommended.*<[a-z-]+>)' .claude/commands/ingest.md`. If the grep finds an explicit mapping → `true`. Default since bootstrap: `false` (dynamic dispatch, cf. ingest.md L48 "propose one or more expert agents from those present in .claude/agents/").
 
 ### 3. Dispatcher
 
-Parse `$ARGUMENTS` :
+Parse `$ARGUMENTS`:
 
 ```
 <sub> <slug> [<new-slug>] [--flags...]
 ```
 
-`<sub>` ∈ {`add`, `rename`, `remove`}. Si manquant ou invalide → afficher l'usage et stopper. Tout le reste passe à la sous-section correspondante.
+`<sub>` ∈ {`add`, `rename`, `remove`}. If missing or invalid → print usage and stop. Everything else is passed to the corresponding subsection.
 
 ---
 
-## Sous-commande : `add <slug>`
+## Sub-command: `add <slug>`
 
-### Phase 1 — Interview interactive
+### Phase 1 — Interactive interview
 
-Bundler les questions en **un seul appel `AskUserQuestion`** (4 questions max ; les fields optionnels en suivi conditionnel).
+Bundle the questions into **a single `AskUserQuestion` call** (max 4 questions; optional fields as conditional follow-ups).
 
-Questions de la passe 1 (4 questions, single-select sauf indication) :
+Pass 1 questions (4 questions, single-select unless stated otherwise):
 
-1. **Domain label** (free-form, ex. `Astrophysique`, `Mental Performance`).
-2. **Deliverables signature** (multiSelect parmi : `cheatsheets`, `syntheses`, `diagrams`, `entities`, `concepts`, `cartographies`). L'issue souligne le cas multi-deliverables (ex. `cheatsheets + syntheses`).
-3. **Position dans la liste `CLAUDE.md`** (single-select) : « insérer entre **<slug-i>** et **<slug-i+1>** » pour chaque paire adjacente de `EXISTING_DOMAINS`, plus l'option « en queue ». L'issue est explicite : l'insertion est conceptuelle, pas alphabétique.
-4. **Audit migration ?** (`Oui` / `Non, plus tard`) — déclenche la passe `--audit-migration` après le rendu.
+1. **Domain label** (free-form, e.g. `Astrophysics`, `Mental Performance`).
+2. **Deliverables signature** (multiSelect among: `cheatsheets`, `syntheses`, `diagrams`, `entities`, `concepts`, `cartographies`). The issue highlights the multi-deliverable case (e.g. `cheatsheets + syntheses`).
+3. **Position in `CLAUDE.md`'s list** (single-select): "insert between **<slug-i>** and **<slug-i+1>**" for each adjacent pair from `EXISTING_DOMAINS`, plus the "at the end" option. The issue is explicit: insertion is conceptual, not alphabetical.
+4. **Audit migration?** (`Yes` / `No, later`) — triggers the `--audit-migration` pass after rendering.
 
-Passe 2 (free-form, demandée en texte libre, pas via `AskUserQuestion`) :
+Pass 2 (free-form text input, not via `AskUserQuestion`):
 
 - `summary_l0` (≤140 chars).
-- `summary_l1` (paragraphe structuré, 50-150 mots).
-- `domain_intro_paragraph` (1-2 phrases en tête du hub).
-- `taxonomy` (sous-thèmes initiaux, ex. liste à puces FR).
-- `domain_specific_observation_section` (liste libre des angles que l'agent doit chercher dans une source du domaine — **authored dans `VAULT_LANGUAGE`**, pas traduit d'un placeholder).
-- `trigger_examples` (déclencheurs visuels typiques pour les frames, ex. `tableaux de résultats, schémas d'architecture`).
-- *Optionnels — laisser vide pour omettre les blocs correspondants* : `authority_table_section`, `co_ingest_section`, `confidentiality_section`, `frames_visual_formats` (override du défaut), `hub_pivot_marker` (marqueur si ce hub est le pivot du vault).
+- `summary_l1` (structured paragraph, 50-150 words).
+- `domain_intro_paragraph` (1-2 sentences at the top of the hub).
+- `taxonomy` (initial sub-themes, e.g. bulleted list).
+- `domain_specific_observation_section` (free-form list of angles the agent should look for in a source of the domain — **authored in `VAULT_LANGUAGE`**, not translated from a placeholder).
+- `trigger_examples` (typical visual triggers for frames, e.g. `result tables, architecture diagrams`).
+- *Optional — leave empty to omit the corresponding blocks*: `authority_table_section`, `co_ingest_section`, `confidentiality_section`, `frames_visual_formats` (override the default), `hub_pivot_marker` (marker if this hub is the vault's pivot).
 
-### Phase 2 — Fetch des templates upstream
+### Phase 2 — Fetch the upstream templates
 
 ```bash
 git fetch template-upstream --tags
@@ -92,163 +92,163 @@ TPL_MEMORY=$(git show template-upstream/main:.claude/agent-memory/domain-memory.
 TPL_HUB=$(git show template-upstream/main:wiki/domains/domain.md.tpl)
 ```
 
-Si l'un des `git show` échoue → STOP, expliquer que le template upstream n'est pas accessible.
+If any `git show` fails → STOP, explain that the upstream template isn't reachable.
 
-### Phase 3 — Rendu
+### Phase 3 — Rendering
 
-Substituer les `{{...}}` :
+Substitute the `{{...}}` placeholders:
 
 - `{{domain_slug}}` → `<slug>` argument.
-- `{{domain_label}}` → réponse interview.
-- `{{bootstrap_date}}` → date du jour `YYYY-MM-DD`.
-- `{{summary_l0}}`, `{{summary_l1}}`, `{{domain_intro_paragraph}}`, `{{taxonomy_section}}`, `{{domain_specific_observation_section}}`, `{{trigger_examples}}` → réponses interview.
-- `{{deliverables_signature_block}}` → générer un bloc multi-lignes listant chaque deliverable choisi avec une phrase descriptive courte (ex. `Une cheatsheet `wiki/cheatsheets/<topic>.md` par sous-thème — tableaux synthétiques, seuils, matrices.`).
-- `{{authority_table_section}}`, `{{co_ingest_section}}`, `{{confidentiality_section}}`, `{{frames_visual_formats}}`, `{{hub_pivot_marker}}`, `{{related_domains_section}}` → laisser vide si l'utilisateur n'a rien donné. Si la balise apparaît seule sur une ligne → supprimer la ligne entière.
-- `{{model}}` → `claude-sonnet-4-6` (défaut template) sauf si l'utilisateur précise.
-- `{{maxTurns}}`, `{{effort}}` → valeurs par défaut observées dans les agents existants (`grep -h '^maxTurns:\|^effort:' .claude/agents/*-expert.md | sort -u`).
-- `{{vault_language}}` → `VAULT_LANGUAGE` détecté.
+- `{{domain_label}}` → interview answer.
+- `{{bootstrap_date}}` → today's date `YYYY-MM-DD`.
+- `{{summary_l0}}`, `{{summary_l1}}`, `{{domain_intro_paragraph}}`, `{{taxonomy_section}}`, `{{domain_specific_observation_section}}`, `{{trigger_examples}}` → interview answers.
+- `{{deliverables_signature_block}}` → generate a multi-line block listing each chosen deliverable with a short descriptive sentence (e.g. `One cheatsheet `wiki/cheatsheets/<topic>.md` per sub-theme — synthesis tables, thresholds, matrices.`).
+- `{{authority_table_section}}`, `{{co_ingest_section}}`, `{{confidentiality_section}}`, `{{frames_visual_formats}}`, `{{hub_pivot_marker}}`, `{{related_domains_section}}` → leave empty if the user provided nothing. If the placeholder appears alone on a line → remove the whole line.
+- `{{model}}` → `claude-sonnet-4-6` (template default) unless the user overrides.
+- `{{maxTurns}}`, `{{effort}}` → default values observed in existing agents (`grep -h '^maxTurns:\|^effort:' .claude/agents/*-expert.md | sort -u`).
+- `{{vault_language}}` → detected `VAULT_LANGUAGE`.
 
-Si `VAULT_LANGUAGE != English`, traduire les sections narratives du template rendu (corps du prompt, descriptions, intro du hub) tout en gardant en anglais les champs YAML techniques (`name`, `tools`, `model`, `memory`, `permissionMode`, `maxTurns`, `effort`).
+If `VAULT_LANGUAGE != English`, translate the narrative sections of the rendered template (prompt body, descriptions, hub intro) while keeping the technical YAML fields in English (`name`, `tools`, `model`, `memory`, `permissionMode`, `maxTurns`, `effort`).
 
-### Phase 4 — Chemins de destination
+### Phase 4 — Destination paths
 
-Cohérents avec les conventions détectées :
+Consistent with the detected conventions:
 
-| Source rendue | Destination |
+| Rendered source | Destination |
 |---|---|
-| `TPL_AGENT` rendu | `.claude/agents/<slug>-expert.md` |
-| `TPL_MEMORY` rendu | `.claude/agent-memory/<slug>(-expert)/MEMORY.md` selon `MEMORY_CONVENTION` |
-| `TPL_HUB` rendu | `wiki/domains/<slug>.md` |
+| `TPL_AGENT` rendered | `.claude/agents/<slug>-expert.md` |
+| `TPL_MEMORY` rendered | `.claude/agent-memory/<slug>(-expert)/MEMORY.md` per `MEMORY_CONVENTION` |
+| `TPL_HUB` rendered | `wiki/domains/<slug>.md` |
 
-Créer également un fichier `.claude/agents/<slug>-expert.suggestions.md` vide (sera alimenté par `/ingest` puis consommé par `/evolve-agent`).
+Also create an empty `.claude/agents/<slug>-expert.suggestions.md` (will be filled by `/ingest`, then consumed by `/evolve-agent`).
 
-### Phase 5 — Insertion dans les déclarations canoniques
+### Phase 5 — Insertion into the canonical declarations
 
-Pour chaque fichier, **lire** le fichier, **calculer le patch**, l'**afficher en preview**, puis appliquer après validation globale (cf. section « Validation & application »).
+For each file: **read** it, **compute the patch**, **show the preview**, then apply after global validation (cf. "Validation & application" section).
 
-- **`CLAUDE.md`** :
-  - Section `## User domains` : insérer une nouvelle entrée numérotée à la position choisie en Phase 1. **Incrémenter de 1 le numéro de chaque entrée située en aval de l'insertion** (regex `^(\d+)\. ` → captures + 1).
-  - Section `## Per-domain expert agents` : insérer la ligne `- \`<slug>-expert\` — livrables : <résumé deliverables>. <signature one-liner>.` à la même position relative.
-- **`README.md`** : si une table « Domains » ou une liste à puces existe, insérer la ligne. Sinon, log un warning « README sans table de domaines détectée, à éditer à la main ».
-- **`wiki/index.md`** : section `## Domains` ou `## Domaines`, insérer la ligne `- [[domains/<slug>]] — <summary_l0>`.
-- **`wiki/overview.md`** : section listant les domaines, insérer la ligne similaire.
-- **`.claude/commands/ingest.md`** : si `INGEST_IS_HARDCODED == false`, **ne pas toucher** — le dispatch dynamique trouvera automatiquement `<slug>-expert.md` au prochain `/ingest`. Si `true` (vault qui a éditeé son ingest.md), localiser le mapping et ajouter une entrée ; logger un warning.
+- **`CLAUDE.md`**:
+  - `## User domains` section: insert a new numbered entry at the position chosen in Phase 1. **Increment by 1 the number of every entry downstream of the insertion** (regex `^(\d+)\. ` → captures + 1).
+  - `## Per-domain expert agents` section: insert the line `- \`<slug>-expert\` — deliverables: <deliverables summary>. <signature one-liner>.` at the same relative position.
+- **`README.md`**: if a "Domains" table or bullet list exists, insert the line. Otherwise log a warning "README has no domain table detected, edit manually".
+- **`wiki/index.md`**: `## Domains` or `## Domaines` section, insert the line `- [[domains/<slug>]] — <summary_l0>`.
+- **`wiki/overview.md`**: section listing domains, insert a similar line.
+- **`.claude/commands/ingest.md`**: if `INGEST_IS_HARDCODED == false`, **do not touch** — dynamic dispatch will automatically find `<slug>-expert.md` on the next `/ingest`. If `true` (vault that customized its ingest.md), locate the mapping and add an entry; log a warning.
 
-### Phase 6 — `--audit-migration` (si demandé)
+### Phase 6 — `--audit-migration` (if requested)
 
-Objectif : identifier les sources / concepts / entities existants qui appartiennent en réalité au nouveau domaine et devraient être re-taggés.
+Goal: identify existing sources / concepts / entities that actually belong to the new domain and should be re-tagged.
 
-Pipeline en deux passes (cf. issue #38 : le filtre LLM second pass est obligatoire — sans lui, ~25/30 candidats sont des faux positifs lexicaux) :
+Two-pass pipeline (cf. issue #38: the second-pass LLM filter is mandatory — without it, ~25/30 candidates are lexical false positives):
 
-1. **Pré-sélection lexicale** : extraire 8-12 mots-clés depuis `summary_l1` + `taxonomy_section` (mots de ≥4 chars, lowercase, hors stopwords FR/EN). `grep -ilE '(\bmot1\b|\bmot2\b|…)' wiki/sources/*.md wiki/concepts/*.md wiki/entities/*.md` → liste de candidats.
-2. **Filtre LLM** : pour chaque candidat, lire son frontmatter (`summary_l1` complet) + son `domains:` actuel. Évaluer in-context (pas d'agent spawn) : « ce candidat appartient-il au domaine `<slug>` ? Donne un verdict parmi `yes`, `no`, `uncertain` avec une justification d'une ligne. ». Garder seulement les `yes` confiants pour la pré-sélection ; les `uncertain` peuvent être présentés en deuxième batch.
+1. **Lexical pre-selection**: extract 8-12 keywords from `summary_l1` + `taxonomy_section` (words ≥4 chars, lowercase, FR/EN stopwords excluded). `grep -ilE '(\bword1\b|\bword2\b|…)' wiki/sources/*.md wiki/concepts/*.md wiki/entities/*.md` → candidates list.
+2. **LLM filter**: for each candidate, read its frontmatter (full `summary_l1`) + its current `domains:`. Evaluate in-context (no agent spawn): "Does this candidate belong to the `<slug>` domain? Give a verdict among `yes`, `no`, `uncertain` with a one-line justification." Keep only confident `yes` for the pre-selection; `uncertain` can be presented in a second batch.
 
-3. **Présentation utilisateur** : `AskUserQuestion` multiSelect, pre-checked uniquement les `yes`, listant `<path> — <verdict>: <justification>` par option (max 4 par batch, pagination via batches successifs si >4 candidats).
+3. **User presentation**: `AskUserQuestion` multiSelect, pre-checked only the `yes`, listing `<path> — <verdict>: <justification>` per option (max 4 per batch, paginated successively if >4 candidates).
 
-4. **Application** : pour chaque candidat validé, éditer `domains:` du frontmatter pour y ajouter `<slug>` (préserver les domaines existants).
+4. **Application**: for each validated candidate, edit the frontmatter's `domains:` to add `<slug>` (preserving existing domains).
 
-### Phase 7 — Validation finale + apply
+### Phase 7 — Final validation + apply
 
-Cf. section commune « Validation & application ».
+Cf. shared "Validation & application" section.
 
 ---
 
-## Sous-commande : `rename <old-slug> <new-slug>`
+## Sub-command: `rename <old-slug> <new-slug>`
 
-### Phase 1 — Pré-validation
+### Phase 1 — Pre-validation
 
-- Refuser si `<new-slug>` existe déjà comme domaine (`wiki/domains/<new-slug>.md` présent OU `.claude/agents/<new-slug>-expert.md` présent) → STOP, demander de choisir un autre slug ou de `remove` d'abord.
-- Refuser si `<new-slug>` n'est pas en `[a-z0-9-]+` (kebab-case ASCII strict — hors scope explicite : non-latin).
-- Refuser si `<old-slug>` n'existe pas dans `EXISTING_DOMAINS`.
+- Refuse if `<new-slug>` already exists as a domain (`wiki/domains/<new-slug>.md` present OR `.claude/agents/<new-slug>-expert.md` present) → STOP, ask the user to pick another slug or to `remove` first.
+- Refuse if `<new-slug>` is not in `[a-z0-9-]+` (strict kebab-case ASCII — explicitly out of scope: non-Latin).
+- Refuse if `<old-slug>` does not exist in `EXISTING_DOMAINS`.
 
-### Phase 2 — Scan exhaustif
+### Phase 2 — Exhaustive scan
 
 ```bash
 bash scripts/scan-domain-refs.sh <old-slug> > /tmp/scan-rename.txt
 ```
 
-Bucketer la sortie en lisant chaque ligne (champ 1 = bucket).
+Bucket the output by reading each line (field 1 = bucket).
 
-### Phase 3 — Présentation par bucket
+### Phase 3 — Per-bucket presentation
 
-Présenter le **résumé global** (compteurs par bucket) avant tout, puis demander bucket par bucket. Pas de validation en bloc — chaque catégorie a son protocole propre.
+Present the **global summary** first (per-bucket counters), then ask bucket by bucket. No bulk validation — each category has its own protocol.
 
-#### `B1 CANONICAL` (déclarations actives)
+#### `B1 CANONICAL` (active declarations)
 
-`AskUserQuestion` Pattern D (file selection, multiSelect, **pre-checked tous**). Description par fichier : nombre d'occurrences et 1-2 lignes d'exemple. L'utilisateur peut décocher si une occurrence est suspecte.
+`AskUserQuestion` Pattern D (file selection, multiSelect, **all pre-checked**). Description per file: occurrence count and 1-2 example lines. The user can uncheck if an occurrence looks suspicious.
 
-#### `B2 FRONTMATTER` (champ `domains:`)
+#### `B2 FRONTMATTER` (`domains:` field)
 
-`AskUserQuestion` Pattern D, **pre-checked tous**. Substitution mécanique sûre — c'est de la métadonnée, pas de la prose.
+`AskUserQuestion` Pattern D, **all pre-checked**. Mechanical substitution, safe — this is metadata, not prose.
 
-#### `B3 WIKILINK` (`[[domains/<old>]]` sans alias)
+#### `B3 WIKILINK` (`[[domains/<old>]]` without alias)
 
-`AskUserQuestion` Pattern D, **pre-checked tous**. Substitution `[[domains/<old>]]` → `[[domains/<new>]]`.
+`AskUserQuestion` Pattern D, **all pre-checked**. Substitution `[[domains/<old>]]` → `[[domains/<new>]]`.
 
 #### `B4 ALIAS` (`[[domains/<old>|Label]]`)
 
-**Un par un**. Pour chaque alias :
+**One by one**. For each alias:
 
 ```json
 {
-  "question": "Wikilink alias à <path>:<line> — '[[domains/<old>|<Label>]]'. Que faire ?",
+  "question": "Wikilink alias at <path>:<line> — '[[domains/<old>|<Label>]]'. What do you want?",
   "options": [
-    {"label": "Renommer slug + garder label", "description": "[[domains/<new>|<Label>]] — utile si le label est délibérément différent"},
-    {"label": "Renommer slug + sync label", "description": "[[domains/<new>|<NewLabel>]] — utile si le label suivait le slug"},
-    {"label": "Laisser tel quel", "description": "Skip cette occurrence"}
+    {"label": "Rename slug + keep label", "description": "[[domains/<new>|<Label>]] — useful if the label was deliberately different"},
+    {"label": "Rename slug + sync label", "description": "[[domains/<new>|<NewLabel>]] — useful if the label tracked the slug"},
+    {"label": "Leave as-is", "description": "Skip this occurrence"}
   ]
 }
 ```
 
-`<NewLabel>` est dérivé de `<new>` (Capitalize first, hyphens → spaces). L'utilisateur peut surcharger via « Other ».
+`<NewLabel>` is derived from `<new>` (Capitalize first, hyphens → spaces). The user can override via "Other".
 
-#### `B5 COMPOSED` (slugs composés)
+#### `B5 COMPOSED` (composed slugs)
 
-**Un par un**. Pour chaque candidat (ex. `equipe-agents-roles-<old>`) :
+**One by one**. For each candidate (e.g. `equipe-agents-roles-<old>`):
 
 ```json
 {
-  "question": "Slug composé à <path>:<line> — '<composed>'. Contient '<old>' mais semble être un identifiant à part entière. Renommer ?",
+  "question": "Composed slug at <path>:<line> — '<composed>'. Contains '<old>' but looks like a standalone identifier. Rename?",
   "options": [
-    {"label": "Garder tel quel", "description": "<composed> est un concept distinct (Recommandé)"},
-    {"label": "Renommer", "description": "Substituer <old> → <new> dans <composed> → <new-composed>"}
+    {"label": "Leave as-is", "description": "<composed> is a separate concept (Recommended)"},
+    {"label": "Rename", "description": "Substitute <old> → <new> inside <composed> → <new-composed>"}
   ]
 }
 ```
 
-Si l'utilisateur choisit « Renommer », appliquer la sub à toutes les occurrences (filename + références) du composé en question.
+If the user picks "Rename", apply the substitution to every occurrence (filename + references) of that composed slug.
 
-#### `B6 PROSE` (mot dans le corps)
+#### `B6 PROSE` (word in body text)
 
-**Un par un** avec une ligne de contexte. Pour chaque hit :
+**One by one** with one line of context. For each hit:
 
 ```json
 {
-  "question": "Occurrence prose à <path>:<line>. Contexte : '<line content>'. Renommer ?",
+  "question": "Prose occurrence at <path>:<line>. Context: '<line content>'. Rename?",
   "options": [
-    {"label": "Garder tel quel", "description": "C'est un mot de la langue naturelle, pas le slug"},
-    {"label": "Renommer", "description": "Substituer <old> → <new> à cette ligne"}
+    {"label": "Leave as-is", "description": "Natural-language word, not the slug"},
+    {"label": "Rename", "description": "Substitute <old> → <new> on this line"}
   ]
 }
 ```
 
-Pour limiter le bruit : si >30 hits PROSE, proposer un batch initial groupé « tout garder par défaut, je décoche au cas par cas ce qui doit être renommé » (Pattern D, **rien de pre-checked**).
+To limit noise: if >30 PROSE hits, propose an initial grouped batch "keep everything by default, I uncheck the ones to rename" (Pattern D, **nothing pre-checked**).
 
 #### `B7 LOGTAG`
 
-Bucket sensible : ces tags structurent le log historique. Présentation `AskUserQuestion` Pattern D, **rien pre-checked**. L'utilisateur opt-in pattern par pattern. Conseil affiché : « renommer un log tag = réécrire un fait historique, généralement préférer skip ».
+Sensitive bucket: these tags structure historical log entries. Present via `AskUserQuestion` Pattern D, **nothing pre-checked**. The user opts in pattern by pattern. Display the warning: "renaming a log tag = rewriting a historical fact, usually prefer skip".
 
-#### `B8 HIST` (traces historiques)
+#### `B8 HIST` (historical traces)
 
-**Skip par défaut**. Si flag `--include-historical` présent, présenter par sous-bucket (log / decisions / syntheses / sources) avec `AskUserQuestion` Pattern D, **rien pre-checked**. Conseil affiché : « les pages historiques décrivent un état passé du vault. Les réécrire = falsifier l'historique. »
+**Skip by default**. If the `--include-historical` flag is set, present by sub-bucket (log / decisions / syntheses / sources) with `AskUserQuestion` Pattern D, **nothing pre-checked**. Display the warning: "historical pages describe a past state of the vault. Rewriting them = falsifying history."
 
 #### `B9 DRIFT`
 
-**Warning final, jamais auto-fix**. Lister les hits en fin de rapport avec recommandation manuelle.
+**Final warning, never auto-fix**. List the hits in the final report with a recommendation for manual review.
 
-### Phase 4 — Renames physiques
+### Phase 4 — Physical renames
 
-Une fois toutes les validations bucket recueillies :
+Once all bucket validations are collected:
 
 ```bash
 # Agent + suggestions
@@ -256,35 +256,35 @@ mv .claude/agents/<old>-expert.md .claude/agents/<new>-expert.md
 [ -f .claude/agents/<old>-expert.suggestions.md ] && mv .claude/agents/<old>-expert.suggestions.md .claude/agents/<new>-expert.suggestions.md
 [ -f .claude/agents/<old>-expert.suggestions.archive.md ] && mv .claude/agents/<old>-expert.suggestions.archive.md .claude/agents/<new>-expert.suggestions.archive.md
 
-# Mémoire (respecter MEMORY_CONVENTION)
+# Memory (respect MEMORY_CONVENTION)
 mv .claude/agent-memory/<old>${SUFFIX}/ .claude/agent-memory/<new>${SUFFIX}/
 
 # Hub
 mv wiki/domains/<old>.md wiki/domains/<new>.md
 ```
 
-À l'intérieur de **chaque** fichier renommé, substituer toutes les références internes au slug et au label (frontmatter `name:`, `description:`, bodies, etc.).
+Inside **each** renamed file, substitute all internal references to the slug and the label (frontmatter `name:`, `description:`, bodies, etc.).
 
-### Phase 5 — Renumérotation `CLAUDE.md`
+### Phase 5 — `CLAUDE.md` renumbering
 
-La rename ne touche pas la position numérique par défaut. Proposer (`AskUserQuestion`) :
-- « Garder la même position numérique » (défaut).
-- « Re-positionner conceptuellement » (re-poser la question Phase 1.3 de `add`).
+The rename doesn't touch the numbered position by default. Propose (`AskUserQuestion`):
+- "Keep the same numeric position" (default).
+- "Re-position conceptually" (re-ask question 1.3 from `add`).
 
 ### Phase 6 — Validation + apply
 
-Cf. section commune.
+Cf. shared section.
 
 ---
 
-## Sous-commande : `remove <slug>`
+## Sub-command: `remove <slug>`
 
-Flags : `--archive` (défaut) | `--purge` | `--include-historical` (modifie `--archive` pour proposer l'historique au cas par cas, sans déclencher le mode `--purge` global).
+Flags: `--archive` (default) | `--purge` | `--include-historical` (modifies `--archive` to propose history case-by-case, without triggering the global `--purge` mode).
 
-### Phase 1 — Pré-validation
+### Phase 1 — Pre-validation
 
-- Refuser si `<slug>` est le **seul domaine** du vault (`|EXISTING_DOMAINS| == 1`) → l'écosystème ne fonctionne pas sans au moins un domaine. Cf. `BOOTSTRAP.md`.
-- Refuser si `<slug>` n'existe pas dans `EXISTING_DOMAINS`.
+- Refuse if `<slug>` is the **only domain** in the vault (`|EXISTING_DOMAINS| == 1`) → the ecosystem doesn't work without at least one domain. Cf. `BOOTSTRAP.md`.
+- Refuse if `<slug>` does not exist in `EXISTING_DOMAINS`.
 
 ### Phase 2 — Scan
 
@@ -292,74 +292,74 @@ Flags : `--archive` (défaut) | `--purge` | `--include-historical` (modifie `--a
 bash scripts/scan-domain-refs.sh <slug> > /tmp/scan-remove.txt
 ```
 
-### Phase 3 — Présentation par bucket
+### Phase 3 — Per-bucket presentation
 
-**Invariant `--archive` (défaut) — STRICT.** Les seuls fichiers supprimés physiquement sont ceux listés en Phase 4 :
+**`--archive` (default) invariant — STRICT.** The only files physically deleted are those listed in Phase 4:
 
 - `.claude/agents/<slug>-expert.md` (+ `.suggestions.md` + `.suggestions.archive.md`)
 - `.claude/agent-memory/<slug>${SUFFIX}/`
 - `wiki/domains/<slug>.md`
 
-**Aucune autre suppression de fichier.** Les pages de contenu (`wiki/sources/`, `wiki/concepts/`, `wiki/entities/`, `wiki/decisions/`, `wiki/syntheses/`) sont :
+**No other file deletion.** Content pages (`wiki/sources/`, `wiki/concepts/`, `wiki/entities/`, `wiki/decisions/`, `wiki/syntheses/`) are:
 
-- **éditées** dans leur frontmatter (B2 retire le slug de `domains:`),
-- ou ont des **lignes retirées** dans leur corps (B3/B4 sur les wikilinks orphelins).
+- **edited** in their frontmatter (B2 removes the slug from `domains:`),
+- or have **lines removed** in their body (B3/B4 on orphan wikilinks).
 
-Si une page devient orpheline (`domains: []` après retrait), un dialogue dédié est proposé (cf. B2 étape 2) — **la suppression de cette page reste opt-in case-by-case**, jamais en batch, jamais pre-checked.
+If a page becomes orphaned (`domains: []` after removal), a dedicated dialog is proposed (cf. B2 step 2) — **deleting that page stays opt-in case-by-case**, never in batch, never pre-checked.
 
-Si tu te surprends à proposer la suppression d'une page de contenu en batch (« Supprimer les N pages ») en mode `--archive` → tu as violé l'invariant : abort, recompose le plan.
+If you catch yourself proposing the deletion of a content page in batch ("Delete the N pages") in `--archive` mode → you've violated the invariant: abort, rebuild the plan.
 
-Modes :
+Modes:
 
-- **`--archive`** (défaut) : édite B1-B4 (lignes / frontmatter / wikilinks). B5/B6/B7 skip silencieux (warnings finaux). B8 préservé entièrement (intouché, pas même proposé). B9 warning.
-- **`--purge`** : édite B1-B4 **plus** propose B5/B6/B7/B8 case-by-case (mêmes protocoles que `rename`, l'action étant la suppression de l'occurrence). La suppression de fichier reste limitée à Phase 4 sauf opt-in explicite case-by-case par page.
-- **`--include-historical`** (modifie `--archive`) : propose B8 sub-bucket par sub-bucket sans pre-check. Toujours pas de suppression de fichier par défaut — l'action B8 reste l'édition de ligne ou de frontmatter.
+- **`--archive`** (default): edits B1-B4 (lines / frontmatter / wikilinks). B5/B6/B7 silently skipped (final warnings). B8 fully preserved (untouched, not even proposed). B9 warning.
+- **`--purge`**: edits B1-B4 **plus** proposes B5/B6/B7/B8 case-by-case (same protocols as `rename`, the action being removal of the occurrence). File deletion stays limited to Phase 4 unless explicit per-page opt-in.
+- **`--include-historical`** (modifies `--archive`): proposes B8 sub-bucket by sub-bucket without pre-check. Still no file deletion by default — the B8 action remains line edit or frontmatter edit.
 
 #### B1 CANONICAL (active)
 
-`AskUserQuestion` Pattern D, **pre-checked tous**. Suppression de la ligne (ou de l'entrée numérotée) correspondant au slug.
+`AskUserQuestion` Pattern D, **all pre-checked**. Removal of the line (or numbered entry) corresponding to the slug.
 
 #### B2 FRONTMATTER
 
-L'action B2 est **toujours une édition de frontmatter, jamais une suppression de page**. Elle se déroule en deux étapes.
+The B2 action is **always a frontmatter edit, never a page deletion**. It runs in two steps.
 
-**Étape 1 — retrait du slug.** `AskUserQuestion` Pattern D, **pre-checked tous**. Pour chaque page avec `domains: [...]` contenant `<slug>` : retirer `<slug>` de la liste, conserver les autres domaines. Les pages B8 HIST (situées dans `wiki/log.md`, `wiki/decisions/`, `wiki/syntheses/`, `wiki/sources/`) sont **exclues de cette étape en mode `--archive`** — leur frontmatter n'est pas édité (cf. invariant Phase 3 + B8).
+**Step 1 — slug removal.** `AskUserQuestion` Pattern D, **all pre-checked**. For each page with `domains: [...]` containing `<slug>`: remove `<slug>` from the list, keep the other domains. B8 HIST pages (located in `wiki/log.md`, `wiki/decisions/`, `wiki/syntheses/`, `wiki/sources/`) are **excluded from this step in `--archive` mode** — their frontmatter isn't edited (cf. Phase 3 invariant + B8).
 
-**Étape 2 — orphelines.** Pour chaque page où le retrait laisse `domains: []`, dialogue dédié **un-par-un** (jamais en batch, jamais pre-checked) :
+**Step 2 — orphans.** For each page where removal leaves `domains: []`, dedicated **one-by-one** dialog (never in batch, never pre-checked):
 
 ```json
 {
-  "question": "Page <path> devient orpheline (domains: []) après retrait de <slug>. Que faire ?",
+  "question": "Page <path> becomes orphan (domains: []) after removing <slug>. What do you want?",
   "options": [
-    {"label": "Re-tagger", "description": "Choisir un autre domaine parmi EXISTING_DOMAINS"},
-    {"label": "Laisser orpheline", "description": "domains: [] — la page reste en place, sera flaggée par /lint (Recommandé)"},
-    {"label": "Supprimer la page", "description": "Opt-in explicite — uniquement pertinent pour les pages mono-domaine de pure description du domaine retiré"}
+    {"label": "Re-tag", "description": "Pick another domain from EXISTING_DOMAINS"},
+    {"label": "Leave orphan", "description": "domains: [] — page stays in place, will be flagged by /lint (Recommended)"},
+    {"label": "Delete the page", "description": "Explicit opt-in — only relevant for mono-domain pages that purely describe the removed domain"}
   ]
 }
 ```
 
-« Supprimer la page » est **opt-in par page**, jamais en batch. Si plus de 3 orphelines, présenter le dialogue dans l'ordre alphabétique des paths, l'utilisateur peut répondre « Laisser orpheline » à toutes pour zapper rapidement.
+"Delete the page" is **opt-in per page**, never in batch. If more than 3 orphans, present the dialog in alphabetical path order; the user can answer "Leave orphan" on all of them to skip through quickly.
 
 #### B3 WIKILINK / B4 ALIAS
 
-`AskUserQuestion` Pattern D, **pre-checked tous**. Suppression de la ligne hôte (les wikilinks `[[domains/<slug>]]` n'ont plus de cible une fois `wiki/domains/<slug>.md` supprimé). Si la ligne contient d'autres contenus utiles → demander à l'utilisateur (split de la ligne ou conservation).
+`AskUserQuestion` Pattern D, **all pre-checked**. Removal of the host line (wikilinks `[[domains/<slug>]]` lose their target once `wiki/domains/<slug>.md` is deleted). If the line contains other useful content → ask the user (split the line or keep it).
 
 #### B5/B6/B7
 
-`--archive` : skip silencieux, listés en warnings finaux.
-`--purge` : proposés case-by-case (« supprimer la ligne ? remplacer par texte vide ? »).
+`--archive`: silent skip, listed in the final warnings.
+`--purge`: proposed case-by-case ("remove the line? replace with empty text?").
 
 #### B8 HIST
 
-**Rappel invariant** : les pages B8 sont dans `wiki/log.md`, `wiki/decisions/`, `wiki/syntheses/`, `wiki/sources/`. Elles tracent l'état passé du vault et **ne sont jamais supprimées par `/domain remove --archive`**, même indirectement via le dialogue B2 étape 2 « page orpheline » (les pages B8 sont exclues de B2 entièrement en `--archive`).
+**Invariant reminder**: B8 pages live in `wiki/log.md`, `wiki/decisions/`, `wiki/syntheses/`, `wiki/sources/`. They record the vault's past state and are **never deleted by `/domain remove --archive`**, even indirectly via the "orphan page" B2 step 2 dialog (B8 pages are excluded from B2 entirely in `--archive`).
 
-- **`--archive`** (défaut) : B8 préservé entièrement. Pas de prompt, pas d'édition de frontmatter, pas d'édition de ligne.
-- **`--include-historical`** : propose par sous-bucket (log / decisions / syntheses / sources) avec `AskUserQuestion` Pattern D, **rien pre-checked**. L'action est **édition de ligne** (retirer la mention du slug dans le corps) ou édition de frontmatter (retirer le slug de `domains:`), pas suppression de fichier. Suppression de page B8 = opt-in explicite case-by-case via le même dialogue à 3 options que B2 étape 2 (jamais en batch).
-- **`--purge`** : implique `--include-historical`. La suppression de page B8 reste opt-in case-by-case par le dialogue dédié.
+- **`--archive`** (default): B8 fully preserved. No prompt, no frontmatter edit, no line edit.
+- **`--include-historical`**: propose by sub-bucket (log / decisions / syntheses / sources) with `AskUserQuestion` Pattern D, **nothing pre-checked**. The action is **line edit** (remove the slug mention from the body) or frontmatter edit (remove the slug from `domains:`), not file deletion. B8 page deletion = explicit opt-in case-by-case via the same 3-option dialog as B2 step 2 (never in batch).
+- **`--purge`**: implies `--include-historical`. B8 page deletion stays opt-in case-by-case via the dedicated dialog.
 
-### Phase 4 — Suppressions physiques
+### Phase 4 — Physical deletions
 
-**Liste exhaustive — `--archive` ne supprime physiquement QUE ces fichiers** :
+**Exhaustive list — `--archive` ONLY physically deletes these files**:
 
 ```bash
 rm .claude/agents/<slug>-expert.md
@@ -369,87 +369,87 @@ rm -rf .claude/agent-memory/<slug>${SUFFIX}/
 rm wiki/domains/<slug>.md
 ```
 
-Toute suppression supplémentaire (page de contenu orpheline opt-in via B2 étape 2, page B8 opt-in en `--include-historical` ou `--purge`) est **validée case-by-case** par l'utilisateur via le dialogue dédié, et journalisée séparément dans le rapport final (Phase 6) en `Pages de contenu supprimées (opt-in)` distinct de `Fichiers du domaine supprimés (Phase 4)`.
+Any additional deletion (orphan content page opt-in via B2 step 2, B8 page opt-in under `--include-historical` or `--purge`) is **validated case-by-case** by the user via the dedicated dialog, and journaled separately in the final report (Phase 6) under `Content pages deleted (opt-in)`, distinct from `Domain files deleted (Phase 4)`.
 
-### Phase 5 — Renumérotation `CLAUDE.md`
+### Phase 5 — `CLAUDE.md` renumbering
 
-Renuméroter les entrées en aval de la position supprimée dans `## User domains`. Idem pour toute autre liste numérotée.
+Renumber the entries downstream of the deleted position in `## User domains`. Same for any other numbered list.
 
 ### Phase 6 — Validation + apply
 
-Cf. section commune.
+Cf. shared section.
 
 ---
 
-## Validation & application (commune aux 3 sous-commandes)
+## Validation & application (shared across the 3 sub-commands)
 
-### A. Phase de scan (read-only)
+### A. Scan phase (read-only)
 
-Toute la commande commence par produire un **plan de changements** sans rien modifier. Les étapes 1-3 de chaque sous-commande sont en lecture pure.
+The command always begins by producing a **change plan** without modifying anything. Steps 1-3 of each sub-command are pure reads.
 
-### B. Phase de preview
+### B. Preview phase
 
-Afficher à l'utilisateur :
+Show the user:
 
-- **Résumé global** : « Vault: <path>. Sous-commande: <sub>. Slug(s): <slugs>. Buckets impactés : B1:<N1>, B2:<N2>, … ».
-- **Liste des renames physiques** (fichiers + dossiers).
-- **Liste des fichiers modifiés** (groupée par bucket).
-- **Warnings** : B9 DRIFT, B5/B6/B7 skippés (en `--archive`), incohérences inter-bucket si détectées.
+- **Global summary**: "Vault: <path>. Sub-command: <sub>. Slug(s): <slugs>. Buckets impacted: B1:<N1>, B2:<N2>, …".
+- **List of physical renames** (files + directories).
+- **List of modified files** (grouped by bucket).
+- **Warnings**: B9 DRIFT, B5/B6/B7 skipped (under `--archive`), cross-bucket inconsistencies if detected.
 
-### C. Phase de validation finale
+### C. Final validation phase
 
-`AskUserQuestion` :
+`AskUserQuestion`:
 
 ```json
 {
-  "question": "Appliquer les changements ?",
-  "header": "Apply ?",
+  "question": "Apply the changes?",
+  "header": "Apply?",
   "options": [
-    {"label": "Apply", "description": "Exécuter renames + edits + suppressions"},
-    {"label": "Apply (dry-run)", "description": "Lister les commandes shell sans les exécuter (debug)"},
-    {"label": "Abort", "description": "Ne rien faire, conserver le plan en /tmp"}
+    {"label": "Apply", "description": "Run renames + edits + deletions"},
+    {"label": "Apply (dry-run)", "description": "List the shell commands without executing them (debug)"},
+    {"label": "Abort", "description": "Do nothing, keep the plan in /tmp"}
   ]
 }
 ```
 
-### D. Phase d'application
+### D. Apply phase
 
-Ordre strict (les renames physiques d'abord pour éviter d'éditer des fichiers qui vont disparaître) :
+Strict order (physical renames first to avoid editing files that are about to disappear):
 
-1. Renames physiques (`mv`).
-2. Suppressions physiques (`rm`).
-3. Edits de contenu (substitutions, suppressions de lignes, renumérotations).
-4. Création de fichiers (rendu des templates pour `add`).
+1. Physical renames (`mv`).
+2. Physical deletions (`rm`).
+3. Content edits (substitutions, line removals, renumbering).
+4. File creations (template rendering for `add`).
 
-Si une étape échoue à mi-chemin :
-- Logger l'erreur, **ne pas continuer**.
-- Suggérer à l'utilisateur de checkpointer Git (`git status` + commit/stash) avant de re-tenter.
-- Le plan est en `/tmp/domain-plan-<timestamp>.txt` pour debug.
+If a step fails mid-way:
+- Log the error, **do not continue**.
+- Suggest the user git-checkpoint (`git status` + commit/stash) before retrying.
+- The plan lives in `/tmp/domain-plan-<timestamp>.txt` for debugging.
 
-### E. Phase de journalisation
+### E. Journaling phase
 
-Append à `wiki/log.md` :
+Append to `wiki/log.md`:
 
 ```
 ## [YYYY-MM-DD] domain | <sub> <slug>[<→ new-slug>]
 
-<N> fichiers touchés. Buckets : <B1:N1, B2:N2, …>. Warnings : <B9 hits si présent, B5/B6/B7 skippés si --archive>.
+<N> files touched. Buckets: <B1:N1, B2:N2, …>. Warnings: <B9 hits if present, B5/B6/B7 skipped if --archive>.
 ```
 
-### F. Rapport final
+### F. Final report
 
-- Compteurs par bucket (touched / skipped).
-- Liste des warnings non traités (drift numérique, slugs composés skipés, etc.).
-- Prochaine étape suggérée :
-  - Après `add` : `/ingest raw/<recent-folder>/` pour tester le nouvel agent sur une source.
-  - Après `rename` : `/lint` pour vérifier qu'aucun wikilink ne pointe sur l'ancien slug.
-  - Après `remove` : `/lint` pour détecter les orphelins.
+- Counters per bucket (touched / skipped).
+- List of untreated warnings (numeric drift, skipped composed slugs, etc.).
+- Next step suggested:
+  - After `add`: `/ingest raw/<recent-folder>/` to test the new agent on a source.
+  - After `rename`: `/lint` to check that no wikilink still points to the old slug.
+  - After `remove`: `/lint` to detect orphans.
 
 ---
 
-## Principes
+## Principles
 
-- **L'historique est sacré** : par défaut, `wiki/log.md`, `wiki/decisions/*`, `wiki/syntheses/*`, `wiki/sources/*` ne sont jamais réécrits. Opt-in explicite via `--include-historical` ou `--purge`.
-- **Ambiguïté → humain** : tout cas où une heuristique pourrait se tromper (composés, prose, aliases) est présenté individuellement à l'utilisateur. Aucune réécriture silencieuse.
-- **Idempotence** : re-lancer la commande sur un domaine déjà ajouté/renommé/supprimé doit produire un plan vide ou minimal (et le préciser).
-- **Pas de touche au dispatch dynamique** : `/ingest` charge ses agents en lisant `.claude/agents/` — l'ajout/suppression du fichier `<slug>-expert.md` suffit. Ne pas éditer `.claude/commands/ingest.md` sauf si un mapping hardcodé est détecté.
+- **History is sacred**: by default, `wiki/log.md`, `wiki/decisions/*`, `wiki/syntheses/*`, `wiki/sources/*` are never rewritten. Explicit opt-in via `--include-historical` or `--purge`.
+- **Ambiguity → human**: any case where a heuristic could be wrong (composed, prose, aliases) is presented individually to the user. No silent rewrite.
+- **Idempotence**: re-running the command on a domain that's already added/renamed/removed must produce an empty or minimal plan (and say so).
+- **Don't touch the dynamic dispatch**: `/ingest` loads its agents by reading `.claude/agents/` — adding/removing the `<slug>-expert.md` file is enough. Don't edit `.claude/commands/ingest.md` unless a hardcoded mapping is detected.
