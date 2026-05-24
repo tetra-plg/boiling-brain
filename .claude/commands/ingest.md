@@ -16,7 +16,7 @@ For each in-scope file, from the **main context**:
 
 ### 1. State detection
 
-Run `bash scripts/scan-raw.sh [scope]` (no argument = all of `raw/`; with folder or file = subtree). The script outputs one line per file:
+Run `bash scripts/wiki-maint/scan-raw.sh [scope]` (no argument = all of `raw/`; with folder or file = subtree). The script outputs one line per file:
 
 ```
 NEW      raw/...    → never seen
@@ -38,7 +38,7 @@ Arbitration:
 - **Don't modify anything else** in existing pages — no textual content update, no `ingested:` bump.
 - If no detectable visual in the transcript → answer "no frame to declare" and don't produce the block.
 
-If video/audio/URL not transcribed → chain `scripts/transcribe.sh` first.
+If video/audio/URL not transcribed → chain `scripts/video/transcribe.sh` first.
 
 ### 2. Expert-agent proposal (user validation)
 
@@ -84,10 +84,10 @@ If the agent's report contains a `## Frame requests` block, handle **before** th
 
 1. Check if a source video is available in `cache/videos/` (look for a file whose name matches the slug of the ingested transcript).
 2. If video available:
-   a. For each `FRAME: HH:MM:SS | slug | description` line: extract via `./scripts/extract-frames.sh <video_path> <timestamp> cache/frames/<slug>.png` (applies a default +5s offset — compensates for the lag between verbal mention and visual display).
+   a. For each `FRAME: HH:MM:SS | slug | description` line: extract via `./scripts/video/extract-frames.sh <video_path> <timestamp> cache/frames/<slug>.png` (applies a default +5s offset — compensates for the lag between verbal mention and visual display).
    b. Show all extracted frames to the user in a single batch (`AskUserQuestion`).
    c. On validation → `cp cache/frames/<slug>.png raw/frames/YYYY-MM-DD-<source-slug>-<slug>.png`.
-   d. On rejection → propose 3 quick alternatives without re-asking the user to specify an offset: extract at T-10s (`offset=-5`), T+0s (`offset=0`) and T+20s (`offset=15`) via `./scripts/extract-frames.sh <video> <timestamp> cache/frames/<slug>-altN.png <offset>`, show all 3 as a batch, validate or annotate `> [!question] Frame not extracted` if none works.
+   d. On rejection → propose 3 quick alternatives without re-asking the user to specify an offset: extract at T-10s (`offset=-5`), T+0s (`offset=0`) and T+20s (`offset=15`) via `./scripts/video/extract-frames.sh <video> <timestamp> cache/frames/<slug>-altN.png <offset>`, show all 3 as a batch, validate or annotate `> [!question] Frame not extracted` if none works.
 3. If no video in cache: tell the user the declared timestamps with the expected description — they can re-run manually or annotate the frames as `> [!question]`.
 4. Include in the final report: `Frames: N promoted · M rejected` (or `Frame requests: N declared — video not available in cache`).
 

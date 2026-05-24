@@ -48,6 +48,7 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 
 ### Changed
 
+- **Breaking — scripts layout**: `scripts/` reorganised into feature subdirectories (`video/`, `wiki-maint/`, `mcp/`, `hooks/`). Only `sync-repos.sh` and `migrations/` remain at the root. Existing vaults are migrated automatically by the `v1.1.0` migration (`scripts/migrations/v1.1.0.md`), which `git rm`s the stale flat paths and re-registers the MCP server at its new absolute path.
 - **`.claude/commands/compress-bb.md`**: translated to EN (v1.0.3 alignment, no functional change).
 - **`scripts/mcp-wiki.py`**: `preview_page` outputs a whitelisted set of frontmatter fields (`type`, `domains`, `created`, `updated`, `summary_l0`, `sources`, `status`, `verdict`) instead of every field — controls verbosity with the new ADR L3 fields (review finding B).
 

@@ -25,7 +25,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-MCP_SCRIPT="$VAULT_PATH/scripts/mcp-wiki.py"
+MCP_SCRIPT="$VAULT_PATH/scripts/mcp/mcp-wiki.py"
 CLAUDE_SETTINGS="$HOME/.claude/settings.json"
 CLAUDE_MD="$HOME/.claude/CLAUDE.md"
 SERVER_NAME="boiling-brain-wiki"
@@ -110,7 +110,7 @@ if settings_path.exists():
 else:
     settings = {}
 
-hook_script = f"bash {vault_path}/scripts/check-session-activity.sh"
+hook_script = f"bash {vault_path}/scripts/hooks/check-session-activity.sh"
 settings.setdefault("hooks", {})
 settings["hooks"].setdefault("Stop", [])
 
@@ -164,7 +164,7 @@ else
   echo "✅ $CLAUDE_MD mis à jour."
 fi
 
-chmod +x "$VAULT_PATH/scripts/check-session-activity.sh"
+chmod +x "$VAULT_PATH/scripts/hooks/check-session-activity.sh"
 
 echo ""
 echo "=== Configuration terminée ==="

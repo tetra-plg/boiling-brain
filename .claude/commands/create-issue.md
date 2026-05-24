@@ -244,7 +244,7 @@ Log in `wiki/log.md`: `## [YYYY-MM-DD] create-issue | <type> #<number> <short ti
 
 ## Proactive use case from the radar
 
-`/create-issue` can also be triggered **proactively** by the main context when the radar is shown ("show me the radar" / "what's on the agenda today"). When a radar entry concerns the **template environment** (typically a bug or gap touching `scripts/scan-raw.sh`, `.claude/commands/*.md`, `BOOTSTRAP.md`, or any file propagated by `/update-vault`), the main context proposes to the user:
+`/create-issue` can also be triggered **proactively** by the main context when the radar is shown ("show me the radar" / "what's on the agenda today"). When a radar entry concerns the **template environment** (typically a bug or gap touching `scripts/wiki-maint/scan-raw.sh`, `.claude/commands/*.md`, `BOOTSTRAP.md`, or any file propagated by `/update-vault`), the main context proposes to the user:
 
 > This radar entry concerns the upstream template. Want to file it via `/create-issue <type>`?
 

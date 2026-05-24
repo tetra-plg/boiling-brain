@@ -15,13 +15,13 @@ Run the INGEST-VIDEO workflow from CLAUDE.md on: $ARGUMENTS
 
 - If YouTube URL: `yt-dlp -x --audio-format m4a -o "cache/audio/<slug>.%(ext)s" <url>`.
 - If local file: move into `${LLMWIKI_VIDEO_CACHE:-cache/videos}/`, then `ffmpeg -i <video> -vn -acodec copy cache/audio/<slug>.m4a`.
-- Local transcription (whisper.cpp or mlx-whisper) → `raw/transcripts/YYYY-MM-DD-<slug>.md` with timestamps. Use `scripts/transcribe.sh` which already covers these steps for both cases.
+- Local transcription (whisper.cpp or mlx-whisper) → `raw/transcripts/YYYY-MM-DD-<slug>.md` with timestamps. Use `scripts/video/transcribe.sh` which already covers these steps for both cases.
 - Create `raw/videos-meta/YYYY-MM-DD-<slug>.meta.md` (URL, duration, hash, location).
 - Purge `cache/audio/<slug>.m4a`.
 
 #### Video storage convention: `LLMWIKI_VIDEO_CACHE`
 
-Environment variable used by `scripts/transcribe.sh`, `scripts/sample-frames.sh` and `scripts/extract-frames.sh` to locate downloaded videos:
+Environment variable used by `scripts/video/transcribe.sh`, `scripts/video/sample-frames.sh` and `scripts/video/extract-frames.sh` to locate downloaded videos:
 
 - **Default**: `cache/videos/` (internal disk, inside the vault).
 - **Override**: export `LLMWIKI_VIDEO_CACHE` to an external disk or dedicated folder if video volume exceeds internal disk capacity.
@@ -99,7 +99,7 @@ The recommended option is marked "(Recommended)" and placed first.
 
 For each `FRAME: HH:MM:SS | slug | description` line of the `## Frame requests` block:
 
-1. Extract the frame: `./scripts/extract-frames.sh <video_path> <timestamp> cache/frames/<slug>.png`.
+1. Extract the frame: `./scripts/video/extract-frames.sh <video_path> <timestamp> cache/frames/<slug>.png`.
 2. Show all extracted frames to the user as a batch via `AskUserQuestion`.
 3. On validation → `cp cache/frames/<slug>.png raw/frames/YYYY-MM-DD-<source-slug>-<slug>.png`.
 4. On rejection → propose a retry at timestamp ±X s, or annotate `> [!question] Frame not extracted` in the source page.
@@ -110,8 +110,8 @@ For each `FRAME: HH:MM:SS | slug | description` line of the `## Frame requests` 
 
 Follows the runbook [wiki/decisions/extraction-frames-induction-runbook.md](../../wiki/decisions/extraction-frames-induction-runbook.md):
 
-1. **Dense sampling**: `scripts/sample-frames.sh <video> /tmp/<slug>-samples/ <cadence>`. Cadence depends on video type (cf. runbook table, default 20 s for dense videos, 30 s for talks, 60 s for quizzes).
-2. **Image-diff**: `scripts/diff-frames.py /tmp/<slug>-samples/ [--roi …] [--threshold …] --output /tmp/<slug>-transitions.md`. ROI is only applied if a **domain annex** of the runbook justifies it for this video type; otherwise full frame by default.
+1. **Dense sampling**: `scripts/video/sample-frames.sh <video> /tmp/<slug>-samples/ <cadence>`. Cadence depends on video type (cf. runbook table, default 20 s for dense videos, 30 s for talks, 60 s for quizzes).
+2. **Image-diff**: `scripts/video/diff-frames.py /tmp/<slug>-samples/ [--roi …] [--threshold …] --output /tmp/<slug>-transitions.md`. ROI is only applied if a **domain annex** of the runbook justifies it for this video type; otherwise full frame by default.
 3. **Visual cataloging**: spawn an `Explore` agent with the transitions table and the prompt of Step 3 of the runbook → table classified `KEEP / DUPLICATE / SKIP`.
 4. **Transcript induction**: for each `KEEP` frame, extract the `[t-30s, t+30s]` transcript window and annotate it (citation, concept, justification). Downgrade to `SKIP` if no pedagogical justification. Output: `/tmp/<slug>-induction.md`.
 5. **Manual batch validation**: show the induction table to the user in a single `AskUserQuestion` multiSelect (Promote / Duplicate / Skip / Re-extract). The main context reads each candidate PNG and presents a textual description per option.

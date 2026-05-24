@@ -143,6 +143,19 @@ Every wiki page carries two extra frontmatter fields:
 
 This lets agents (and you, via `/query`) navigate the wiki without paying the full body cost on every page they consider.
 
+## Scripts layout
+
+The `scripts/` directory is organised by feature, not by verb. The convention is:
+
+- `scripts/video/` — video and frame extraction pipeline (`extract-frames.sh`, `sample-frames.sh`, `diff-frames.py`, `transcribe.sh`).
+- `scripts/wiki-maint/` — wiki maintenance utilities (`backfill-summaries.py`, `enrich-hub.py`, `scan-raw.sh`, `scan-domain-refs.sh`).
+- `scripts/mcp/` — MCP server and its installer (`mcp-wiki.py`, `setup-mcp.sh`).
+- `scripts/hooks/` — Claude Code hooks (e.g. `check-session-activity.sh`).
+- `scripts/migrations/` — versioned migration slash-commands invoked by `/update-vault`.
+- `scripts/sync-repos.sh` — standalone CLI tool, kept at the root.
+
+New scripts should be placed in the existing feature directory that best fits their role, or at the root only if they are standalone tools with no family. Avoid adding flat scripts at the root.
+
 ## Slash commands shipped
 
 | Command | Purpose |
