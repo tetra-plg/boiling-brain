@@ -174,6 +174,17 @@ done < <(find wiki -type f -name '*.md' -not -path '*worktrees*' | sort)
 # [[domains/<slug>]]  → WIKILINK
 # [[domains/<slug>|Label]] → ALIAS
 # Historique → HIST
+#
+# Scope : on **exclut** les fichiers canoniques de ce scan car leurs wikilinks
+# sont déjà capturés en CANONICAL (B1). Éviter la double émission qui ferait
+# valider deux fois la même ligne dans `/domain rename`.
+
+_is_canonical_path() {
+  case "$1" in
+    "CLAUDE.md"|"README.md"|"wiki/index.md"|"wiki/overview.md"|".claude/commands/ingest.md") return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
 while IFS= read -r line; do
   [ -z "$line" ] && continue
@@ -181,6 +192,9 @@ while IFS= read -r line; do
   rest="${line#*:}"
   lineno="${rest%%:*}"
   snippet="${rest#*:}"
+
+  # Skip si déjà capturé en CANONICAL
+  _is_canonical_path "$path" && continue
 
   # Détermine si alias (présence de | après le slug dans le wikilink)
   if echo "$snippet" | grep -qE "\[\[domains/${SLUG_RX}\|[^]]+\]\]"; then
@@ -193,7 +207,7 @@ while IFS= read -r line; do
     bucket="HIST"
   fi
   _emit "$bucket" "$path" "$lineno" "$snippet"
-done < <(grep -rnE --exclude-dir=worktrees "\[\[domains/${SLUG_RX}(\|[^]]+)?\]\]" wiki .claude CLAUDE.md README.md 2>/dev/null || true)
+done < <(grep -rnE --exclude-dir=worktrees "\[\[domains/${SLUG_RX}(\|[^]]+)?\]\]" wiki .claude 2>/dev/null || true)
 
 # --- B5 — COMPOSED ---
 # Slugs composés : slugs (filenames de pages, identifiants dans des wikilinks,

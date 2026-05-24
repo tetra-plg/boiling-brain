@@ -121,7 +121,7 @@ Créer également un fichier `.claude/agents/<slug>-expert.suggestions.md` vide 
 Pour chaque fichier, **lire** le fichier, **calculer le patch**, l'**afficher en preview**, puis appliquer après validation globale (cf. section « Validation & application »).
 
 - **`CLAUDE.md`** :
-  - Section `## User domains` : insérer une nouvelle entrée numérotée à la position choisie en Phase 1. Renuméroter les entrées suivantes (regex `^(\d+)\. ` → décrémenter `\1` ne s'applique pas ici, on incrémente les entrées après l'insertion).
+  - Section `## User domains` : insérer une nouvelle entrée numérotée à la position choisie en Phase 1. **Incrémenter de 1 le numéro de chaque entrée située en aval de l'insertion** (regex `^(\d+)\. ` → captures + 1).
   - Section `## Per-domain expert agents` : insérer la ligne `- \`<slug>-expert\` — livrables : <résumé deliverables>. <signature one-liner>.` à la même position relative.
 - **`README.md`** : si une table « Domains » ou une liste à puces existe, insérer la ligne. Sinon, log un warning « README sans table de domaines détectée, à éditer à la main ».
 - **`wiki/index.md`** : section `## Domains` ou `## Domaines`, insérer la ligne `- [[domains/<slug>]] — <summary_l0>`.
