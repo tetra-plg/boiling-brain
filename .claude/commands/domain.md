@@ -294,9 +294,26 @@ bash scripts/scan-domain-refs.sh <slug> > /tmp/scan-remove.txt
 
 ### Phase 3 — Présentation par bucket
 
-Mode `--archive` (défaut) : strip uniquement B1-B4. B5/B6/B7 par défaut skip (warnings). B8 préservé. B9 warning.
+**Invariant `--archive` (défaut) — STRICT.** Les seuls fichiers supprimés physiquement sont ceux listés en Phase 4 :
 
-Mode `--purge` : strip B1-B4 **plus** propose B5/B6/B7/B8 case-by-case (mêmes protocoles que `rename`, mais l'action est suppression de l'occurrence au lieu de substitution).
+- `.claude/agents/<slug>-expert.md` (+ `.suggestions.md` + `.suggestions.archive.md`)
+- `.claude/agent-memory/<slug>${SUFFIX}/`
+- `wiki/domains/<slug>.md`
+
+**Aucune autre suppression de fichier.** Les pages de contenu (`wiki/sources/`, `wiki/concepts/`, `wiki/entities/`, `wiki/decisions/`, `wiki/syntheses/`) sont :
+
+- **éditées** dans leur frontmatter (B2 retire le slug de `domains:`),
+- ou ont des **lignes retirées** dans leur corps (B3/B4 sur les wikilinks orphelins).
+
+Si une page devient orpheline (`domains: []` après retrait), un dialogue dédié est proposé (cf. B2 étape 2) — **la suppression de cette page reste opt-in case-by-case**, jamais en batch, jamais pre-checked.
+
+Si tu te surprends à proposer la suppression d'une page de contenu en batch (« Supprimer les N pages ») en mode `--archive` → tu as violé l'invariant : abort, recompose le plan.
+
+Modes :
+
+- **`--archive`** (défaut) : édite B1-B4 (lignes / frontmatter / wikilinks). B5/B6/B7 skip silencieux (warnings finaux). B8 préservé entièrement (intouché, pas même proposé). B9 warning.
+- **`--purge`** : édite B1-B4 **plus** propose B5/B6/B7/B8 case-by-case (mêmes protocoles que `rename`, l'action étant la suppression de l'occurrence). La suppression de fichier reste limitée à Phase 4 sauf opt-in explicite case-by-case par page.
+- **`--include-historical`** (modifie `--archive`) : propose B8 sub-bucket par sub-bucket sans pre-check. Toujours pas de suppression de fichier par défaut — l'action B8 reste l'édition de ligne ou de frontmatter.
 
 #### B1 CANONICAL (active)
 
@@ -304,7 +321,24 @@ Mode `--purge` : strip B1-B4 **plus** propose B5/B6/B7/B8 case-by-case (mêmes p
 
 #### B2 FRONTMATTER
 
-`AskUserQuestion` Pattern D, **pre-checked tous**. Pour `domains: [a, <slug>, b]` → retirer `<slug>` ; si `domains` devient vide, **ne pas supprimer la page** (warning : page sans domaine), demander à l'utilisateur si la page doit être re-taggée vers un autre domaine ou laissée orpheline.
+L'action B2 est **toujours une édition de frontmatter, jamais une suppression de page**. Elle se déroule en deux étapes.
+
+**Étape 1 — retrait du slug.** `AskUserQuestion` Pattern D, **pre-checked tous**. Pour chaque page avec `domains: [...]` contenant `<slug>` : retirer `<slug>` de la liste, conserver les autres domaines. Les pages B8 HIST (situées dans `wiki/log.md`, `wiki/decisions/`, `wiki/syntheses/`, `wiki/sources/`) sont **exclues de cette étape en mode `--archive`** — leur frontmatter n'est pas édité (cf. invariant Phase 3 + B8).
+
+**Étape 2 — orphelines.** Pour chaque page où le retrait laisse `domains: []`, dialogue dédié **un-par-un** (jamais en batch, jamais pre-checked) :
+
+```json
+{
+  "question": "Page <path> devient orpheline (domains: []) après retrait de <slug>. Que faire ?",
+  "options": [
+    {"label": "Re-tagger", "description": "Choisir un autre domaine parmi EXISTING_DOMAINS"},
+    {"label": "Laisser orpheline", "description": "domains: [] — la page reste en place, sera flaggée par /lint (Recommandé)"},
+    {"label": "Supprimer la page", "description": "Opt-in explicite — uniquement pertinent pour les pages mono-domaine de pure description du domaine retiré"}
+  ]
+}
+```
+
+« Supprimer la page » est **opt-in par page**, jamais en batch. Si plus de 3 orphelines, présenter le dialogue dans l'ordre alphabétique des paths, l'utilisateur peut répondre « Laisser orpheline » à toutes pour zapper rapidement.
 
 #### B3 WIKILINK / B4 ALIAS
 
@@ -317,11 +351,15 @@ Mode `--purge` : strip B1-B4 **plus** propose B5/B6/B7/B8 case-by-case (mêmes p
 
 #### B8 HIST
 
-`--archive` : préservé (par défaut).
-`--include-historical` : proposé par sous-bucket avec `AskUserQuestion` Pattern D, **rien pre-checked**.
-`--purge` : impliquant `--include-historical`, propose B8 et les autres.
+**Rappel invariant** : les pages B8 sont dans `wiki/log.md`, `wiki/decisions/`, `wiki/syntheses/`, `wiki/sources/`. Elles tracent l'état passé du vault et **ne sont jamais supprimées par `/domain remove --archive`**, même indirectement via le dialogue B2 étape 2 « page orpheline » (les pages B8 sont exclues de B2 entièrement en `--archive`).
+
+- **`--archive`** (défaut) : B8 préservé entièrement. Pas de prompt, pas d'édition de frontmatter, pas d'édition de ligne.
+- **`--include-historical`** : propose par sous-bucket (log / decisions / syntheses / sources) avec `AskUserQuestion` Pattern D, **rien pre-checked**. L'action est **édition de ligne** (retirer la mention du slug dans le corps) ou édition de frontmatter (retirer le slug de `domains:`), pas suppression de fichier. Suppression de page B8 = opt-in explicite case-by-case via le même dialogue à 3 options que B2 étape 2 (jamais en batch).
+- **`--purge`** : implique `--include-historical`. La suppression de page B8 reste opt-in case-by-case par le dialogue dédié.
 
 ### Phase 4 — Suppressions physiques
+
+**Liste exhaustive — `--archive` ne supprime physiquement QUE ces fichiers** :
 
 ```bash
 rm .claude/agents/<slug>-expert.md
@@ -330,6 +368,8 @@ rm -f .claude/agents/<slug>-expert.suggestions.archive.md
 rm -rf .claude/agent-memory/<slug>${SUFFIX}/
 rm wiki/domains/<slug>.md
 ```
+
+Toute suppression supplémentaire (page de contenu orpheline opt-in via B2 étape 2, page B8 opt-in en `--include-historical` ou `--purge`) est **validée case-by-case** par l'utilisateur via le dialogue dédié, et journalisée séparément dans le rapport final (Phase 6) en `Pages de contenu supprimées (opt-in)` distinct de `Fichiers du domaine supprimés (Phase 4)`.
 
 ### Phase 5 — Renumérotation `CLAUDE.md`
 
