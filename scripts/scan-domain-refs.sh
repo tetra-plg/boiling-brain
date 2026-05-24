@@ -356,8 +356,12 @@ _scan_body() {
 
 while IFS= read -r f; do
   [ -f "$f" ] || continue
-  # Skip les fichiers canoniques : leurs occurrences sont déjà émises en CANONICAL (B1).
-  # Sans ce filtre, wiki/index.md et wiki/overview.md seraient double-émis (B1 + B6).
+  # Skip les fichiers canoniques présents dans le scope `find wiki .claude` :
+  # leurs occurrences sont déjà émises en CANONICAL (B1). Sans ce filtre, B6 PROSE
+  # les double-émettrait. Les 2 autres canoniques (CLAUDE.md, README.md) sont à
+  # la racine du vault, donc hors du scope `find wiki .claude` ci-dessous — pas
+  # besoin de les lister ici. Si le scope `find` est élargi un jour, ajouter
+  # CLAUDE.md et README.md à ce case.
   case "$f" in
     ".claude/commands/ingest.md"|"wiki/index.md"|"wiki/overview.md") continue ;;
   esac

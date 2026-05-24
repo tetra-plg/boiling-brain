@@ -42,7 +42,7 @@ Dispatch on the first word of `$ARGUMENTS`:
 
 2. **Fetch templates** — `git show template-upstream/main:<path>` for `.claude/agents/domain-expert.md.tpl`, `.claude/agent-memory/domain-memory.md.tpl`, `wiki/domains/domain.md.tpl`. STOP on any fetch failure.
 
-3. **Render** — substitute `{{...}}`. Empty optional block alone on a line → remove the line. `{{model}}` default `claude-sonnet-4-6`; `{{maxTurns}}` / `{{effort}}` from peer agents (`grep -h '^maxTurns:\|^effort:' .claude/agents/*-expert.md | sort -u`). If `VAULT_LANGUAGE != English`, translate narrative sections; keep technical YAML in EN (`name`, `tools`, `model`, `memory`, `permissionMode`, `maxTurns`, `effort`).
+3. **Render** — substitute `{{...}}`. Empty optional block alone on a line → remove the line. `{{model}}` / `{{maxTurns}}` / `{{effort}}` inferred from peer agents (`grep -hE '^(model|maxTurns|effort):' .claude/agents/*-expert.md | sort | uniq -c | sort -rn | head -1` per field — pick the dominant value); fallback `claude-sonnet-4-6` if no peer. If `VAULT_LANGUAGE != English`, translate narrative sections; keep technical YAML in EN (`name`, `tools`, `model`, `memory`, `permissionMode`, `maxTurns`, `effort`).
 
 4. **Destinations** (per `MEMORY_CONVENTION`):
    - `.claude/agents/<slug>-expert.md`
