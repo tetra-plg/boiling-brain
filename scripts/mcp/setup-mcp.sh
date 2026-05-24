@@ -4,7 +4,7 @@
 #   - Ajoute le hook Stop (check-session-activity.sh) dans ~/.claude/settings.json
 #   - Ajoute les instructions d'invocation dans ~/.claude/CLAUDE.md
 #
-# Usage : bash scripts/setup-mcp.sh [--vault-path /chemin/vers/vault]
+# Usage : bash scripts/mcp/setup-mcp.sh [--vault-path /chemin/vers/vault]
 #
 # Par défaut, le vault est le répertoire parent de ce script (racine du vault).
 # Pré-requis :

@@ -174,7 +174,7 @@ New scripts should be placed in the existing feature directory that best fits th
 
 ## MCP server (optional, v1.1+)
 
-Run `bash scripts/setup-mcp.sh` once after bootstrap to register the `boiling-brain-wiki` MCP server in `~/.claude/settings.json`. Once active, Claude Code can query your wiki from **any project** — not just inside the vault directory.
+Run `bash scripts/mcp/setup-mcp.sh` once after bootstrap to register the `boiling-brain-wiki` MCP server in `~/.claude/settings.json`. Once active, Claude Code can query your wiki from **any project** — not just inside the vault directory.
 
 Five tools are exposed:
 

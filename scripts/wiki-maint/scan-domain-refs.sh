@@ -2,7 +2,7 @@
 # scan-domain-refs.sh — Catégorise chaque référence à un slug de domaine dans le vault
 #
 # Usage:
-#   scripts/scan-domain-refs.sh <slug>
+#   scripts/wiki-maint/scan-domain-refs.sh <slug>
 #
 # Sortie par ligne (tagué bucket, parseable trivialement par awk/grep) :
 #

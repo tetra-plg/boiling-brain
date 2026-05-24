@@ -5,7 +5,7 @@
 # writes cache/.session-pending so the SessionStart hook can propose /compress-bb.
 #
 # Usage (in ~/.claude/settings.json hooks.Stop):
-#   bash /path/to/vault/scripts/check-session-activity.sh
+#   bash /path/to/vault/scripts/hooks/check-session-activity.sh
 #
 # Environment variables:
 #   VAULT_PATH — vault directory (default: parent of this script)
