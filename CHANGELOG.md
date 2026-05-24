@@ -15,7 +15,7 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 - **`/compress-bb`**: slash-command to save the current session journal into `raw/notes/sessions/YYYY-MM-DD-<slug>.md`, ready for `/ingest`.
 - **Hooks**: `Stop` hook (`scripts/hooks/check-session-activity.sh`) detects commits + modified files → writes `cache/.session-pending`; `SessionStart` hook detects `.pending-ingest` and `.session-pending` and proposes the follow-up actions.
 - **`/query` tiered loading**: L0 scan first, then L1/L2 descent only when relevant — reduces context consumption for broad questions.
-- **`scripts/migrations/v1.1.0-mcp-setup.md`**: interactive migration invoked by `/update-vault` for vaults < 1.1.0. Runs `setup-mcp.sh` (MCP + global Stop hook) and patches the vault's `CLAUDE.md` to add the "Session start" section that drives the reading of `cache/.pending-ingest` and `cache/.session-pending` signals.
+- **`scripts/migrations/v1.1.0.md`**: interactive migration invoked by `/update-vault` for vaults < 1.1.0. Runs `setup-mcp.sh` (MCP + global Stop hook) and patches the vault's `CLAUDE.md` to add the "Session start" section that drives the reading of `cache/.pending-ingest` and `cache/.session-pending` signals.
 - **`/update-vault`**: optional `target-branch` argument to test pre-release feat branches before merge (e.g. `/update-vault feat/v1.2.0`). Default behavior unchanged (target `main`). (#30)
 - **`/domain`**: new slash-command to manage a vault's domain lifecycle post-bootstrap. Three sub-commands:
   - `/domain add <slug>` — interactive interview, fetches the 3 templates (`domain-expert.md.tpl`, `domain-memory.md.tpl`, `domain.md.tpl`) from `template-upstream` on the fly, renders them respecting vault conventions (memory-dir suffix, vault language), and inserts the new domain into the 5 canonical declaration files (`CLAUDE.md`, `README.md`, `wiki/index.md`, `wiki/overview.md`, and `.claude/commands/ingest.md` only if hardcoded dispatch is detected). Optional `--audit-migration` flag scans existing sources/concepts/entities for candidates to re-tag, with a second-pass LLM filter to cut lexical false positives.
@@ -61,7 +61,7 @@ Migration to v1.1.0 is **handled by `/update-vault`**:
 /update-vault
 ```
 
-`/update-vault` detects the local version (1.0.x) → target 1.1.0, propagates the new files (`scripts/mcp/mcp-wiki.py`, `scripts/mcp/setup-mcp.sh`, `scripts/hooks/check-session-activity.sh`, `.claude/commands/compress-bb.md`, `scripts/migrations/v1.1.0-mcp-setup.md`, `/query` updated), then invokes the `v1.1.0-mcp-setup` migration which:
+`/update-vault` detects the local version (1.0.x) → target 1.1.0, propagates the new files (`scripts/mcp/mcp-wiki.py`, `scripts/mcp/setup-mcp.sh`, `scripts/hooks/check-session-activity.sh`, `.claude/commands/compress-bb.md`, `scripts/migrations/v1.1.0.md`, `/query` updated), then invokes the `v1.1.0` migration which:
 
 1. Announces the additions and what it will mutate (`~/.claude/settings.json`, `~/.claude/CLAUDE.md`, `<vault>/CLAUDE.md`).
 2. Proposes 3 options via `AskUserQuestion`: **Enable** (full setup) / **Patch vault CLAUDE.md only** (skip global mutations) / **Skip**.
@@ -71,7 +71,7 @@ Migration to v1.1.0 is **handled by `/update-vault`**:
 
 Neither `~/.claude/settings.json`, `~/.claude/CLAUDE.md`, nor `<vault>/CLAUDE.md` is ever rewritten — only content is added or merged.
 
-If you prefer to migrate manually, read [scripts/migrations/v1.1.0-mcp-setup.md](scripts/migrations/v1.1.0-mcp-setup.md) which describes exactly what to change.
+If you prefer to migrate manually, read [scripts/migrations/v1.1.0.md](scripts/migrations/v1.1.0.md) which describes exactly what to change.
 
 **Post-update actions** (one-time, after `/update-vault` completes):
 
