@@ -58,22 +58,41 @@ themes: [list of themes covered]
 <Concrete actions identified for follow-up.>
 ```
 
-### 3. Write the file
+### 3. Persist the file (via MCP, fallback to manual paste)
+
+The session journal lives under `raw/notes/sessions/`, which is protected by the `.claude/hooks/protect-raw.sh` `PreToolUse:Write|Edit` hook. Writes from the agent's `Write` or `Edit` tool would be denied. The sanctioned write path is the MCP `drop_to_raw` tool exposed by the `boiling-brain-wiki` server: it writes server-side (bypassing the hook by design) AND appends the relative path to `cache/.pending-ingest` automatically.
+
+**Preferred path — MCP `drop_to_raw`:**
+
+Invoke the tool:
 
 ```
-raw/notes/sessions/YYYY-MM-DD-<slug>.md
+drop_to_raw(
+  subfolder="notes/sessions",
+  filename="YYYY-MM-DD-<slug>.md",
+  content=<the full markdown content built in step 2>
+)
 ```
 
-### 4. Update the pending-ingest signal
+Substitute `YYYY-MM-DD` with today's date and `<slug>` with the slug from step 1. The tool creates `raw/notes/sessions/YYYY-MM-DD-<slug>.md`, appends the relative path to `cache/.pending-ingest`, and returns a confirmation. No separate signal-update step is needed.
 
-Add the path to `cache/.pending-ingest` (create the file if absent):
+**Fallback — manual paste** (only when the `boiling-brain-wiki` MCP server is not connected in the current session, e.g. brand-new vault or temporarily unregistered):
+
+Emit a copy-pastable code block containing the full markdown content (the same body built in step 2), prefixed with this instruction to the user:
 
 ```
-raw/notes/sessions/YYYY-MM-DD-<slug>.md
+The boiling-brain-wiki MCP server is not connected in this session.
+To persist the journal, copy the block below and write it manually to:
+    raw/notes/sessions/YYYY-MM-DD-<slug>.md
+Then append the path to cache/.pending-ingest:
+    echo "raw/notes/sessions/YYYY-MM-DD-<slug>.md" >> cache/.pending-ingest
 ```
 
-### 5. Confirm to the user
+Followed by a fenced code block containing the journal content (the YAML-frontmatter + body from step 2).
 
-Show the path created and remind:
-- The file will be proposed for ingestion at the next session start (via the SessionStart hook).
-- Manual ingestion is available immediately: `/ingest raw/notes/sessions/YYYY-MM-DD-<slug>.md`.
+### 4. Confirm to the user
+
+After successful persistence (either path), display:
+- The path created: `raw/notes/sessions/YYYY-MM-DD-<slug>.md`.
+- A reminder: the file will be proposed for ingestion at the next session start (via the SessionStart hook).
+- The manual-ingest shortcut: `/ingest raw/notes/sessions/YYYY-MM-DD-<slug>.md`.
