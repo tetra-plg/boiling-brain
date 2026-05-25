@@ -70,48 +70,191 @@ def _domain_pages(domain: str) -> list[Path]:
     return matches
 
 
+_BACKLINK_CACHE: dict[str, int] | None = None
+_WIKILINK_RE = re.compile(r"\[\[([^\]|]+?)(?:\|[^\]]+)?\]\]")
+
+
+def _build_backlink_index() -> dict[str, int]:
+    """Scan every wiki page once and count [[slug]] occurrences. Result is
+    cached in-process. Slug = page path relative to WIKI_DIR, without the .md
+    extension (e.g. 'concepts/model-context-protocol' for
+    wiki/concepts/model-context-protocol.md). Wikilinks may also use bare
+    slugs ('model-context-protocol') — those are counted under the bare-slug
+    bucket and added to the full-slug count by _compute_centrality.
+    """
+    counts: dict[str, int] = {}
+    for p in _all_wiki_pages():
+        try:
+            content = p.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        for m in _WIKILINK_RE.finditer(content):
+            target = m.group(1).strip()
+            counts[target] = counts.get(target, 0) + 1
+    return counts
+
+
+def _compute_centrality(page_path: str) -> int:
+    """Return the number of backlinks pointing to `page_path` (relative to
+    WIKI_PATH, e.g. 'wiki/concepts/foo.md'). Builds the backlink index lazily;
+    subsequent calls reuse the cache. To refresh, set the module-level
+    `_BACKLINK_CACHE = None` and call again.
+    """
+    global _BACKLINK_CACHE
+    if _BACKLINK_CACHE is None:
+        _BACKLINK_CACHE = _build_backlink_index()
+    if not page_path.startswith("wiki/"):
+        page_path = "wiki/" + page_path
+    rel = page_path[len("wiki/"):]
+    if rel.endswith(".md"):
+        rel = rel[:-3]
+    full = _BACKLINK_CACHE.get(rel, 0)
+    bare = _BACKLINK_CACHE.get(rel.rsplit("/", 1)[-1], 0) if "/" in rel else 0
+    return full + bare
+
+
+def _normalize_query(q: str) -> list[str]:
+    """Lowercase, NFC-normalise, split on whitespace and hyphens, drop empties.
+    Used by the matching layer to make 'two-words', 'two words', and 'twowords'
+    queries behave consistently against the page content.
+    """
+    import unicodedata
+    q = unicodedata.normalize("NFC", q).lower()
+    tokens: list[str] = []
+    for chunk in q.replace("-", " ").split():
+        if chunk:
+            tokens.append(chunk)
+    return tokens
+
+
+def _normalize_haystack(text: str) -> str:
+    """Counterpart of _normalize_query for the searched text. Lowercase, NFC,
+    collapse hyphens and whitespace to single spaces.
+    """
+    import unicodedata
+    text = unicodedata.normalize("NFC", text).lower()
+    text = text.replace("-", " ")
+    text = " ".join(text.split())
+    return text
+
+
+def _all_tokens_present(tokens: list[str], haystack: str) -> bool:
+    """True iff every token from _normalize_query is a substring of the
+    pre-normalised haystack.
+    """
+    return all(t in haystack for t in tokens)
+
+
+def _compact_l0(fm: dict, p) -> str:
+    """Compact one-line representation used by scan_<type> outputs.
+    Format: '- <slug> — <summary_l0>'. The slug is the page filename
+    without the .md extension; the type is left implicit (the caller
+    knows it from its own tool name).
+    """
+    l0 = fm.get("summary_l0", "—") or "—"
+    slug = p.stem
+    return f"- {slug} — {l0}"
+
+
+_TYPES_FOR_SCAN_TOOLS = (
+    "concepts",
+    "sources",
+    "syntheses",
+    "entities",
+    "cheatsheets",
+    "decisions",
+    "diagrams",
+)
+
+# Map from the directory-style plural name used in the scan_<type> tool to the
+# singular value stored in the `type:` frontmatter field.
+_TYPE_TOOL_TO_FRONTMATTER = {
+    "concepts": "concept",
+    "sources": "source",
+    "syntheses": "synthesis",
+    "entities": "entity",
+    "cheatsheets": "cheatsheet",
+    "decisions": "decision",
+    "diagrams": "diagram",
+}
+
+
 @mcp.tool(
     description=(
         "Use FIRST before answering any question about the user's knowledge domains. "
-        "Lists wiki pages for a given domain with their summary_l0 (one-line synopsis). "
-        "domain: one of poker, ia, factory, metier, tech, astro. "
-        "Returns ALL pages by default (sorted by last updated). "
-        "Pass limit=N to cap output (e.g. on very large domains > 5000 pages). "
-        "Use preview_page or read_page for details."
+        "Returns a compact hierarchical overview of a domain: the hub page (summary_l1), "
+        "page counts by type, and the top 10 pages by centrality (incoming wikilinks). "
+        "Use scan_concepts / scan_entities / scan_<type>(domain, query=...) to drill down. "
+        "domain: one of poker, ia, factory, vie-professionnelle, mental, tech, meta "
+        "(or your vault's domains)."
     )
 )
-def scan_domain(domain: str, limit: int = 0) -> str:
+def scan_domain(domain: str) -> str:
     pages = _domain_pages(domain)
     if not pages:
         return f"Aucune page trouvée pour le domaine « {domain} »."
 
-    # Sort by updated desc, then created desc
-    def sort_key(p: Path):
+    # Hub page lookup: wiki/domains/<domain>.md with type: domain
+    hub_path = WIKI_DIR / "domains" / f"{domain}.md"
+    hub_l1 = ""
+    if hub_path.exists():
+        try:
+            hub_fm, _ = _parse_front(hub_path.read_text(encoding="utf-8"))
+            hub_l1 = hub_fm.get("summary_l1", "") or ""
+        except Exception:
+            hub_l1 = ""
+
+    # Counts by type (frontmatter `type:` value, lowercased and trimmed)
+    counts: dict[str, int] = {}
+    for p in pages:
         try:
             fm, _ = _parse_front(p.read_text(encoding="utf-8"))
-            return (str(fm.get("updated", "")), str(fm.get("created", "")))
+            t = str(fm.get("type", "")).strip().lower()
+            counts[t] = counts.get(t, 0) + 1
         except Exception:
-            return ("", "")
+            continue
 
-    pages.sort(key=sort_key, reverse=True)
-    total = len(pages)
-    if limit > 0:
-        pages = pages[:limit]
-
-    if limit > 0 and total > limit:
-        lines = [f"# Domaine : {domain} ({len(pages)} / {total} pages, capped at limit={limit})\n"]
-    else:
-        lines = [f"# Domaine : {domain} ({len(pages)} pages)\n"]
+    # Top 10 pages by centrality (backlinks)
+    ranked: list[tuple[int, Path, dict]] = []
     for p in pages:
         try:
             fm, _ = _parse_front(p.read_text(encoding="utf-8"))
         except Exception:
             fm = {}
         rel = str(p.relative_to(WIKI_PATH))
-        l0 = fm.get("summary_l0", "—")
-        page_type = fm.get("type", "")
-        updated = fm.get("updated", fm.get("created", ""))
-        lines.append(f"- [{rel}] ({page_type}, {updated}) — {l0}")
+        c = _compute_centrality(rel)
+        ranked.append((c, p, fm))
+    ranked.sort(key=lambda x: x[0], reverse=True)
+    top = ranked[:10]
+
+    # Assemble the response
+    lines = [f"# Domaine {domain} ({len(pages)} pages)\n"]
+    if hub_l1:
+        lines.append("## Hub\n")
+        lines.append(hub_l1.strip())
+        lines.append("")
+
+    lines.append("## Structure")
+    type_to_tool = {v: k for k, v in _TYPE_TOOL_TO_FRONTMATTER.items()}
+    sorted_counts = sorted(counts.items(), key=lambda kv: -kv[1])
+    for t, n in sorted_counts:
+        tool = type_to_tool.get(t)
+        if tool == "sources":
+            hint = f'scan_sources("{domain}", query=...)  [query required]'
+        elif tool:
+            hint = f'scan_{tool}("{domain}")'
+        else:
+            hint = "(no dedicated scan tool for this type)"
+        lines.append(f"- {t}: {n} → {hint}")
+    lines.append("")
+
+    lines.append("## Top 10 pages centrales (par backlinks)")
+    for c, p, fm in top:
+        slug = p.stem
+        rel_dir = str(p.parent.relative_to(WIKI_DIR))
+        t = fm.get("type", "")
+        l0 = fm.get("summary_l0", "—") or "—"
+        lines.append(f"- {rel_dir}/{slug} ({t}, {c} backlinks) — {l0}")
 
     return "\n".join(lines)
 
