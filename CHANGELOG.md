@@ -22,6 +22,8 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
   - `/domain rename <old-slug> <new-slug>` — full vault scan via `scripts/wiki-maint/scan-domain-refs.sh`, bucketed presentation (canonical / frontmatter / wikilink / alias / composed / prose / log-tag / historical / numeric-drift), case-by-case validation for ambiguous buckets (composed slugs, prose words, wikilink aliases). Physical renames of `<slug>-expert.md`, `<slug>-expert.suggestions[.archive].md`, memory dir, and `wiki/domains/<slug>.md`.
   - `/domain remove <slug>` — `--archive` (default) strips the domain from active declarations while preserving historical traces in `wiki/log.md`, `wiki/decisions/`, `wiki/syntheses/`, `wiki/sources/`. `--purge` proposes the historical sweep case-by-case. `--include-historical` opt-in for archive mode. (#38)
 - **`scripts/wiki-maint/scan-domain-refs.sh`**: helper script (called by `/domain rename` and `/domain remove`) that scans the entire vault for a slug and emits a line-oriented report categorized in 9 buckets. Convention aligned with `scan-raw.sh` (machine-parseable, exit codes 0/1, env var `VAULT_PATH` for inter-vault testing). (#38)
+- **MCP tiered-loading refactor — 7 new tools**: `scan_concepts(domain, query, top)`, `scan_entities(...)`, `scan_decisions(...)`, `scan_syntheses(...)`, `scan_cheatsheets(...)`, `scan_diagrams(...)`, `scan_sources(...)`. Per-type drill-down inside a domain. Without `query`, return the top N pages by centrality (incoming wikilinks). With `query`, filter via case + separator-insensitive tokenisation and rank by centrality.
+- **`scripts/mcp/smoke_test.py`**: standalone harness that invokes every MCP tool against a real vault (`WIKI_PATH=…`), prints OK/FAIL against the v1.1.0 token gates, and exits non-zero on failure. Used as the gate before tagging v1.1.0.
 
 ### Added (ingest + agent surface)
 
@@ -53,6 +55,8 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 - **`/update-vault` — slash-command slimmed to ~170 lines (from ~350)** by extracting two helper scripts: `scripts/wiki-maint/detect-vault-version.sh` (version detection + applied-migrations back-fill) and `scripts/wiki-maint/propagate-templates.sh` (file propagation with 3-way merge). The markdown command focuses on LLM-driven orchestration (AskUserQuestion, branching decisions, migration sub-workflows); the shell scripts carry their own documentation and `--help`.
 - **`.claude/commands/compress-bb.md`**: translated to EN (v1.0.3 alignment, no functional change).
 - **`scripts/mcp/mcp-wiki.py`**: `preview_page` outputs a whitelisted set of frontmatter fields (`type`, `domains`, `created`, `updated`, `summary_l0`, `sources`, `status`, `verdict`) instead of every field — controls verbosity with the new ADR L3 fields (review finding B).
+- **Breaking — `scan_domain` return format**: no longer dumps all pages of the domain. Returns a compact hierarchical view: the `wiki/domains/<domain>.md` hub `summary_l1`, page counts per type with explicit pointers to the new `scan_<type>` tools, and the top 10 pages by centrality. Estimated reduction: ~94% on a 388-page domain (measured against BoilingBrain `ia`, dropping from ~23k to ~900 tokens).
+- **Breaking — `search_wiki` return format**: replaced `<path>:<line>: <extract>` with an enriched line per result: `<path> (<type>) — <summary_l0> — wikilinks: [<slugs>]`. Matching is now tokenised (case + separator insensitive); ranking is by centrality (backlinks).
 
 ### Migration from v1.0.x
 
