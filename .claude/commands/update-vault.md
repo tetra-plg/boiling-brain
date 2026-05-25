@@ -116,6 +116,49 @@ Skipped: <files in UNSTAGE>
 "
 ```
 
+#### Post-propagation auto-refresh of MCP setup
+
+`scripts/mcp/setup-mcp.sh` and `scripts/mcp/mcp-wiki.py` carry side-effects that live outside the vault: the MCP registration in `claude mcp` (absolute python path + script path), the Stop hook entry in `~/.claude/settings.json`, and the LLM instructions block in `~/.claude/CLAUDE.md` (which `setup-mcp.sh` writes/refreshes). When these two files change upstream, the in-vault propagation is not enough — the script needs to be re-run to refresh those external mutations.
+
+**The migration `v1.1.0` Part A already invokes `setup-mcp.sh`** when it runs. Therefore: only auto-trigger the refresh here if `v1.1.0` is NOT in `MIGRATIONS_TO_APPLY` (otherwise the migration handles it and double-running just adds noise).
+
+```bash
+# Detect changes to either MCP script in the propagated set
+MCP_CHANGED=false
+echo "$SELECTED_FILES" | grep -qE '^scripts/mcp/(setup-mcp\.sh|mcp-wiki\.py)$' && MCP_CHANGED=true
+
+# Skip if a migration is going to re-run setup-mcp.sh anyway
+if [ "$MCP_CHANGED" = "true" ] && ! printf '%s\n' "$MIGRATIONS_TO_APPLY" | grep -qFx 'v1.1.0'; then
+  AUTO_REFRESH=true
+fi
+```
+
+If `AUTO_REFRESH=true`, ask the user before running (the script mutates user-owned global files):
+
+```json
+{
+  "questions": [{
+    "question": "scripts/mcp/setup-mcp.sh or mcp-wiki.py changed upstream. Re-run setup-mcp.sh now to refresh the MCP registration, Stop hook and ~/.claude/CLAUDE.md block?",
+    "header": "Refresh MCP setup",
+    "multiSelect": false,
+    "options": [
+      {"label": "Yes, refresh now", "description": "Runs `bash scripts/mcp/setup-mcp.sh --vault-path \"$(pwd)\"`. The script is idempotent and self-healing on the CLAUDE.md block. Restart Claude Code afterwards to load the new MCP server code."},
+      {"label": "No, I'll run it manually later", "description": "Skip. Note: the MCP server visible to Claude Code still points at the old code until you re-run the script and restart Claude Code."}
+    ]
+  }]
+}
+```
+
+On `Yes`, run it and surface the output:
+
+```bash
+bash scripts/mcp/setup-mcp.sh --vault-path "$(pwd)"
+```
+
+On `No`, emit a reminder in the final summary:
+
+> ℹ️ `setup-mcp.sh` was not re-run despite an upstream change. Refresh manually with `bash scripts/mcp/setup-mcp.sh --vault-path "$(pwd)"` and restart Claude Code when ready.
+
 ### 6. Run the migration chain
 
 For each migration in `MIGRATIONS_TO_APPLY` (ascending version order), invoke it as a sub-workflow. Migration files live under `scripts/migrations/v<X>-*.md` — read the file and execute its steps (AskUserQuestion, edits, commit).
