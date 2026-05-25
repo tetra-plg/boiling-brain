@@ -10,11 +10,16 @@ token count, and exits non-zero if any output exceeds the Phase 5 gate limits.
 
 Default domain: 'ia' (matches the BoilingBrain reference). Override via argv.
 """
+import os
 import sys
 import importlib.util
 import pathlib
 
 DEFAULT_DOMAIN = sys.argv[1] if len(sys.argv) > 1 else "ia"
+
+if not os.environ.get("WIKI_PATH"):
+    print("Error: WIKI_PATH env var required. Usage: WIKI_PATH=/path/to/vault python3 smoke_test.py [domain]", file=sys.stderr)
+    sys.exit(1)
 
 spec = importlib.util.spec_from_file_location(
     "mcp_wiki",

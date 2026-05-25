@@ -17,6 +17,7 @@ Usage:
 import os
 import re
 import json
+import unicodedata
 from pathlib import Path
 from typing import Optional
 
@@ -118,7 +119,6 @@ def _normalize_query(q: str) -> list[str]:
     Used by the matching layer to make 'two-words', 'two words', and 'twowords'
     queries behave consistently against the page content.
     """
-    import unicodedata
     q = unicodedata.normalize("NFC", q).lower()
     tokens: list[str] = []
     for chunk in q.replace("-", " ").split():
@@ -131,7 +131,6 @@ def _normalize_haystack(text: str) -> str:
     """Counterpart of _normalize_query for the searched text. Lowercase, NFC,
     collapse hyphens and whitespace to single spaces.
     """
-    import unicodedata
     text = unicodedata.normalize("NFC", text).lower()
     text = text.replace("-", " ")
     text = " ".join(text.split())
@@ -445,13 +444,10 @@ def read_page(page_path: str) -> str:
         return f"Erreur de lecture : {e}"
 
 
-_OUTGOING_WIKILINK_RE = re.compile(r"\[\[([^\]|]+?)(?:\|[^\]]+)?\]\]")
-
-
 def _outgoing_wikilinks(body: str, limit: int = 10) -> list[str]:
     seen: list[str] = []
     seen_set: set[str] = set()
-    for m in _OUTGOING_WIKILINK_RE.finditer(body):
+    for m in _WIKILINK_RE.finditer(body):
         slug = m.group(1).strip()
         if slug in seen_set:
             continue
