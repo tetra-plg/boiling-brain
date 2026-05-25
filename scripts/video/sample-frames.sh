@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Usage:
-#   scripts/sample-frames.sh <video_path> <output_dir> [cadence_seconds]
+#   scripts/video/sample-frames.sh <video_path> <output_dir> [cadence_seconds]
 #
 # Produit:
 #   <output_dir>/sample-NNNN.png  (1280×720, échantillonnés toutes [cadence] secondes)

@@ -2,9 +2,9 @@
 # scan-raw.sh — Détecte l'état de chaque fichier raw vis-à-vis du wiki
 #
 # Usage:
-#   scripts/scan-raw.sh                   → scanne tout raw/
-#   scripts/scan-raw.sh raw/notes/foo.md  → fichier unique
-#   scripts/scan-raw.sh raw/tracked-repos/ → sous-arbre
+#   scripts/wiki-maint/scan-raw.sh                   → scanne tout raw/
+#   scripts/wiki-maint/scan-raw.sh raw/notes/foo.md  → fichier unique
+#   scripts/wiki-maint/scan-raw.sh raw/tracked-repos/ → sous-arbre
 #
 # Sortie par ligne :
 #   NEW      <rel-path>

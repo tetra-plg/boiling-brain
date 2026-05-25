@@ -44,8 +44,8 @@ After transcription + standard ingest, `/ingest-video` computes signals (duratio
 
 ### C. Heavy-pipeline scripts packaged
 
-- [scripts/sample-frames.sh](../../scripts/sample-frames.sh): dense ffmpeg sampling with parameterizable cadence (default 20 s).
-- [scripts/diff-frames.py](../../scripts/diff-frames.py): optional ROI image-diff (default full frame `0,0,1,1`), parameterizable threshold, markdown output of transitions.
+- [scripts/video/sample-frames.sh](../../scripts/video/sample-frames.sh): dense ffmpeg sampling with parameterizable cadence (default 20 s).
+- [scripts/video/diff-frames.py](../../scripts/video/diff-frames.py): optional ROI image-diff (default full frame `0,0,1,1`), parameterizable threshold, markdown output of transitions.
 
 ### D. Mandatory markdown transcription after promotion (Step 9 of the runbook)
 
@@ -64,7 +64,7 @@ Every promoted frame (mode A as well as mode B) **must** be transcribed as struc
 |---|---|
 | [[decisions/extraction-frames-induction-runbook]] | Domain-agnostic rewrite + Domain annexes (empty skeletons to enrich as ingests come in) + Step 9 |
 | `.claude/agents/<domain>-expert.md` (all) | `## Visual frames` section (mode A) with domain triggers + mandatory markdown transcription |
-| [scripts/sample-frames.sh](../../scripts/sample-frames.sh), [scripts/diff-frames.py](../../scripts/diff-frames.py) | Packaged in the template |
+| [scripts/video/sample-frames.sh](../../scripts/video/sample-frames.sh), [scripts/video/diff-frames.py](../../scripts/video/diff-frames.py) | Packaged in the template |
 | [.claude/commands/ingest-video.md](../../.claude/commands/ingest-video.md) | A/B dispatcher (user proposal) + mode B pipeline branch |
 | [CLAUDE.md](../../CLAUDE.md) | INGEST-VIDEO section updated |
 | `wiki/domains/<d>.md` | Cross-ref to the runbook |

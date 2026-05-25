@@ -69,7 +69,7 @@ Dispatch on the first word of `$ARGUMENTS`:
 
 1. **Pre-validation** — refuse if `<new>` exists (as `wiki/domains/<new>.md` or `.claude/agents/<new>-expert.md`); if `<new>` not `[a-z0-9-]+`; if `<old>` not in `EXISTING_DOMAINS`.
 
-2. **Scan** — `bash scripts/scan-domain-refs.sh <old>`, bucket the output (field 1).
+2. **Scan** — `bash scripts/wiki-maint/scan-domain-refs.sh <old>`, bucket the output (field 1).
 
 3. **Per-bucket protocol**:
 

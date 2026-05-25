@@ -46,9 +46,9 @@ Long videos (>30 min) — coachings, conferences, software demos, UI tutorials, 
 | Punctuated interview / talking head | every 60 s | 30–80 |
 | Quiz / short slides | every 60 s | 30–60 |
 
-**Standard command** (packaged in [scripts/sample-frames.sh](../../scripts/sample-frames.sh)):
+**Standard command** (packaged in [scripts/video/sample-frames.sh](../../scripts/video/sample-frames.sh)):
 ```bash
-scripts/sample-frames.sh "$VIDEO" /tmp/<slug>-samples/ [cadence_seconds]
+scripts/video/sample-frames.sh "$VIDEO" /tmp/<slug>-samples/ [cadence_seconds]
 ```
 
 Output: 1280×720 PNGs in the samples folder, plus a `.cadence` file remembering the cadence for step 2.
@@ -59,9 +59,9 @@ Output: 1280×720 PNGs in the samples folder, plus a `.cadence` file remembering
 
 **Method**: for each `(sample_n, sample_n+1)` pair, compute the average grayscale pixel difference. Optionally restrict the computation to an **ROI** (region of interest) to ignore an unchanging zone (overlay, watermark, fixed webcam).
 
-**Command** (packaged in [scripts/diff-frames.py](../../scripts/diff-frames.py)):
+**Command** (packaged in [scripts/video/diff-frames.py](../../scripts/video/diff-frames.py)):
 ```bash
-scripts/diff-frames.py /tmp/<slug>-samples/ \
+scripts/video/diff-frames.py /tmp/<slug>-samples/ \
   [--roi x,y,w,h] \
   [--threshold 12.0] \
   --output /tmp/<slug>-transitions.md
@@ -208,10 +208,10 @@ For heuristics specific to a piece of software or a course format, see **Domain 
 
 ## Existing tools to reuse
 
-- [scripts/transcribe.sh](../../scripts/transcribe.sh) — local Whisper (mlx-whisper).
-- [scripts/sample-frames.sh](../../scripts/sample-frames.sh) — Step 1.
-- [scripts/diff-frames.py](../../scripts/diff-frames.py) — Step 2.
-- [scripts/extract-frames.sh](../../scripts/extract-frames.sh) — one-shot extraction (`/ingest-video` mode A).
+- [scripts/video/transcribe.sh](../../scripts/video/transcribe.sh) — local Whisper (mlx-whisper).
+- [scripts/video/sample-frames.sh](../../scripts/video/sample-frames.sh) — Step 1.
+- [scripts/video/diff-frames.py](../../scripts/video/diff-frames.py) — Step 2.
+- [scripts/video/extract-frames.sh](../../scripts/video/extract-frames.sh) — one-shot extraction (`/ingest-video` mode A).
 - [/ingest-video](../../.claude/commands/ingest-video.md) — orchestrator, proposes mode A / B / Skip.
 - `AskUserQuestion` — interactive batch validation.
 

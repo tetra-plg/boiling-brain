@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Usage:
-#   scripts/transcribe.sh <chemin-fichier-local>
-#   scripts/transcribe.sh <url-youtube>
+#   scripts/video/transcribe.sh <chemin-fichier-local>
+#   scripts/video/transcribe.sh <url-youtube>
 #
 # Produit :
 #   raw/transcripts/YYYY-MM-DD-<slug>.md

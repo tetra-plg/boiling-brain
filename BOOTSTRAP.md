@@ -437,7 +437,7 @@ Substitute.
 
 ```bash
 rm .claude/commands/ingest-video.md
-rm scripts/transcribe.sh scripts/sample-frames.sh scripts/extract-frames.sh scripts/diff-frames.py
+rm scripts/video/transcribe.sh scripts/video/sample-frames.sh scripts/video/extract-frames.sh scripts/video/diff-frames.py
 rm wiki/decisions/extraction-frames-induction-runbook.md
 rm wiki/decisions/ingest-video-modes-a-b-generalisation.md
 ```
@@ -579,14 +579,14 @@ Ask:
     "header": "MCP Wiki",
     "multiSelect": false,
     "options": [
-      {"label": "✅ Yes, set it up now", "description": "Runs bash scripts/setup-mcp.sh. Prerequisites: Python 3 + internet connection for pip."},
-      {"label": "❌ No, I'll do it later", "description": "Run bash scripts/setup-mcp.sh from the vault whenever you want."}
+      {"label": "✅ Yes, set it up now", "description": "Runs bash scripts/mcp/setup-mcp.sh. Prerequisites: Python 3 + internet connection for pip."},
+      {"label": "❌ No, I'll do it later", "description": "Run bash scripts/mcp/setup-mcp.sh from the vault whenever you want."}
     ]
   }]
 }
 ```
 
-- **Yes**: run `bash scripts/setup-mcp.sh` (from the vault root). On pip error, show the error message + manual fallback: `pip install "fastmcp>=2.14"` then re-run.
+- **Yes**: run `bash scripts/mcp/setup-mcp.sh` (from the vault root). On pip error, show the error message + manual fallback: `pip install "fastmcp>=2.14"` then re-run.
 - **No**: skip.
 
 ---
@@ -671,7 +671,7 @@ Happy ingesting.
 ### B. Files NOT to touch
 
 - `LICENSE`, `.gitignore`, `README.md` (the README can be updated by the user later for their own instance — don't rewrite it during bootstrap).
-- `scripts/scan-raw.sh`, `scripts/backfill-summaries.py`, `scripts/enrich-hub.py` (generic, stay as-is).
+- `scripts/wiki-maint/scan-raw.sh`, `scripts/wiki-maint/backfill-summaries.py`, `scripts/wiki-maint/enrich-hub.py` (generic, stay as-is).
 - The non-conditional slash-commands: `/ingest`, `/query`, `/save`, `/lint`, `/evolve-agent`, `/update-vault`.
 
 ### C. If you get stuck
