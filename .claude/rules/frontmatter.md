@@ -41,6 +41,10 @@ covered_paths:                               # optional: if the page synthesizes
   - "raw/<folder>/<file2>.md"
 ```
 
+### Hard rule `source_path` round-trip
+
+`source_path` **must round-trip byte-for-byte** to the on-disk filename. Do NOT normalise typographic characters (apostrophes `'` ↔ `’`, quotes, em/en dashes, etc.) when emitting `source_path`. `scripts/wiki-maint/scan-raw.sh` applies Unicode normalization symmetrically at match time (NFC + fold U+2019 → U+0027), but emitting a normalized `source_path` against a non-normalized filename creates ghost duplicate pages on every subsequent sweep.
+
 ### Hard rule `source_sha256`
 
 `source_sha256` must **always** be computed via `shasum -a 256 <file>` on the actual file at ingestion time. Never a textual placeholder (`see-raw-file`, the slug, a fake hex, `TODO`...). This rule applies without exception to every expert agent.
