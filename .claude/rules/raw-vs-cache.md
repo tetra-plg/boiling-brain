@@ -15,7 +15,7 @@ Hard rules:
 
 - **Never modify an existing file in `raw/`.** If a source evolves (e.g. doc updated), create a **new file** with a new SHA, never overwrite the old one.
 - **Never move a file out of `raw/`** once it is referenced by a wiki page: you would break `source_path` and `source_sha256`.
-- **SHA-keyed snapshots** for evolving sources (cf. `wiki/decisions/tracked-repos-immutable-snapshots.md`): each version → a new dedicated folder, never overwrite.
+- **SHA-keyed snapshots** for evolving sources (cf. [template doc — tracked-repos-immutable-snapshots](https://github.com/tetra-plg/boiling-brain/blob/main/docs/tracked-repos-immutable-snapshots.md)): each version → a new dedicated folder, never overwrite.
 - **No expert agent writes to `raw/`.** Agents read `raw/` and write to `wiki/`. The only exception is frame promotion (`cache/frames/` → `raw/frames/`) handled by `/ingest-video`.
 
 ## cache/ — transient
@@ -36,5 +36,5 @@ Hard rules:
 
 ## Cross-refs
 
-- `wiki/decisions/tracked-repos-immutable-snapshots.md` — SHA-keyed snapshot pattern for evolving external sources.
-- `wiki/decisions/extraction-frames-induction-runbook.md` — promotion workflow `cache/frames/` → `raw/frames/`.
+- [template doc — tracked-repos-immutable-snapshots](https://github.com/tetra-plg/boiling-brain/blob/main/docs/tracked-repos-immutable-snapshots.md) — SHA-keyed snapshot pattern for evolving external sources.
+- [template doc — extraction-frames-induction-runbook](https://github.com/tetra-plg/boiling-brain/blob/main/docs/extraction-frames-induction-runbook.md) — promotion workflow `cache/frames/` → `raw/frames/`.

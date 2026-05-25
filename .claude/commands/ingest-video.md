@@ -108,7 +108,7 @@ For each `FRAME: HH:MM:SS | slug | description` line of the `## Frame requests` 
 
 ### 4b. Mode B — cross-induction
 
-Follows the runbook [wiki/decisions/extraction-frames-induction-runbook.md](../../wiki/decisions/extraction-frames-induction-runbook.md):
+Follows the runbook [docs/extraction-frames-induction-runbook.md](https://github.com/tetra-plg/boiling-brain/blob/main/docs/extraction-frames-induction-runbook.md) (template doc, not in your vault):
 
 1. **Dense sampling**: `scripts/video/sample-frames.sh <video> /tmp/<slug>-samples/ <cadence>`. Cadence depends on video type (cf. runbook table, default 20 s for dense videos, 30 s for talks, 60 s for quizzes).
 2. **Image-diff**: `scripts/video/diff-frames.py /tmp/<slug>-samples/ [--roi …] [--threshold …] --output /tmp/<slug>-transitions.md`. ROI is only applied if a **domain annex** of the runbook justifies it for this video type; otherwise full frame by default.
