@@ -47,6 +47,7 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 - **`scripts/mcp/setup-mcp.sh`**: quote heredoc delimiter and pass shell vars via `os.environ` — vault paths containing `"` or `\` no longer corrupt the Python hook registration silently (review finding A).
 - **`scripts/mcp/setup-mcp.sh`**: surface pipx install errors instead of swallowing stderr — real cause visible when fastmcp installation fails (review finding C).
 - **`scripts/mcp/mcp-wiki.py`**: `scan_domain` now accepts an optional `limit` parameter (default `0` = no limit) and surfaces capping in the output (`X / Y pages`) — large domains no longer lose pages silently (#36, review finding D).
+- **`scripts/mcp/setup-mcp.sh`**: export `CLAUDE_MD` to the inline python3 subshell that replaces the outdated `~/.claude/CLAUDE.md` block — fixes `KeyError: 'CLAUDE_MD'` that silently swallowed the self-healing on pre-#47 vaults attempting to refresh their block (the script reported `✅ Hook Stop déjà enregistré.` then crashed; the migration was marked applied while the block stayed outdated). Reported by user E2E test on a real vault.
 
 ### Changed
 
@@ -60,6 +61,7 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 - **`scripts/mcp/setup-mcp.sh` self-heals the `~/.claude/CLAUDE.md` global block**: detects the pre-#47 5-tool block via marker and replaces it in place with the new 12-tool + tiered-loading description (12 tools = 5 originals + 7 new `scan_<type>`). Vaults already at v1.1.0 (migrated pre-#47) can re-run `bash <vault>/scripts/mcp/setup-mcp.sh` directly to refresh the LLM instructions, no `applied-migrations` edit needed. The MCP tools themselves are auto-discovered by Claude Code at session start — only the LLM-facing instructions need this refresh.
 - **`/update-vault` — `force-rerun: true` migration flag**: a migration whose frontmatter contains `force-rerun: true` is re-evaluated at every `/update-vault` even when its slug is already in `applied-migrations`. Closes the case where a previously-applied migration ships a content fix that must re-execute on already-migrated vaults (e.g. `v1.1.0.md` after the #41 MCP refactor: `setup-mcp.sh` was extended to write a 12-tool LLM instructions block, but the migration had already run with the 5-tool version, so vaults stuck with the outdated block until re-run). Idempotency is the migration author's responsibility — `force-rerun: true` migrations must be safe to re-apply (a no-op when the target state is already reached).
 - **`scripts/migrations/v1.1.0.md` is now marked `force-rerun: true`**: ensures every vault at v1.1.0 re-runs `setup-mcp.sh` at the next `/update-vault`, refreshing the LLM instructions block, re-checking the MCP registration, and re-checking the Stop hook entry. No-op on already-current state.
+- **Breaking — template-owned ADRs moved from `wiki/decisions/` to `docs/`**: the 3 ADRs documenting template-internal decisions (`extraction-frames-induction-runbook`, `tracked-repos-immutable-snapshots`, `ingest-video-modes-a-b-generalisation`) leave `wiki/` (now reserved for user-owned ADRs — each vault enriches `wiki/decisions/` with its own decisions). `wiki/decisions/decision.md.tpl` (the ADR template for the user) stays. Migration v1.1.0 Part C removes the 3 stale files from existing vaults' `wiki/decisions/` (the `docs/` versions are propagated by `/update-vault` step 5). Refs from propagated files (`.claude/agents/`, `wiki/domains/`, `.claude/commands/`, `.claude/rules/`, `scripts/`) now point to the GitHub URL of the template upstream. `docs/` format unified: H1 + `> **TL;DR:**` blockquote, no YAML frontmatter (wiki-style frontmatter had no use outside the indexer).
 
 ### Migration from v1.0.x
 
@@ -70,23 +72,25 @@ Migration to v1.1.0 is **handled by `/update-vault`**:
 /update-vault
 ```
 
-`/update-vault` detects the local version (1.0.x) → target 1.1.0, propagates the new files (`scripts/mcp/mcp-wiki.py`, `scripts/mcp/setup-mcp.sh`, `scripts/hooks/check-session-activity.sh`, `.claude/commands/compress-bb.md`, `scripts/migrations/v1.1.0.md`, `/query` updated), then invokes the `v1.1.0` migration which:
+`/update-vault` detects the local version (1.0.x) → target 1.1.0, **3-way merges** the propagated files into the vault (local edits on tracked-by-template files are preserved when they don't collide with template changes — see "3-way merge on file propagation" above), then invokes the `v1.1.0` migration which:
 
 1. Announces the additions and what it will mutate (`~/.claude/settings.json`, `~/.claude/CLAUDE.md`, `<vault>/CLAUDE.md`).
 2. Proposes 3 options via `AskUserQuestion`: **Enable** (full setup) / **Patch vault CLAUDE.md only** (skip global mutations) / **Skip**.
-3. If **Enable**: runs `bash scripts/mcp/setup-mcp.sh --vault-path <vault>` (idempotent — pip-installs `fastmcp` if missing, merges mcpServers + Stop hook, appends a marker-bounded block to `~/.claude/CLAUDE.md`).
-4. Patches the vault's `CLAUDE.md` to insert the `## Session start (signals from cache/)` section (idempotent — title-based detection).
-5. Dedicated commit, then bumps `.claude/template-version` to 1.1.0.
+3. **Part A** (if **Enable**): runs `bash scripts/mcp/setup-mcp.sh --vault-path <vault>` (idempotent + self-healing: installs `fastmcp` via pipx, resolves the right Python interpreter for PEP 668 systems, registers MCP via `claude mcp add -s user`, adds the Stop hook, writes/refreshes the 12-tool LLM instructions block in `~/.claude/CLAUDE.md`). Patches the vault's `CLAUDE.md` to insert the `## Session start` section.
+4. **Part B**: detects and removes the pre-v1.1.0 flat-layout scripts (`scripts/extract-frames.sh`, `scripts/scan-raw.sh`, etc.) — they live under `scripts/{video,wiki-maint,mcp,hooks}/` now (propagated by step 5). Cleans the stale Stop hook entry pointing at the old `scripts/check-session-activity.sh` path before `setup-mcp.sh` re-registers the new one.
+5. **Part C** (v1.1.0 final): removes the 3 template-owned ADRs (`extraction-frames-induction-runbook`, `tracked-repos-immutable-snapshots`, `ingest-video-modes-a-b-generalisation`) from `wiki/decisions/` — they live in `docs/` now (propagated by step 5). `wiki/decisions/` is reserved for the user's own ADRs going forward.
+6. Dedicated commits per part, then bumps `.claude/template-version` to 1.1.0 with the slug list in `applied-migrations`.
 
-Neither `~/.claude/settings.json`, `~/.claude/CLAUDE.md`, nor `<vault>/CLAUDE.md` is ever rewritten — only content is added or merged.
+The migration is marked `force-rerun: true`: it re-evaluates at every `/update-vault` to catch content fixes shipped after the initial application (e.g. a vault migrated pre-#47 will refresh its `~/.claude/CLAUDE.md` block on the next update). All steps are idempotent — no-op when the target state is already reached.
+
+Neither `~/.claude/settings.json`, `~/.claude/CLAUDE.md`, nor `<vault>/CLAUDE.md` is ever rewritten as a whole — only specific content blocks are added, merged or refreshed.
 
 If you prefer to migrate manually, read [scripts/migrations/v1.1.0.md](scripts/migrations/v1.1.0.md) which describes exactly what to change.
 
 **Post-update actions** (one-time, after `/update-vault` completes):
 
 - **Restart Claude Code** to reload the MCP server subprocess with the updated `scripts/mcp/mcp-wiki.py` (otherwise `scan_domain` still runs with the previously loaded code).
-- **Optional — refresh the vault's `CLAUDE.md`**: PR-B enriches the "Per-domain expert agents" section of `CLAUDE.md.tpl` with references to `.claude/agent-output-contract.md` and `.claude/agent-memory/`. Existing vaults can re-align manually by diffing their `CLAUDE.md` against the new `CLAUDE.md.tpl`. Not blocking — `/ingest` reads the contract directly from disk.
-- **Optional — re-run `setup-mcp.sh` if your vault path contains special characters** (`"`, `\`): the pre-PR-E heredoc could corrupt the Stop hook registration silently. Re-run `bash scripts/mcp/setup-mcp.sh --vault-path "$(pwd)"` to re-register with the fixed quoting.
+- **Verify** with `/mcp` inside Claude Code — `boiling-brain-wiki` should appear as `Connected` and expose the 12 tools (5 originals + 7 new `scan_<type>`). See [docs/mcp-tiered-loading.md](docs/mcp-tiered-loading.md) for the recommended usage pattern.
 
 ## [v1.0.3] — 2026-05-06
 
