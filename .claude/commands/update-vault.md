@@ -5,193 +5,139 @@ argument-hint: [target-branch]
 
 # /update-vault
 
-Updates this vault from the upstream `tetra-plg/boiling-brain` template. Since v1.0.2, `/update-vault` is a **versioned migration machine**: it detects the vault's version (via `.claude/template-version`), compares it to the target version, propagates new files, and runs the breaking migrations between the two versions when needed.
-
-Use this workflow to pull new scripts, slash-commands, rules or architectural decisions published in the template after your bootstrap.
+Updates this vault from the upstream `tetra-plg/boiling-brain` template. Detects the vault's version, propagates new files via 3-way merge that preserves local edits, runs breaking migrations between the two versions.
 
 ## Arguments
 
-`$ARGUMENTS` — optional target branch ref on `template-upstream` (default: `main`). Use this to test a pre-release feat branch before its release, e.g. `/update-vault feat/v1.2.0`.
+`$ARGUMENTS` — optional `template-upstream` branch (default: `main`). Use to test pre-release feat branches: `/update-vault feat/v1.2.0`.
 
 ## Steps
 
-### 1. Configure the `template-upstream` remote (one-time)
+### 1. Fetch the upstream template
 
 ```bash
-git remote add template-upstream https://github.com/tetra-plg/boiling-brain.git 2>/dev/null \
-  && echo "remote template-upstream added" \
-  || echo "remote template-upstream already configured"
+git remote add template-upstream https://github.com/tetra-plg/boiling-brain.git 2>/dev/null || true
 git fetch template-upstream --tags
 ```
 
-### 2. Detect the local version (with v1.0.0 and v1.0.1 backwards compatibility)
-
-```bash
-LOCAL_VERSION=""
-LOCAL_SHA=""
-
-if [ -f .claude/template-version ]; then
-  # Standard case: v1.0.2+
-  LOCAL_VERSION=$(grep '^template-version:' .claude/template-version | awk '{print $2}')
-  LOCAL_SHA=$(grep '^template-sha:' .claude/template-version | awk '{print $2}')
-  # applied-migrations field (introduced v1.1.0+) — list of migration slugs applied locally
-  APPLIED_MIGRATIONS=$(awk '
-    /^applied-migrations:/{flag=1; next}
-    /^[^[:space:]]/{flag=0}
-    flag && /^[[:space:]]*-/{gsub(/^[[:space:]]*-[[:space:]]*/, ""); print}
-  ' .claude/template-version)
-elif [ -f .template-bootstrap-sha ]; then
-  # v1.0.1 backwards compat: has .template-bootstrap-sha but no .claude/template-version
-  LOCAL_VERSION="1.0.1"
-  LOCAL_SHA=$(cat .template-bootstrap-sha)
-  echo "Vault detected at v1.0.1 (legacy). .claude/template-version will be created during this update."
-else
-  # v1.0.0 backwards compat: neither file. Use tag v1.0.0 as baseline.
-  LOCAL_SHA=$(git -C . show template-upstream/main 2>/dev/null && git rev-list -n 1 v1.0.0 2>/dev/null || echo "")
-  if [ -n "$LOCAL_SHA" ]; then
-    LOCAL_VERSION="1.0.0"
-    echo "Vault detected at v1.0.0 (legacy, no .template-bootstrap-sha). Baseline = tag v1.0.0."
-  else
-    echo "BASELINE_MISSING"
-    echo "No baseline found (.claude/template-version, .template-bootstrap-sha, and tag v1.0.0 all missing)."
-    echo "Create the file manually (see Notes at the bottom) then re-run /update-vault."
-    exit 1
-  fi
-fi
-
-echo "Local version: $LOCAL_VERSION (SHA $LOCAL_SHA)"
-```
-
-**Back-compat `applied-migrations`** : if the field is absent (vault bumped pre-v1.1.0), populate it from version baseline. Because the previous mechanism blocked any version bump when a migration was skipped, `template-version: X.Y.Z` certifies that all migrations with `version <= X.Y.Z` were applied.
-
-```bash
-if [ -z "$APPLIED_MIGRATIONS" ] && [ -f .claude/template-version ]; then
-  APPLIED_MIGRATIONS=$(git ls-tree -r "template-upstream/${TARGET_BRANCH:-main}" --name-only \
-    | grep '^scripts/migrations/v[0-9]' \
-    | while IFS= read -r f; do
-        slug=$(basename "$f" .md)
-        version=$(echo "$slug" | sed 's/^v//' | awk -F'-' '{print $1}')
-        if printf '%s\n%s\n' "$version" "$LOCAL_VERSION" | sort -CV; then
-          echo "$slug"
-        fi
-      done)
-  echo "applied-migrations field was missing — populated from version baseline (${LOCAL_VERSION})."
-fi
-```
-
-### 3. Detect the target version (from the remote)
+### 2. Detect the local version
 
 ```bash
 TARGET_BRANCH="${ARGUMENTS:-main}"
+eval "$(bash scripts/wiki-maint/detect-vault-version.sh "$TARGET_BRANCH")"
+```
+
+This populates `LOCAL_VERSION`, `LOCAL_SHA`, and the `APPLIED_MIGRATIONS` array. The script handles v1.0.0/v1.0.1/v1.0.2+ vaults and back-fills `applied-migrations` for vaults bumped pre-v1.1.0. If it exits non-zero (`BASELINE_MISSING`), stop and surface the error.
+
+### 3. Detect the target version
+
+```bash
 TARGET_VERSION=$(git show "template-upstream/${TARGET_BRANCH}:.claude/template-version" 2>/dev/null \
   | grep '^template-version:' | awk '{print $2}')
 TARGET_SHA=$(git rev-parse "template-upstream/${TARGET_BRANCH}")
-
-if [ -z "$TARGET_VERSION" ]; then
-  echo "Upstream template has no .claude/template-version (probably < v1.0.2). Falling back to SHA."
-  TARGET_VERSION="$TARGET_SHA"
-fi
-
-echo "Target branch: ${TARGET_BRANCH} — version: $TARGET_VERSION (SHA $TARGET_SHA)"
+[ -z "$TARGET_VERSION" ] && TARGET_VERSION="$TARGET_SHA"
+echo "Target: ${TARGET_BRANCH} → ${TARGET_VERSION} (${TARGET_SHA:0:12}…)"
 ```
 
 ### 4. Compute the migration chain to apply
 
-List all migrations on the target branch and keep those **not present in `APPLIED_MIGRATIONS`**. This per-migration tracking handles retroactive migrations (added upstream after a version bump) — a version-range filter would silently skip them forever.
-
 ```bash
 ALL_MIGRATIONS=$(git ls-tree -r "template-upstream/${TARGET_BRANCH}" --name-only \
-  | grep '^scripts/migrations/v[0-9]' \
-  | sort -V)
-
+  | grep '^scripts/migrations/v[0-9]' | sort -V)
 MIGRATIONS_TO_APPLY=$(for f in $ALL_MIGRATIONS; do
   slug=$(basename "$f" .md)
-  echo "$APPLIED_MIGRATIONS" | grep -qFx "$slug" || echo "$slug"
+  printf '%s\n' "${APPLIED_MIGRATIONS[@]}" | grep -qFx "$slug" || echo "$slug"
 done)
 ```
 
-If `MIGRATIONS_TO_APPLY` is empty and local version == target: "Your vault is up to date."
+Per-migration tracking (vs version-range filter) handles retroactive migrations added upstream after a version bump.
 
-If `MIGRATIONS_TO_APPLY` is empty but local version < target: only propagate the files (step 5).
+- If `MIGRATIONS_TO_APPLY` is empty AND `LOCAL_VERSION == TARGET_VERSION`: "Your vault is up to date." → stop.
+- If empty but version differs: skip to step 5 (only file propagation needed).
 
-### 5. Identify and propagate the changed files
+### 5. Propagate the changed files
 
-List the files changed between `LOCAL_SHA` and `TARGET_SHA`, excluding files consumed at bootstrap:
+Compute the list of files that changed between baseline and target, excluding bootstrap-consumed files:
 
 ```bash
-git diff --name-only ${LOCAL_SHA} "template-upstream/${TARGET_BRANCH}" \
-  | grep -v '\.tpl$' \
-  | grep -v '^BOOTSTRAP\.md$' \
-  | grep -v '^PLACEHOLDERS\.md$' \
-  | grep -v '^CONTRIBUTING\.md$' \
-  | grep -v '^CLAUDE\.md$'
+CHANGED_FILES=$(git diff --name-only "${LOCAL_SHA}" "template-upstream/${TARGET_BRANCH}" \
+  | grep -vE '\.tpl$|^BOOTSTRAP\.md$|^PLACEHOLDERS\.md$|^CONTRIBUTING\.md$|^CLAUDE\.md$')
 ```
 
-Notes:
+Show the list to the user via `AskUserQuestion` (multiSelect). Pre-check all newly added files and everything under `.claude/rules/`.
 
-- **`.claude/rules/**`** is included naturally (not in exclusions).
-- **`scripts/migrations/**`** is also included: migrations are propagated into the vault to be consumable at the next `/update-vault`.
-- **`CLAUDE.md`** is excluded: it's user-owned. Its migration is handled by the interactive `scripts/migrations/v<X>-*.md` slash-commands, never via overwrite.
-
-For files newly added in the template (which don't exist yet in the vault — e.g. `.claude/template-version`, `.claude/rules/*`, `scripts/migrations/*`), don't filter by `[ -e "$f" ]`: they must be created.
-
-Show the list to the user via `AskUserQuestion` (multiSelect): which files do they want to update? Pre-check all newly added files and all `.claude/rules/` files.
-
-For each selected file:
+Run the propagation on the selected files:
 
 ```bash
-mkdir -p "$(dirname "$f")"
-git show "template-upstream/${TARGET_BRANCH}:$f" > "$f"
+RESULTS=$(printf '%s\n' "$SELECTED_FILES" \
+  | bash scripts/wiki-maint/propagate-templates.sh "$LOCAL_SHA" "$TARGET_BRANCH")
 ```
 
-> **Why `git show` rather than `cherry-pick`?**
-> Bootstrap resets the git history. The vault has no common ancestor with the template — `cherry-pick` would fail. `git show` copies the target content, no history dependency.
+The script emits one line per file: `PROPAGATED <f>`, `FAST_FORWARD <f>`, `AUTO_MERGED <f>`, or `CONFLICT <f>`. AUTO_MERGED means local edits were preserved alongside template changes (3-way merge). CONFLICT means overlapping edits — the file on disk now contains conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`).
 
-Dedicated commit:
+For each `CONFLICT <f>`, ask the user how to resolve:
+
+```json
+{
+  "questions": [{
+    "question": "<f> has overlapping edits between your local version and the template update. How do you want to resolve it?",
+    "header": "Conflict: <basename>",
+    "multiSelect": false,
+    "options": [
+      {"label": "Keep merged version with markers", "description": "File contains <<<<<<< / ======= / >>>>>>> showing both sides. Edit it manually after this command, then re-stage."},
+      {"label": "Use template version (discard local edits)", "description": "Overwrite with the upstream template. Your local customisations on this file are lost."},
+      {"label": "Use vault version (discard template update)", "description": "Restore your local version. The file diverges from template until you re-run /update-vault and resolve."},
+      {"label": "Skip this file", "description": "Do not stage. The file stays in its current marker-annotated state until you handle it manually."}
+    ]
+  }]
+}
+```
+
+Apply the choice (per-file):
 
 ```bash
-git add <updated files>
-git commit -m "chore: propagate template files (${LOCAL_VERSION} → ${TARGET_VERSION})"
+case "$CHOICE" in
+  "Keep merged version with markers")              : ;;  # already on disk
+  "Use template version (discard local edits)")    git show "template-upstream/${TARGET_BRANCH}:$f" > "$f" ;;
+  "Use vault version (discard template update)")   git show "HEAD:$f" > "$f" 2>/dev/null || rm -f "$f" ;;
+  "Skip this file")                                UNSTAGE+=("$f") ;;
+esac
+```
+
+Stage everything except `UNSTAGE` and commit:
+
+```bash
+git add <propagated files not in UNSTAGE>
+git commit -m "chore: propagate template files (${LOCAL_VERSION} → ${TARGET_VERSION})
+
+Auto-merged: <case-D clean files>
+Resolved: <conflict files with user choice>
+Skipped: <files in UNSTAGE>
+"
 ```
 
 ### 6. Run the migration chain
 
-For each migration identified at step 4, in ascending version order, **invoke the corresponding slash-command**. Example for v1.0.2:
+For each migration in `MIGRATIONS_TO_APPLY` (ascending version order), invoke it as a sub-workflow. Migration files live under `scripts/migrations/v<X>-*.md` — read the file and execute its steps (AskUserQuestion, edits, commit).
 
-```
-/v1.0.2-claude-md-slim
-```
-
-Note: migration files live under `scripts/migrations/` (not `.claude/commands/`), so they are not exposed as top-level slash-commands. `/update-vault` invokes them as a **sub-workflow**: you read the `scripts/migrations/v<X>-*.md` file and execute its workflow step-by-step, following the instructions it contains (read, detect, AskUserQuestion, write).
-
-Each migration can pick its own verdict:
-
-- **Applied**: the file is updated, dedicated commit by the migration itself. Append the migration slug to `APPLIED_MIGRATIONS` (the slug becomes a permanent record in `.claude/template-version`).
-- **Manual edit requested by the user**: the migration touches nothing, the user takes over. **Do not append to `APPLIED_MIGRATIONS`** — it will be re-proposed at the next `/update-vault`.
-- **Skipped**: same, do not append.
-
-Track the state of each migration in a memory variable to decide on the final bump and the updated `applied-migrations` list.
+Each migration returns one of three verdicts:
+- **Applied**: file updated, dedicated commit by the migration. Append its slug to `APPLIED_MIGRATIONS`.
+- **Manual edit / Skipped**: do NOT append. The migration is re-proposed at the next `/update-vault`.
 
 ### 7. Bump `.claude/template-version`
 
-Write the updated file with the new `applied-migrations` list. Bump `template-version` to `TARGET_VERSION` **only if all applicable migrations were accepted**; otherwise keep the local version and let the next `/update-vault` re-propose the pending migrations.
-
 ```bash
 TODAY=$(date +%Y-%m-%d)
-ALL_APPLIED=$(all_migrations_accepted && echo "true" || echo "false")
+ALL_APPLIED=$(all_migrations_accepted && echo true || echo false)
 NEW_VERSION="$LOCAL_VERSION"; NEW_SHA="$LOCAL_SHA"
-if [ "$ALL_APPLIED" = "true" ]; then
-  NEW_VERSION="$TARGET_VERSION"; NEW_SHA="$TARGET_SHA"
-fi
+[ "$ALL_APPLIED" = "true" ] && { NEW_VERSION="$TARGET_VERSION"; NEW_SHA="$TARGET_SHA"; }
 
 {
   echo "template-version: ${NEW_VERSION}"
   echo "template-sha: ${NEW_SHA}"
   echo "last-updated: ${TODAY}"
   echo "applied-migrations:"
-  for slug in $APPLIED_MIGRATIONS; do
-    echo "  - $slug"
-  done
+  printf '  - %s\n' "${APPLIED_MIGRATIONS[@]}"
 } > .claude/template-version
 
 git add .claude/template-version
@@ -199,55 +145,25 @@ if [ "$ALL_APPLIED" = "true" ]; then
   git commit -m "chore: bump template-version to ${NEW_VERSION}"
 else
   git commit -m "chore: update applied-migrations (${LOCAL_VERSION} retained, pending migrations remain)"
+  echo "⚠️ Some migrations were not applied. Version stays at ${LOCAL_VERSION}. Re-run /update-vault after manual resolution."
 fi
 ```
 
-If a migration was skipped or manually edited:
+### 8. Legacy vault edge case
 
-> ⚠️ Some migrations were not applied. `.claude/template-version` stays at `${LOCAL_VERSION}` (with `applied-migrations` updated). Re-run `/update-vault` once you've finalized the manual migrations.
-
-### 8. Edge case: legacy v1.0.0 or v1.0.1 vault (no `.claude/template-version`)
-
-If `.claude/template-version` did not exist at session start (backwards compat detected at step 2), it must be **created** at the end of this first update, even if not all migrations were accepted. The initial creation pins the baseline.
-
-Case A — all migrations accepted: `.claude/template-version` is created at step 7 with `template-version: ${TARGET_VERSION}` (standard case).
-
-Case B — at least one migration skipped or under manual edit: create `.claude/template-version` with **the version from before the skipped migrations**:
-
-```bash
-LAST_APPLIED_VERSION="$LOCAL_VERSION"  # update if partial migrations applied
-TODAY=$(date +%Y-%m-%d)
-{
-  echo "template-version: ${LAST_APPLIED_VERSION}"
-  echo "template-sha: ${LOCAL_SHA}"
-  echo "last-updated: ${TODAY}"
-  echo "applied-migrations:"
-  for slug in $APPLIED_MIGRATIONS; do
-    echo "  - $slug"
-  done
-} > .claude/template-version
-git add .claude/template-version
-git commit -m "chore: initialize .claude/template-version (${LAST_APPLIED_VERSION})"
-```
-
-This way the legacy vault gains the new versioning mechanism even if migration is unfinished.
+If `.claude/template-version` did not exist at session start (step 2 detected v1.0.0 or v1.0.1), step 7 creates it for the first time — even if not all migrations were accepted, with version set to the last fully-applied baseline. This pins the versioning mechanism going forward.
 
 ## Notes
 
-**Files never updated automatically:**
+Excluded from propagation (consumed at bootstrap or user-owned):
+- `*.tpl`, `BOOTSTRAP.md`, `PLACEHOLDERS.md`, `CONTRIBUTING.md` — bootstrap-only.
+- `CLAUDE.md` — user-owned; migrated only through `scripts/migrations/v<X>-*.md`.
 
-- `*.tpl`, `BOOTSTRAP.md`, `PLACEHOLDERS.md`, `CONTRIBUTING.md` — consumed at bootstrap.
-- `CLAUDE.md` — user-owned, migrated only through interactive `scripts/migrations/v<X>-*.md`.
+Vault-specific files (never in template, never overwritten): `.claude/agents/<domain>-expert.md`, `wiki/domains/*.md`, `wiki/overview.md`, `wiki/log.md`, `wiki/radar.md`, `wiki/index.md`.
 
-**Files specific to your instance (never in the template):**
+`.claude/rules/` is upstream-tracked: additions and modifications propagate at every `/update-vault`.
 
-Your agents (`.claude/agents/<domain>-expert.md`), your hubs (`wiki/domains/*.md`), `wiki/overview.md`, `wiki/log.md`, `wiki/radar.md`, `wiki/index.md`, etc. have names distinct from template files — they will never be overwritten.
-
-**`.claude/rules/`** is upstream-tracked: any addition or modification of a rule in the template will be propagated to the vault at every `/update-vault`.
-
-**Missing baseline (hypothetical pre-v1.0.0 vault):**
-
-If neither `.claude/template-version`, `.template-bootstrap-sha`, nor the `v1.0.0` tag is found, create the file manually:
+If no baseline exists (no `.claude/template-version`, no `.template-bootstrap-sha`, no `v1.0.0` tag), step 2 exits `BASELINE_MISSING`. Recover manually:
 
 ```bash
 git fetch template-upstream --tags
@@ -255,5 +171,3 @@ git rev-list -n 1 v1.0.0 > .template-bootstrap-sha
 git add .template-bootstrap-sha
 git commit -m "fix: add template bootstrap sha (retrocompat)"
 ```
-
-Then re-run `/update-vault` — the v1.0.0 backwards compat will take over.
