@@ -180,7 +180,7 @@ marker = "<!-- boiling-brain-wiki-mcp -->"
 new_block = """$CLAUDE_MD_BLOCK"""
 # Replace everything between (and including) the two markers, on first match.
 pattern = re.compile(re.escape(marker) + r".*?" + re.escape(marker), re.DOTALL)
-new_content, n = pattern.subn(new_block, content, count=1)
+new_content, n = pattern.subn(lambda m: new_block, content, count=1)
 if n == 0:
     # Shouldn't happen (grep above confirmed marker presence) but fallback safely.
     new_content = content.rstrip() + "\n\n" + new_block + "\n"
