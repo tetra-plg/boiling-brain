@@ -16,7 +16,7 @@ Before this decision, two video frame-extraction pipelines coexisted but neither
 
 1. **Light mode ("frame requests")** — the agent declares timestamps from the transcript via a `## Frame requests` block. Implemented in [.claude/commands/ingest-video.md](../../.claude/commands/ingest-video.md). The `## Visual frames` section was historically absent from most agents.
 
-2. **Heavy mode ("cross-induction")** — 8-step pipeline documented in [[decisions/extraction-frames-induction-runbook]]. No integration into `/ingest-video`, no packaged script (ffmpeg/Python commands inline in the runbook), runbook initially scoped to a single use case.
+2. **Heavy mode ("cross-induction")** — 8-step pipeline documented in [extraction-frames-induction-runbook](extraction-frames-induction-runbook.md). No integration into `/ingest-video`, no packaged script (ffmpeg/Python commands inline in the runbook), runbook initially scoped to a single use case.
 
 Consequences:
 - Several agents could capture nothing visual from their videos.
@@ -36,7 +36,7 @@ Consequences:
 ### A. The two modes coexist and are usable by every agent
 
 - **Mode A (light, frame requests)**: `## Visual frames` section inserted into every expert agent prompt generated from the template, with domain-specific verbal triggers.
-- **Mode B (heavy, cross-induction)**: [[decisions/extraction-frames-induction-runbook]] runbook *domain-agnostic*, domain specifics moved to **Domain annexes**. The pipeline is driven by `/ingest-video` and the main context, not by the agent — so no agent prompt changes for mode B.
+- **Mode B (heavy, cross-induction)**: [extraction-frames-induction-runbook](extraction-frames-induction-runbook.md) runbook *domain-agnostic*, domain specifics moved to **Domain annexes**. The pipeline is driven by `/ingest-video` and the main context, not by the agent — so no agent prompt changes for mode B.
 
 ### B. `/ingest-video` proposes the right mode, the user picks
 
@@ -62,7 +62,7 @@ Every promoted frame (mode A as well as mode B) **must** be transcribed as struc
 
 | File | Action |
 |---|---|
-| [[decisions/extraction-frames-induction-runbook]] | Domain-agnostic rewrite + Domain annexes (empty skeletons to enrich as ingests come in) + Step 9 |
+| [extraction-frames-induction-runbook](extraction-frames-induction-runbook.md) | Domain-agnostic rewrite + Domain annexes (empty skeletons to enrich as ingests come in) + Step 9 |
 | `.claude/agents/<domain>-expert.md` (all) | `## Visual frames` section (mode A) with domain triggers + mandatory markdown transcription |
 | [scripts/video/sample-frames.sh](../../scripts/video/sample-frames.sh), [scripts/video/diff-frames.py](../../scripts/video/diff-frames.py) | Packaged in the template |
 | [.claude/commands/ingest-video.md](../../.claude/commands/ingest-video.md) | A/B dispatcher (user proposal) + mode B pipeline branch |
@@ -78,4 +78,4 @@ Every promoted frame (mode A as well as mode B) **must** be transcribed as struc
 
 ## Cross-refs
 
-- [[decisions/extraction-frames-induction-runbook|Cross-induction runbook]] (the heavy pipeline itself)
+- [Cross-induction runbook](extraction-frames-induction-runbook.md) (the heavy pipeline itself)
