@@ -16,7 +16,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-VAULT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+VAULT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 WIKI_SOURCES="$VAULT_ROOT/wiki/sources"
 
 # --- Collecte des fichiers à analyser ---
@@ -144,7 +144,7 @@ while IFS= read -r source_file; do
 
   # `source_sha256_composite:` ignoré : non comparable au sha d'un fichier individuel.
   if [ -n "$first_sp" ]; then
-    sha_line=$(grep "^source_sha256:" "$source_file" 2>/dev/null | head -1 | sed 's/^source_sha256:[[:space:]]*//' || true)
+    sha_line=$(grep "^source_sha256:" "$source_file" 2>/dev/null | head -1 | sed 's/^source_sha256:[[:space:]]*//; s/^"//; s/"$//' || true)
     if [ -n "$sha_line" ] && [[ "$sha_line" != -* ]]; then
       path_to_sha["$(_safe_key "$first_sp")"]="$sha_line"
     fi
