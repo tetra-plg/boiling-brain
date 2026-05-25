@@ -138,10 +138,10 @@ Three rules ship by default:
 
 Every wiki page carries two extra frontmatter fields:
 
-- `summary_l0` — single line, ≤140 chars. Telegraphic. Used as TOC entry when an agent scans an entire domain.
+- `summary_l0` — single line, ≤140 chars. Telegraphic. Used as a TOC entry when an agent scans a list of pages.
 - `summary_l1` — 2-5 sentences (~50-150 words). Used when the agent decides whether to load the full body.
 
-This lets agents (and you, via `/query`) navigate the wiki without paying the full body cost on every page they consider.
+This lets agents (and you, via `/query`) navigate the wiki without paying the full body cost on every page they consider. Starting in v1.1.0, the MCP server pushes this further by exposing a **hierarchical orient → drill → preview → read** pattern across 12 tools (~96% token reduction vs flat dumps on large domains). See [docs/mcp-tiered-loading.md](docs/mcp-tiered-loading.md) for the full pattern.
 
 ## Scripts layout
 
@@ -174,17 +174,24 @@ New scripts should be placed in the existing feature directory that best fits th
 
 ## MCP server (optional, v1.1+)
 
-Run `bash scripts/mcp/setup-mcp.sh` once after bootstrap to register the `boiling-brain-wiki` MCP server in `~/.claude/settings.json`. Once active, Claude Code can query your wiki from **any project** — not just inside the vault directory.
+Run `bash scripts/mcp/setup-mcp.sh` once after bootstrap to register the `boiling-brain-wiki` MCP server (user-scope). Once active, Claude Code can query your wiki from **any project** — not just inside the vault directory.
 
-Five tools are exposed:
+**12 tools** are exposed, organised as a tiered-loading hierarchy (orient → drill → read). Full reference: [docs/mcp-tiered-loading.md](docs/mcp-tiered-loading.md).
 
 | Tool | Purpose |
 |---|---|
-| `scan_domain(domain)` | L0 index of a domain (one-line summaries, up to 80 pages) |
-| `preview_page(page_path)` | Frontmatter + summary_l1 of a single page |
-| `read_page(page_path)` | Full body of a page |
-| `search_wiki(query)` | Full-text search across `wiki/` |
-| `drop_to_raw(subfolder, filename, content)` | Write a file to `raw/` and signal it for ingestion |
+| `scan_domain(domain)` | **Orient**: hub `summary_l1` + counts per type + top 10 pages by centrality (backlinks). ~860 tokens. Use FIRST. |
+| `scan_concepts(domain, query="", top=20)` | **Drill**: concepts in a domain, ranked by centrality. Optional query (case + separator insensitive). |
+| `scan_entities`, `scan_decisions`, `scan_syntheses`, `scan_cheatsheets`, `scan_diagrams` | Same semantics, per type. |
+| `scan_sources(domain, query, top=20)` | Same shape but query is **required** (sources too numerous without a target). |
+| `preview_page(page_path)` | L1: frontmatter (whitelisted fields) + `summary_l1`. |
+| `read_page(page_path)` | L2: full body. |
+| `search_wiki(query, limit=10)` | Cross-type, cross-domain. Format enriched: path, type, summary_l0, outgoing wikilinks. |
+| `drop_to_raw(subfolder, filename, content)` | Sanctioned write into `raw/` (server-side, bypasses the `protect-raw.sh` hook by design). Auto-signals via `cache/.pending-ingest`. |
+
+**Recommended pattern**: `scan_domain` → `scan_<type>(query=...)` → `preview_page` → `read_page`. Measured: ~96% token reduction vs a flat dump on a 388-page domain.
+
+A standalone smoke test (`scripts/mcp/smoke_test.py`) asserts per-tool token budgets against any vault — run it after any non-trivial change to `mcp-wiki.py`.
 
 ## Workflow loop
 
