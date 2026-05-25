@@ -1,14 +1,6 @@
----
-type: decision
-domains: [meta]
-created: 2026-04-29
-updated: 2026-04-30
-sources: []
-summary_l0: "Video frames generalization: A/B modes for every expert agent, packaged scripts, mandatory markdown transcription"
-summary_l1: |
-  The decision unifies video extraction across all agents through two complementary modes: light mode A ("frame requests" declared by the agent) for visual-poor videos, heavy mode B (cross-induction in 9 steps) for visual-dense videos. The main context dynamically proposes the right mode based on density and duration. Each agent receives a "Visual frames" section with domain-specific verbal triggers. Extraction scripts packaged (sample-frames.sh, diff-frames.py). Every promoted frame must be transcribed as markdown to make content queryable without re-viewing.
----
 # Decision — Generalize `/ingest-video` & frame extraction across all agents
+
+> **TL;DR:** unifies video extraction across all agents through two complementary modes: light mode A ("frame requests" declared by the agent) for visual-poor videos, heavy mode B (cross-induction in 9 steps) for visual-dense videos. The main context dynamically proposes the right mode based on density and duration. Each agent receives a "Visual frames" section with domain-specific verbal triggers. Extraction scripts packaged (sample-frames.sh, diff-frames.py). Every promoted frame must be transcribed as markdown to make content queryable without re-viewing.
 
 ## Problem
 

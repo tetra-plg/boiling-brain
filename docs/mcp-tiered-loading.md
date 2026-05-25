@@ -1,6 +1,6 @@
 # MCP tiered-loading layer
 
-> Reference for the `boiling-brain-wiki` MCP server's 12 tools and the tiered-loading pattern they implement. Added in v1.1.0 (refactor #41).
+> **TL;DR:** reference for the `boiling-brain-wiki` MCP server's 12 tools and the tiered-loading pattern they implement (orient → drill → preview → read). Added in v1.1.0 (refactor #41). Measured ~96% token reduction vs the pre-v1.1.0 flat dump on a 388-page domain.
 
 ## Why tiered loading
 
