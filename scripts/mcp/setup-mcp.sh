@@ -172,7 +172,7 @@ if [[ -f "$CLAUDE_MD" ]] && grep -qF "$MARKER" "$CLAUDE_MD"; then
     echo "✅ $CLAUDE_MD déjà configuré (marqueur présent, contenu à jour)."
   else
     # Outdated block (pre-#47, only 5 tools listed). Replace in place.
-    python3 - <<PYEOF
+    CLAUDE_MD="$CLAUDE_MD" python3 - <<PYEOF
 import os, re, pathlib
 p = pathlib.Path(os.environ["CLAUDE_MD"])
 content = p.read_text(encoding="utf-8")
