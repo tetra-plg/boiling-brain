@@ -259,6 +259,138 @@ def scan_domain(domain: str) -> str:
     return "\n".join(lines)
 
 
+def _scan_type_impl(domain: str, type_singular: str, type_plural: str, query: str, top: int) -> str:
+    """Shared implementation for scan_concepts, scan_entities, scan_decisions,
+    scan_syntheses, scan_cheatsheets, scan_diagrams. scan_sources wraps this
+    too but adds a refusal path for empty queries.
+    """
+    pages = []
+    for p in _domain_pages(domain):
+        try:
+            fm, body = _parse_front(p.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if str(fm.get("type", "")).strip().lower() != type_singular:
+            continue
+        pages.append((p, fm, body))
+
+    if not pages:
+        return f"Aucune page de type « {type_singular} » dans le domaine « {domain} »."
+
+    if query.strip():
+        tokens = _normalize_query(query)
+        scored = []
+        for p, fm, body in pages:
+            haystack_parts = [
+                str(fm.get("summary_l0", "")),
+                str(fm.get("summary_l1", "")),
+                p.stem,
+                body,
+            ]
+            haystack = _normalize_haystack(" ".join(haystack_parts))
+            if _all_tokens_present(tokens, haystack):
+                centrality = _compute_centrality(str(p.relative_to(WIKI_PATH)))
+                scored.append((centrality, p, fm))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        kept = scored[:top]
+        if not kept:
+            return f"Aucune page de type « {type_singular} » dans « {domain} » ne matche « {query} »."
+    else:
+        ranked = []
+        for p, fm, _body in pages:
+            centrality = _compute_centrality(str(p.relative_to(WIKI_PATH)))
+            ranked.append((centrality, p, fm))
+        ranked.sort(key=lambda x: x[0], reverse=True)
+        kept = ranked[:top]
+
+    header = (
+        f"# {type_plural} dans {domain} — top {len(kept)}"
+        + (f" pour « {query} »" if query.strip() else " par centralité")
+    )
+    lines = [header, ""]
+    for _c, p, fm in kept:
+        lines.append(_compact_l0(fm, p))
+    return "\n".join(lines)
+
+
+@mcp.tool(
+    description=(
+        "List concepts in a domain. Without query: top N by centrality (backlinks). "
+        "With query: only concepts whose title/body/summary contain all tokens "
+        "(case + separator insensitive), ranked by centrality. Use after scan_domain "
+        "to drill into the concept layer."
+    )
+)
+def scan_concepts(domain: str, query: str = "", top: int = 20) -> str:
+    return _scan_type_impl(domain, "concept", "Concepts", query, top)
+
+
+@mcp.tool(
+    description="List entities (people, tools, places, organisations) in a domain. Same semantics as scan_concepts."
+)
+def scan_entities(domain: str, query: str = "", top: int = 20) -> str:
+    return _scan_type_impl(domain, "entity", "Entities", query, top)
+
+
+@mcp.tool(
+    description="List decisions (ADRs, retained tradeoffs) in a domain. Same semantics as scan_concepts."
+)
+def scan_decisions(domain: str, query: str = "", top: int = 20) -> str:
+    return _scan_type_impl(domain, "decision", "Decisions", query, top)
+
+
+@mcp.tool(
+    description="List syntheses (cross-cutting summaries) in a domain. Same semantics as scan_concepts."
+)
+def scan_syntheses(domain: str, query: str = "", top: int = 20) -> str:
+    return _scan_type_impl(domain, "synthesis", "Syntheses", query, top)
+
+
+@mcp.tool(
+    description="List cheatsheets (quick-reference how-tos) in a domain. Same semantics as scan_concepts."
+)
+def scan_cheatsheets(domain: str, query: str = "", top: int = 20) -> str:
+    return _scan_type_impl(domain, "cheatsheet", "Cheatsheets", query, top)
+
+
+@mcp.tool(
+    description="List diagrams (visual artefacts) in a domain. Same semantics as scan_concepts."
+)
+def scan_diagrams(domain: str, query: str = "", top: int = 20) -> str:
+    return _scan_type_impl(domain, "diagram", "Diagrams", query, top)
+
+
+@mcp.tool(
+    description=(
+        "List source pages in a domain. UNLIKE scan_concepts/entities/etc., "
+        "scan_sources REQUIRES a non-empty query — sources are typically too "
+        "numerous to enumerate usefully without a target. With query: only "
+        "sources whose title/body/summary contain all tokens, ranked by centrality."
+    )
+)
+def scan_sources(domain: str, query: str = "", top: int = 20) -> str:
+    if not query.strip():
+        n_sources = sum(
+            1 for p in _domain_pages(domain)
+            if _safe_get_type(p) == "source"
+        )
+        return (
+            f"scan_sources(\"{domain}\") sans query retournerait {n_sources} sources, peu utile.\n"
+            f"Préciser une query : scan_sources(\"{domain}\", query=\"<topic>\").\n"
+            f"Pour explorer le domaine sans cible, préférer scan_domain(\"{domain}\") "
+            f"ou scan_concepts(\"{domain}\")."
+        )
+    return _scan_type_impl(domain, "source", "Sources", query, top)
+
+
+def _safe_get_type(p) -> str:
+    try:
+        fm, _ = _parse_front(p.read_text(encoding="utf-8"))
+        return str(fm.get("type", "")).strip().lower()
+    except Exception:
+        return ""
+
+
 @mcp.tool(
     description=(
         "Preview a wiki page: frontmatter fields + summary_l1 (2-5 sentence description). "
