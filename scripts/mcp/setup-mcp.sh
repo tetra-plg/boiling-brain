@@ -137,27 +137,57 @@ settings_path.write_text(json.dumps(settings, indent=2, ensure_ascii=False))
 print(f"✅ {settings_path} mis à jour (hook Stop).")
 PYEOF
 
-# --- Append ~/.claude/CLAUDE.md (idempotent via marqueur) ---
+# --- Append ~/.claude/CLAUDE.md (idempotent via marqueur ; replace if outdated) ---
 MARKER="<!-- boiling-brain-wiki-mcp -->"
 CLAUDE_MD_BLOCK="$MARKER
 ## Wiki personnel (boiling-brain-wiki MCP)
 
 Tu as accès à un serveur MCP \`boiling-brain-wiki\` qui expose le wiki personnel de l'utilisateur.
 
-**Règle d'invocation :** avant de répondre à toute question portant sur les domaines de connaissance de l'utilisateur (poker, ia, factory, metier, tech, astro), appelle **toujours** \`scan_domain\` en premier pour vérifier ce que le wiki contient.
+**Règle d'invocation :** avant de répondre à toute question portant sur les domaines de connaissance de l'utilisateur, suis le pattern de tiered loading :
 
-Outils disponibles :
-- \`scan_domain(domain)\` — index L0 d'un domaine (à appeler en premier)
-- \`preview_page(page_path)\` — frontmatter + summary_l1 d'une page
-- \`read_page(page_path)\` — corps complet d'une page
-- \`search_wiki(query)\` — recherche full-text dans wiki/
-- \`drop_to_raw(subfolder, filename, content)\` — dépose un fichier dans raw/ pour ingest
+1. **\`scan_domain(domain)\`** — overview hiérarchique du domaine (hub + counts par type + top 10 centralité). ~1k tokens. À appeler EN PREMIER pour s'orienter.
+2. **\`scan_<type>(domain, query=\"\", top=20)\`** — drill-down par type une fois le domaine identifié. Sans query : top N par centralité. Avec query : filtrage tokenisé (case + séparateur insensible). 7 outils granulaires :
+   - \`scan_concepts\` — concepts / idées / principes
+   - \`scan_entities\` — acteurs, outils, lieux, organisations
+   - \`scan_decisions\` — ADRs, tradeoffs retenus
+   - \`scan_syntheses\` — résumés cross-cutting
+   - \`scan_cheatsheets\` — référence rapide / how-to
+   - \`scan_diagrams\` — artefacts visuels
+   - \`scan_sources\` — sources brutes (REQUIERT une query, sources trop nombreuses sans cible)
+3. **\`preview_page(page_path)\`** — frontmatter + summary_l1 d'une page (L1, ~300 tokens).
+4. **\`read_page(page_path)\`** — corps complet d'une page (L2, taille variable).
 
-Domaines disponibles : poker, ia, factory, metier, tech, astro
+**Cross-coupe** : \`search_wiki(query, limit=10)\` — recherche full-text tokenisée cross-type, cross-domain, format enrichi (path, type, summary_l0, wikilinks). Complémentaire aux scan_<type> qui sont intra-domaine.
+
+**Écriture** : \`drop_to_raw(subfolder, filename, content)\` — dépose un fichier dans raw/ pour ingest (bypass propre du hook protect-raw.sh).
+
+Le pattern tiered (scan_domain → scan_<type> → preview → read) économise drastiquement les tokens vs un dump de domaine (mesuré : ~96% de réduction sur un domaine de 388 pages).
 $MARKER"
 
 if [[ -f "$CLAUDE_MD" ]] && grep -qF "$MARKER" "$CLAUDE_MD"; then
-  echo "✅ $CLAUDE_MD déjà configuré (marqueur présent)."
+  # Marker present — check if the existing block is the current (12-tool) version
+  # by looking for a distinctive string of the new content.
+  if grep -qF "scan_concepts" "$CLAUDE_MD"; then
+    echo "✅ $CLAUDE_MD déjà configuré (marqueur présent, contenu à jour)."
+  else
+    # Outdated block (pre-#47, only 5 tools listed). Replace in place.
+    python3 - <<PYEOF
+import os, re, pathlib
+p = pathlib.Path(os.environ["CLAUDE_MD"])
+content = p.read_text(encoding="utf-8")
+marker = "<!-- boiling-brain-wiki-mcp -->"
+new_block = """$CLAUDE_MD_BLOCK"""
+# Replace everything between (and including) the two markers, on first match.
+pattern = re.compile(re.escape(marker) + r".*?" + re.escape(marker), re.DOTALL)
+new_content, n = pattern.subn(new_block, content, count=1)
+if n == 0:
+    # Shouldn't happen (grep above confirmed marker presence) but fallback safely.
+    new_content = content.rstrip() + "\n\n" + new_block + "\n"
+p.write_text(new_content, encoding="utf-8")
+print(f"✅ {p} mis à jour (bloc obsolète remplacé par la version 12 outils + tiered loading).")
+PYEOF
+  fi
 else
   echo "" >> "$CLAUDE_MD"
   echo "$CLAUDE_MD_BLOCK" >> "$CLAUDE_MD"
