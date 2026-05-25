@@ -12,7 +12,7 @@ This file documents every `{{placeholder}}` used in the `*.tpl` files of this te
 | `{{role}}` | string | Interview Q (current role / title) | `CLAUDE.md.tpl`, `overview.md.tpl` |
 | `{{parcours_short}}` | markdown bullet list, 2-4 lines | Interview Q (career, in 2-3 bullets) | `overview.md.tpl` |
 | `{{bootstrap_date}}` | YYYY-MM-DD | `date +%Y-%m-%d` at bootstrap time | `overview.md.tpl`, `index.md.tpl`, `radar.md.tpl`, `domain.md.tpl` (per-domain) |
-| `{{has_tracked_repos}}` | boolean | Interview Q (do you want to track GitHub repos via `/sync-repos`?) | Conditional: keeps or removes `tracked-repos.config.json.tpl`, `scripts/sync-repos.sh`, `.claude/commands/sync-repos.md`, `wiki/decisions/tracked-repos-immutable-snapshots.md`, and several blocks inside `CLAUDE.md.tpl` |
+| `{{has_tracked_repos}}` | boolean | Interview Q (do you want to track GitHub repos via `/sync-repos`?) | Conditional: keeps or removes `tracked-repos.config.json.tpl`, `scripts/sync-repos.sh`, `.claude/commands/sync-repos.md`, `docs/tracked-repos-immutable-snapshots.md`, and several blocks inside `CLAUDE.md.tpl` |
 
 ### Conditional sections in `CLAUDE.md.tpl`
 

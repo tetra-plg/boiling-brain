@@ -438,8 +438,8 @@ Substitute.
 ```bash
 rm .claude/commands/ingest-video.md
 rm scripts/video/transcribe.sh scripts/video/sample-frames.sh scripts/video/extract-frames.sh scripts/video/diff-frames.py
-rm wiki/decisions/extraction-frames-induction-runbook.md
-rm wiki/decisions/ingest-video-modes-a-b-generalisation.md
+rm docs/extraction-frames-induction-runbook.md
+rm docs/ingest-video-modes-a-b-generalisation.md
 ```
 
 **If `has_tracked_repos = false`**:
@@ -448,7 +448,7 @@ rm wiki/decisions/ingest-video-modes-a-b-generalisation.md
 rm .claude/commands/sync-repos.md
 rm scripts/sync-repos.sh
 rm tracked-repos.config.json.tpl    # or its rendered output if already substituted
-rm wiki/decisions/tracked-repos-immutable-snapshots.md
+rm docs/tracked-repos-immutable-snapshots.md
 ```
 
 ### 5.6 Renaming substituted `.tpl` files to their final name
@@ -662,7 +662,7 @@ Happy ingesting.
 - `wiki/index.md`, `wiki/log.md`, `wiki/overview.md`, `wiki/radar.md`
 - For each domain: `wiki/domains/<slug>.md` + `.claude/agents/<slug>-expert.md` + `.claude/agent-memory/<slug>/MEMORY.md`
 - `wiki/decisions/bootstrap-prompt.md`, `wiki/decisions/placeholders-reference.md`
-- Conditional: `tracked-repos.config.json`, `wiki/decisions/tracked-repos-immutable-snapshots.md`, `wiki/decisions/extraction-frames-induction-runbook.md`, `wiki/decisions/ingest-video-modes-a-b-generalisation.md`
+- Conditional: `tracked-repos.config.json`, `docs/tracked-repos-immutable-snapshots.md`, `docs/extraction-frames-induction-runbook.md`, `docs/ingest-video-modes-a-b-generalisation.md`
 - `raw/` structure: `notes/`, `transcripts/`, `videos-meta/`, `frames/` (pre-existing via .gitkeep) + conditional (`pdfs/`, `articles/`, `docs/`)
 - `cache/` structure: `frames/` + conditional (`videos/inbox/`, `audio/`, `sync-repos/`)
 - `.obsidian/graph.json` (graph filters + colorGroups per domain) + `.obsidian/app.json`
