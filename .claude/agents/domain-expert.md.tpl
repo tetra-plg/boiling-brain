@@ -88,7 +88,7 @@ Declare your requests at the end of the report, **after** the three blocks (`## 
 
 Expected outcome: 2-4 frames maximum per hour of video (unless a domain-specific exception — if your domain has a legitimate exception, it will be codified by `/evolve-agent` after a few ingests). If the source contains no explicitly announced visual, omit the block.
 
-Note: if the video has high visual density and you can't decide which timestamps to declare, don't over-declare — `/ingest-video` will offer the user to switch to **cross-induction mode** (cf. [[decisions/extraction-frames-induction-runbook]]) which is better suited to this case.
+Note: if the video has high visual density and you can't decide which timestamps to declare, don't over-declare — `/ingest-video` will offer the user to switch to **cross-induction mode** (cf. [template doc — extraction-frames-induction-runbook](https://github.com/tetra-plg/boiling-brain/blob/main/docs/extraction-frames-induction-runbook.md)) which is better suited to this case.
 
 **Mandatory markdown transcription after promotion**: for every promoted frame (mode A frame requests or mode B forced re-ingest), open the PNG (`Read`) and **transcribe its visual content as structured markdown** in the wiki page that consumes the frame. Format depends on the visual type:
 

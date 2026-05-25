@@ -1,14 +1,6 @@
----
-type: decision
-domains: [meta]
-created: 2026-04-19
-updated: 2026-04-30
-sources: []
-summary_l0: "Immutable SHA-keyed snapshots for evolving GitHub repo docs — faithful to the Karpathy principle"
-summary_l1: |
-  The problem: we want to bring into the wiki the docs of GitHub repos that change with every merge, while keeping `raw/` immutable. Solution: `/sync-repos` creates immutable snapshots named by the short SHA of each repo's HEAD, driven by a `tracked-repos.config.json` manifest. Every merge produces a new snapshot without overwriting the previous ones; hash-based idempotence and version history remain usable. Reusable pattern for any repo whose docs evolve (frameworks, living specs, in-progress projects).
----
 # Bringing evolving docs into an immutable `raw/`
+
+> **TL;DR:** we want to bring into the wiki the docs of GitHub repos that change with every merge, while keeping `raw/` immutable. Solution: `/sync-repos` creates immutable snapshots named by the short SHA of each repo's HEAD, driven by a `tracked-repos.config.json` manifest. Every merge produces a new snapshot without overwriting the previous ones; hash-based idempotence and version history remain usable. Reusable pattern for any repo whose docs evolve (frameworks, living specs, in-progress projects).
 
 ## The problem
 

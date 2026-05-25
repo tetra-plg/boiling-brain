@@ -1,14 +1,6 @@
----
-type: decision
-domains: [meta]
-created: 2026-04-29
-updated: 2026-04-30
-sources: []
-summary_l0: "Long-video frame extraction: dense sampling + image-diff + cross-induction with transcript + batch validation + markdown transcription"
-summary_l1: |
-  This runbook describes a 9-step process to extract relevant frames from long videos (>30 min) where simple methods under-extract. Each step crosses several signals: dense sampling, pixel-diff computation, agent-driven visual cataloging, validation against the transcript (±30s), high-resolution extraction, batch manual validation, then markdown transcription of the content. Applicable to every wiki domain. Recommended for visually dense videos or suspected under-extraction.
----
 # Runbook — Frame extraction by cross-induction (sampling × image-diff × transcript × manual validation × markdown transcription)
+
+> **TL;DR:** 9-step process to extract relevant frames from long videos (>30 min) where simple methods under-extract. Each step crosses several signals: dense sampling, pixel-diff computation, agent-driven visual cataloging, validation against the transcript (±30s), high-resolution extraction, batch manual validation, then markdown transcription of the content. Applicable to every wiki domain. Recommended for visually dense videos or suspected under-extraction.
 
 > Cross-domain asset. Reusable by every expert agent of the wiki. Domain specifics (specific software UIs, OCR profiles, cheatsheet formats) are pushed into the **Domain annexes** section at the end of the runbook.
 
