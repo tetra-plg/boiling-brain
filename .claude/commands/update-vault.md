@@ -41,16 +41,31 @@ echo "Target: ${TARGET_BRANCH} → ${TARGET_VERSION} (${TARGET_SHA:0:12}…)"
 
 ### 4. Compute the migration chain to apply
 
+A migration enters `MIGRATIONS_TO_APPLY` if either:
+- Its slug is NOT in `APPLIED_MIGRATIONS` (the normal "new migration" path), OR
+- Its slug IS in `APPLIED_MIGRATIONS` BUT its frontmatter contains `force-rerun: true` (the "re-evaluate on every update" path, used when a previously-applied migration ships a fix or extension that needs to re-execute on already-migrated vaults).
+
 ```bash
 ALL_MIGRATIONS=$(git ls-tree -r "template-upstream/${TARGET_BRANCH}" --name-only \
   | grep '^scripts/migrations/v[0-9]' | sort -V)
 MIGRATIONS_TO_APPLY=$(for f in $ALL_MIGRATIONS; do
   slug=$(basename "$f" .md)
-  printf '%s\n' "${APPLIED_MIGRATIONS[@]}" | grep -qFx "$slug" || echo "$slug"
+  # Always include if not yet applied
+  if ! printf '%s\n' "${APPLIED_MIGRATIONS[@]}" | grep -qFx "$slug"; then
+    echo "$slug"
+    continue
+  fi
+  # Already applied — check the force-rerun flag in the migration frontmatter
+  force=$(git show "template-upstream/${TARGET_BRANCH}:$f" 2>/dev/null \
+    | awk 'BEGIN{fm=0} /^---$/{fm++; next} fm==1 && /^force-rerun:/{print $2}' \
+    | tr -d ' "')
+  if [ "$force" = "true" ]; then
+    echo "$slug"
+  fi
 done)
 ```
 
-Per-migration tracking (vs version-range filter) handles retroactive migrations added upstream after a version bump.
+Per-migration tracking (vs version-range filter) handles retroactive migrations added upstream after a version bump. The `force-rerun` flag handles the case where a previously-applied migration receives a content fix that must re-execute on already-migrated vaults (idempotency is the migration author's responsibility — a `force-rerun: true` migration must be safe to re-apply).
 
 - If `MIGRATIONS_TO_APPLY` is empty AND `LOCAL_VERSION == TARGET_VERSION`: "Your vault is up to date." → stop.
 - If empty but version differs: skip to step 5 (only file propagation needed).
@@ -115,49 +130,6 @@ Resolved: <conflict files with user choice>
 Skipped: <files in UNSTAGE>
 "
 ```
-
-#### Post-propagation auto-refresh of MCP setup
-
-`scripts/mcp/setup-mcp.sh` and `scripts/mcp/mcp-wiki.py` carry side-effects that live outside the vault: the MCP registration in `claude mcp` (absolute python path + script path), the Stop hook entry in `~/.claude/settings.json`, and the LLM instructions block in `~/.claude/CLAUDE.md` (which `setup-mcp.sh` writes/refreshes). When these two files change upstream, the in-vault propagation is not enough — the script needs to be re-run to refresh those external mutations.
-
-**The migration `v1.1.0` Part A already invokes `setup-mcp.sh`** when it runs. Therefore: only auto-trigger the refresh here if `v1.1.0` is NOT in `MIGRATIONS_TO_APPLY` (otherwise the migration handles it and double-running just adds noise).
-
-```bash
-# Detect changes to either MCP script in the propagated set
-MCP_CHANGED=false
-echo "$SELECTED_FILES" | grep -qE '^scripts/mcp/(setup-mcp\.sh|mcp-wiki\.py)$' && MCP_CHANGED=true
-
-# Skip if a migration is going to re-run setup-mcp.sh anyway
-if [ "$MCP_CHANGED" = "true" ] && ! printf '%s\n' "$MIGRATIONS_TO_APPLY" | grep -qFx 'v1.1.0'; then
-  AUTO_REFRESH=true
-fi
-```
-
-If `AUTO_REFRESH=true`, ask the user before running (the script mutates user-owned global files):
-
-```json
-{
-  "questions": [{
-    "question": "scripts/mcp/setup-mcp.sh or mcp-wiki.py changed upstream. Re-run setup-mcp.sh now to refresh the MCP registration, Stop hook and ~/.claude/CLAUDE.md block?",
-    "header": "Refresh MCP setup",
-    "multiSelect": false,
-    "options": [
-      {"label": "Yes, refresh now", "description": "Runs `bash scripts/mcp/setup-mcp.sh --vault-path \"$(pwd)\"`. The script is idempotent and self-healing on the CLAUDE.md block. Restart Claude Code afterwards to load the new MCP server code."},
-      {"label": "No, I'll run it manually later", "description": "Skip. Note: the MCP server visible to Claude Code still points at the old code until you re-run the script and restart Claude Code."}
-    ]
-  }]
-}
-```
-
-On `Yes`, run it and surface the output:
-
-```bash
-bash scripts/mcp/setup-mcp.sh --vault-path "$(pwd)"
-```
-
-On `No`, emit a reminder in the final summary:
-
-> ℹ️ `setup-mcp.sh` was not re-run despite an upstream change. Refresh manually with `bash scripts/mcp/setup-mcp.sh --vault-path "$(pwd)"` and restart Claude Code when ready.
 
 ### 6. Run the migration chain
 
