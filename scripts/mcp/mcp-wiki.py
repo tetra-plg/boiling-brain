@@ -473,7 +473,7 @@ def _outgoing_wikilinks(body: str, limit: int = 10) -> list[str]:
         "matches 'two-words' and 'twowords'). Results are ranked by centrality."
     )
 )
-def search_wiki(query: str, limit: int = 20) -> str:
+def search_wiki(query: str, limit: int = 10) -> str:
     tokens = _normalize_query(query)
     if not tokens:
         return "Requête vide."
@@ -503,7 +503,7 @@ def search_wiki(query: str, limit: int = 20) -> str:
         rel = str(p.relative_to(WIKI_PATH))
         t = fm.get("type", "")
         l0 = fm.get("summary_l0", "—") or "—"
-        wikilinks = _outgoing_wikilinks(body, limit=10)
+        wikilinks = _outgoing_wikilinks(body, limit=3)
         wikilinks_str = ", ".join(wikilinks) if wikilinks else "—"
         lines.append(f"- {rel} ({t}) — {l0} — wikilinks: [{wikilinks_str}]")
     return "\n".join(lines)
