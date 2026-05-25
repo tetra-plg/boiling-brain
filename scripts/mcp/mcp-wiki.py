@@ -445,34 +445,68 @@ def read_page(page_path: str) -> str:
         return f"Erreur de lecture : {e}"
 
 
+_OUTGOING_WIKILINK_RE = re.compile(r"\[\[([^\]|]+?)(?:\|[^\]]+)?\]\]")
+
+
+def _outgoing_wikilinks(body: str, limit: int = 10) -> list[str]:
+    seen: list[str] = []
+    seen_set: set[str] = set()
+    for m in _OUTGOING_WIKILINK_RE.finditer(body):
+        slug = m.group(1).strip()
+        if slug in seen_set:
+            continue
+        seen_set.add(slug)
+        seen.append(slug)
+        if len(seen) >= limit:
+            break
+    return seen
+
+
 @mcp.tool(
     description=(
-        "Full-text search across all wiki pages. "
-        "Returns matching pages with filename, type, and the matching line. "
-        "query: search term (case-insensitive). "
-        "limit: max results (default 20)."
+        "Full-text tokenised search across all wiki pages. Cross-type, "
+        "cross-domain. Returns matching pages with path, type, summary_l0, "
+        "and up to 10 outgoing wikilinks for quick navigation. Use this for "
+        "natural-language queries that are not domain-scoped; use "
+        "scan_<type>(domain, query=...) for domain-scoped drill-downs. "
+        "Query is tokenised (case + separator insensitive: 'two words' "
+        "matches 'two-words' and 'twowords'). Results are ranked by centrality."
     )
 )
 def search_wiki(query: str, limit: int = 20) -> str:
-    if not query.strip():
+    tokens = _normalize_query(query)
+    if not tokens:
         return "Requête vide."
-    pattern = re.compile(re.escape(query), re.IGNORECASE)
-    results = []
+    scored: list[tuple[int, Path, dict, str]] = []
     for p in _all_wiki_pages():
         try:
             content = p.read_text(encoding="utf-8")
         except Exception:
             continue
-        for i, line in enumerate(content.splitlines(), 1):
-            if pattern.search(line):
-                rel = str(p.relative_to(WIKI_PATH))
-                results.append(f"{rel}:{i}: {line.strip()}")
-                break  # one match per file
-        if len(results) >= limit:
-            break
-    if not results:
+        fm, body = _parse_front(content)
+        haystack_parts = [
+            str(fm.get("summary_l0", "")),
+            str(fm.get("summary_l1", "")),
+            p.stem,
+            body,
+        ]
+        haystack = _normalize_haystack(" ".join(haystack_parts))
+        if _all_tokens_present(tokens, haystack):
+            centrality = _compute_centrality(str(p.relative_to(WIKI_PATH)))
+            scored.append((centrality, p, fm, body))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    kept = scored[:limit]
+    if not kept:
         return f"Aucun résultat pour « {query} »."
-    return f"# Résultats pour « {query} » ({len(results)})\n\n" + "\n".join(results)
+    lines = [f"# Résultats pour « {query} » ({len(kept)})", ""]
+    for _c, p, fm, body in kept:
+        rel = str(p.relative_to(WIKI_PATH))
+        t = fm.get("type", "")
+        l0 = fm.get("summary_l0", "—") or "—"
+        wikilinks = _outgoing_wikilinks(body, limit=10)
+        wikilinks_str = ", ".join(wikilinks) if wikilinks else "—"
+        lines.append(f"- {rel} ({t}) — {l0} — wikilinks: [{wikilinks_str}]")
+    return "\n".join(lines)
 
 
 @mcp.tool(
