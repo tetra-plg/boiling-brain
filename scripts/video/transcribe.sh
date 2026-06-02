@@ -11,7 +11,7 @@
 set -euo pipefail
 
 INPUT="${1:?Usage: transcribe.sh <chemin-ou-url>}"
-VAULT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+VAULT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$VAULT_ROOT"
 
 MODEL="${WHISPER_MODEL:-$HOME/.local/share/whisper-models/ggml-large-v3-turbo.bin}"

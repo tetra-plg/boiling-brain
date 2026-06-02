@@ -32,9 +32,9 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # VAULT_PATH override permet de cibler un autre vault (utile pour les tests
-# depuis le repo template avant propagation). Défaut : parent du script
-# (= racine vault dans l'usage normal post-/update-vault).
-VAULT_ROOT="${VAULT_PATH:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+# depuis le repo template avant propagation). Défaut : grand-parent du script
+# (= racine vault, post-#42 le script vit dans scripts/wiki-maint/).
+VAULT_ROOT="${VAULT_PATH:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 
 # --- Validation ---
 
