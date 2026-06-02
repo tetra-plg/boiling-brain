@@ -2,12 +2,25 @@
 """
 mcp-wiki.py — MCP server (stdio) exposing the BoilingBrain wiki via FastMCP.
 
-Tools:
-  scan_domain   — list domain pages with summary_l0 (tiered loading L0)
-  preview_page  — read frontmatter + summary_l1 of a page (tiered loading L1)
-  read_page     — read full body of a page (tiered loading L2)
-  search_wiki   — full-text search across wiki/
-  drop_to_raw   — write a file to raw/ and signal it via cache/.pending-ingest
+Tools (12 total, organised as a tiered-loading hierarchy):
+
+  Orient (entry point, ~1k tokens):
+    scan_domain   — hub summary_l1 + counts per type + top 10 by centrality
+
+  Drill (per-type, ~500 tokens each):
+    scan_concepts, scan_entities, scan_decisions, scan_syntheses,
+    scan_cheatsheets, scan_diagrams       — top N by centrality OR matching query
+    scan_sources                          — same shape but query REQUIRED
+
+  Tiered loading (page-level):
+    preview_page  — frontmatter + summary_l1
+    read_page     — full body
+
+  Cross-coupe (cross-type, cross-domain):
+    search_wiki   — tokenised full-text + ranking by centrality
+
+  Write side:
+    drop_to_raw   — server-side write into raw/ (bypasses protect-raw.sh)
 
 Usage:
   Launched automatically by Claude Code (registered via `claude mcp add`).
@@ -27,8 +40,6 @@ WIKI_PATH = Path(os.environ.get("WIKI_PATH", str(Path(__file__).parent.parent.pa
 WIKI_DIR = WIKI_PATH / "wiki"
 RAW_DIR = WIKI_PATH / "raw"
 CACHE_DIR = WIKI_PATH / "cache"
-
-MAX_OUTPUT_TOKENS_APPROX = 10_000
 
 FRONT_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
@@ -155,16 +166,6 @@ def _compact_l0(fm: dict, p) -> str:
     return f"- {slug} — {l0}"
 
 
-_TYPES_FOR_SCAN_TOOLS = (
-    "concepts",
-    "sources",
-    "syntheses",
-    "entities",
-    "cheatsheets",
-    "decisions",
-    "diagrams",
-)
-
 # Map from the directory-style plural name used in the scan_<type> tool to the
 # singular value stored in the `type:` frontmatter field.
 _TYPE_TOOL_TO_FRONTMATTER = {
@@ -184,8 +185,8 @@ _TYPE_TOOL_TO_FRONTMATTER = {
         "Returns a compact hierarchical overview of a domain: the hub page (summary_l1), "
         "page counts by type, and the top 10 pages by centrality (incoming wikilinks). "
         "Use scan_concepts / scan_entities / scan_<type>(domain, query=...) to drill down. "
-        "domain: one of poker, ia, factory, vie-professionnelle, mental, tech, meta "
-        "(or your vault's domains)."
+        "domain: a domain slug declared in the vault's CLAUDE.md (e.g. one of the slugs "
+        "listed in `wiki/domains/`)."
     )
 )
 def scan_domain(domain: str) -> str:
@@ -461,12 +462,13 @@ def _outgoing_wikilinks(body: str, limit: int = 10) -> list[str]:
 @mcp.tool(
     description=(
         "Full-text tokenised search across all wiki pages. Cross-type, "
-        "cross-domain. Returns matching pages with path, type, summary_l0, "
-        "and up to 10 outgoing wikilinks for quick navigation. Use this for "
-        "natural-language queries that are not domain-scoped; use "
-        "scan_<type>(domain, query=...) for domain-scoped drill-downs. "
-        "Query is tokenised (case + separator insensitive: 'two words' "
-        "matches 'two-words' and 'twowords'). Results are ranked by centrality."
+        "cross-domain. Returns up to `limit` matching pages with path, type, "
+        "summary_l0, and up to 3 outgoing wikilinks per result for quick "
+        "navigation. Use this for natural-language queries that are not "
+        "domain-scoped; use scan_<type>(domain, query=...) for domain-scoped "
+        "drill-downs. Query is tokenised (case + separator insensitive: 'two "
+        "words' matches 'two-words' and 'twowords'). Results are ranked by "
+        "centrality (incoming wikilinks)."
     )
 )
 def search_wiki(query: str, limit: int = 10) -> str:

@@ -15,7 +15,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VAULT_PATH="${VAULT_PATH:-$(dirname "$SCRIPT_DIR")}"
+# Post-#42 layout : ce script vit dans scripts/mcp/. La racine du vault est
+# donc 2 niveaux au-dessus (../..), pas 1 seul comme avant #42.
+VAULT_PATH="${VAULT_PATH:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 
 # --- Parse args ---
 while [[ $# -gt 0 ]]; do
