@@ -23,7 +23,7 @@ from typing import Optional
 
 from fastmcp import FastMCP
 
-WIKI_PATH = Path(os.environ.get("WIKI_PATH", str(Path(__file__).parent.parent)))
+WIKI_PATH = Path(os.environ.get("WIKI_PATH", str(Path(__file__).parent.parent.parent)))
 WIKI_DIR = WIKI_PATH / "wiki"
 RAW_DIR = WIKI_PATH / "raw"
 CACHE_DIR = WIKI_PATH / "cache"
