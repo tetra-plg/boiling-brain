@@ -8,7 +8,7 @@
 
 ## Status
 
-First public release (v1.0). The template works end-to-end and has been used to scaffold real vaults. Future releases will iterate on the bootstrap interview, agent prompts, and domain-deduction heuristics based on community feedback. See [CHANGELOG.md](./CHANGELOG.md) for milestones. Bug reports and generic-improvement PRs welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md).
+v1.1.0 — major release: an MCP server for cross-project wiki access (tiered loading, ~96% token reduction), a session lifecycle (Stop/SessionStart hooks + `/compress-bb`), `/domain` lifecycle commands, L3 readiness (ADR verdict tracking), and a CI revamp for living vaults (Obsidian-safe Prettier formatter, semantic-only linting, deterministic wiki validation). The template works end-to-end and has scaffolded real vaults. See [CHANGELOG.md](./CHANGELOG.md) for the full milestone list. Bug reports and generic-improvement PRs welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## What is an LLM Wiki?
 
@@ -156,6 +156,17 @@ The `scripts/` directory is organised by feature, not by verb. The convention is
 
 New scripts should be placed in the existing feature directory that best fits their role, or at the root only if they are standalone tools with no family. Avoid adding flat scripts at the root.
 
+## CI for living vaults
+
+The CI (`.github/workflows/lint.yml`) blocks only on **repairable, meaningful** defects — a remote vault is a read-only artifact (`raw/` and the LLM are local-only), so CI does deterministic validation only:
+
+- **`format-check`** — Prettier, Obsidian-safe (via `scripts/wiki-maint/format-md.py`): markdown stays clean by construction without breaking `[[wikilink|alias]]` or code-span pipes in tables.
+- **`markdownlint`** — semantic rules only (MD056, MD042, MD051, MD024); cosmetic rules delegated to Prettier.
+- **`wiki-integrity`** — `scripts/wiki-maint/validate-wiki.py`: broken `[[wikilinks]]`, internal links, frontmatter conformance, and leftover git conflict markers. Skips `raw/`.
+- **`link-check-report`** — weekly, **non-blocking** (lychee): external links surfaced as a report, never failing the push.
+
+Run `/format` to normalise a pre-formatter vault; generation commands (`/ingest`, `/save`, `/evolve-agent`) format their output automatically.
+
 ## Slash commands shipped
 
 | Command                                | Purpose                                                                                                                                                                                                                        |
@@ -171,6 +182,7 @@ New scripts should be placed in the existing feature directory that best fits th
 | `/update-vault`                        | Cherry-pick improvements from the upstream template into your vault instance (versioned migration machine).                                                                                                                    |
 | `/create-issue [type]`                 | Sanitize a draft and open an issue on the upstream template repo (auto-strips wikilinks, vault-specific slugs, private paths). Always validated by you before `gh issue create`.                                               |
 | `/compress-bb`                         | Save the current session journal to `raw/notes/sessions/` for later ingestion.                                                                                                                                                 |
+| `/format [path]`                       | Normalise markdown via Prettier (Obsidian-safe: preserves pipes in `[[wikilink\|alias]]` and code spans). On-demand or one-shot for a pre-formatter vault. Excludes `raw/`, `cache/`, `.claude/worktrees/`, `.venv*`.          |
 
 ## MCP server (optional, v1.1+)
 
