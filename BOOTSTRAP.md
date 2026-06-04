@@ -67,7 +67,7 @@ Example JSON (clear inference, detected = Français):
       "header": "Vault language",
       "multiSelect": false,
       "options": [
-        { "label": "Français", "description": "Detected from your first messages. All wiki pages, agents and comments will be in French." },
+        { "label": "Français (Recommended)", "description": "Detected from your first messages. All wiki pages, agents and comments will be in French." },
         { "label": "English", "description": "Write the entire vault in English." },
         { "label": "Español", "description": "Write the entire vault in Spanish." },
         { "label": "Deutsch", "description": "Write the entire vault in German." }
