@@ -5,16 +5,20 @@ argument-hint: [domain — empty = whole wiki]
 
 Run the LINT workflow from CLAUDE.md.
 
-If $ARGUMENTS is provided: limit the analysis to domain `$ARGUMENTS`
-  (pages wiki/domains/$ARGUMENTS.md, wiki/entities/, wiki/concepts/, wiki/sources/ with `domains: [$ARGUMENTS]`).
+If $ARGUMENTS is provided: limit the analysis to domain `$ARGUMENTS`  (pages wiki/domains/$ARGUMENTS.md, wiki/entities/, wiki/concepts/, wiki/sources/ with`domains: [$ARGUMENTS]`).
 If empty: full wiki sweep (expensive — reserve for monthly reviews).
 
 Report on:
+
 - Contradictions across pages
 - Stale claims
 - Orphan pages — see criterion below
 - Concepts mentioned without their own page
 - Missing cross-references
+- **Stale raw sources** — for every page, each path listed in `sources:` (and
+  `covered_paths:`) must exist on disk under `raw/`. A missing source means the
+  page references content that was deleted or moved — flag it. (This is the
+  local counterpart of the CI, which cannot see `raw/`.)
 - Data gaps worth researching
 - **L3 readiness**:
   - ADRs (`wiki/decisions/*.md`) older than 90 days without `verdict` (status confirmation overdue).
