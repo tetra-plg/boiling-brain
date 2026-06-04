@@ -214,6 +214,26 @@ class ValidateWikiTest(unittest.TestCase):
             r = run(tmp)
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
+    def test_wikilink_escaped_alias_in_table_resolves(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            make_vault(tmp, {
+                "concepts/foo.md": GOOD_FM + "\n| x | [[concepts/bar\\|the bar]] |\n",
+                "concepts/bar.md": GOOD_FM,
+            })
+            r = run(tmp)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_wikilink_escaped_alias_still_detects_broken(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            make_vault(tmp, {
+                "concepts/foo.md": GOOD_FM + "\n| x | [[concepts/missing\\|alias]] |\n",
+            })
+            r = run(tmp)
+            self.assertEqual(r.returncode, 1)
+            self.assertIn("missing", r.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

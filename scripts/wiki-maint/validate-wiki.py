@@ -113,6 +113,7 @@ def check_wikilinks(relpath, text, relpaths, bare, defects):
     for n, line in iter_prose_lines(text):
         for m in WIKILINK_RE.finditer(line):
             target = m.group(1).strip()
+            target = target.rstrip("\\")  # handle Obsidian table alias escape [[t\|alias]]
             if target.startswith("raw/"):
                 continue
             norm = target[len("wiki/"):] if target.startswith("wiki/") else target
