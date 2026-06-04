@@ -39,6 +39,15 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 - **`revisit_after` frontmatter field** on `type: decision` and `type: concept` pages (opt-in). (#18)
 - **`/lint`**: flag ADRs ≥ 90 days without `verdict`, and pages whose `revisit_after` is past. (#18)
 
+### Added (CI revamp for living vaults)
+
+- **CI recalibrated for content vaults** — `.github/workflows/lint.yml` no longer blocks on inevitable noise. Three blocking jobs on push/PR: `format-check` (Prettier `--check`), `markdownlint` (semantic rules only), and `wiki-integrity` (new); plus a weekly **non-blocking** `link-check-report` for external links (lychee, `fail: false`) instead of failing every push on dead third-party URLs. Rationale: the remote vault is a read-only artifact (`raw/` and the LLM are local-only), so CI does deterministic validation only — it blocks on what is repairable and meaningful, never on inevitable noise (rotting web links, cosmetic style of generated content).
+- **Prettier as the markdown formatter** — new `.prettierrc` (`proseWrap: preserve`) and `.prettierignore` (excludes `raw/`, `node_modules/`, `.claude/worktrees/`). Markdown is clean and consistent by construction. `.markdownlint.jsonc` recalibrated to **semantic rules only** (MD056 table-column-count, MD042 empty-links, MD051 link-fragments, MD024) and disables the cosmetic rules now owned by Prettier — including **MD060** pre-emptively (invisible on the action's markdownlint v0.34 but explodes on upgrade).
+- **`scripts/wiki-maint/validate-wiki.py`** (+ `test_validate_wiki.py`, 18 stdlib `unittest` tests) — deterministic integrity checker for broken `[[wikilinks]]`, broken internal relative links/anchors, and per-type frontmatter conformance (required fields present, `domains` non-empty, `summary_l0` ≤140 mono-line, `summary_l1` present — both required for tiered loading). Vocabulary is **open** (no closed `type`/`status` list — judging vocabulary is the semantic `/lint`'s job). Skips `raw/` targets (local-only) and understands Obsidian table-alias escapes (`[[target\|alias]]`).
+- **`/format`** — new command running `prettier --write` on demand and for the one-shot normalisation of a pre-formatter vault.
+- **Generation commands format their output** — `/ingest`, `/save`, `/evolve-agent`, `/compress-bb` run `prettier --write` on the markdown they produce, keeping the CI `format-check` job green.
+- **`/lint`** — now also verifies that the `raw/` source files cited in each page's `sources:` exist on disk (the local counterpart of the CI, which cannot see `raw/`).
+
 ### Fixed (alpha feedback)
 
 - **`/compress-bb`**: document "When NOT to use" to avoid redundancy with substantive `raw/notes/` (#22).
