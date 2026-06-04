@@ -382,6 +382,7 @@ Once every domain has been individually validated, show a full recap:
 
 **Identity**: {{name}} — {{role}}
 **Vault**: `{{vault_name}}`
+**Language**: {{vault_language}}
 **Cadence**: {{cadence}}
 **Source types**: {{source_types joined}}
 {{ "**Video storage**: " + video_cache_path if ingest_video_enabled else "" }}
