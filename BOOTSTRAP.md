@@ -2,9 +2,9 @@
 
 > You (Claude) are reading this file in a fresh clone of `tetra-plg/boiling-brain`. Your mission: walk the user through an interview, infer their architecture, scaffold their personalized LLM-Wiki instance, then clean up.
 >
-> **Language**: detect the user's language from their first messages (or from the system locale if you can infer it) and run the entire interview, generate every file and write every comment in that language. If unsure, ask the question in English before continuing. Do not maintain multiple versions of the prompt — adapt on the fly. Be direct, no prose. The `AskUserQuestion` calls must be asked as specified.
+> **Language**: infer a candidate language from the user's first messages (or from the system locale if you can infer it), then **confirm it explicitly at Q0** (Section 2) before anything else — the inference only seeds the default, the user's Q0 answer is authoritative. Run the entire interview, generate every file and write every comment in the confirmed language. Do not maintain multiple versions of the prompt — adapt on the fly. Be direct, no prose. The `AskUserQuestion` calls must be asked as specified.
 >
-> **Language persistence**: the language detected here becomes the value of the `{{vault_language}}` placeholder (human label: `English`, `Français`, `Español`, `Deutsch`, `日本語`…). That value is then injected into `CLAUDE.md` and into every domain agent so that **all wiki pages produced by `/ingest` are written in that language**, regardless of the original source language. An EN source in a FR vault yields FR pages; the reverse is just as true. Confirm the language with the user at the end of Q1 if you have any doubt.
+> **Language persistence**: the language detected here becomes the value of the `{{vault_language}}` placeholder (human label: `English`, `Français`, `Español`, `Deutsch`, `日本語`…). That value is then injected into `CLAUDE.md` and into every domain agent so that **all wiki pages produced by `/ingest` are written in that language**, regardless of the original source language. An EN source in a FR vault yields FR pages; the reverse is just as true. The language is confirmed at Q0 (Section 2) and re-displayed in the Final recap (Section 4.2) before scaffolding.
 
 ---
 
@@ -34,7 +34,7 @@ An **LLM Wiki** is a personal wiki maintained by an LLM:
 
 ### 1.4 What you'll do (overview)
 
-1. 7-question interview (Section 2).
+1. Interview: Q0 language gate + Q1–Q7 (Section 2).
 2. Inference of 5 properties per domain (Section 3).
 3. Per-domain + global validation (Section 4).
 4. Generation: placeholder substitution, per-domain duplication, conditional removals, this file moved to ADR, git reset (Section 5).
@@ -43,9 +43,41 @@ An **LLM Wiki** is a personal wiki maintained by an LLM:
 
 ---
 
-## Section 2 — Step 1, Interview (7 questions)
+## Section 2 — Step 1, Interview (Q0 language gate + 7 questions)
 
 Ask the questions **sequentially**. Store every answer in an internal variable. **Move on only when the previous one is resolved.**
+
+### Q0 — Vault language
+
+**Before Q1**, confirm the language the entire vault will be written in. Infer a candidate from the user's first messages, then **always** ask via `AskUserQuestion` — never skip this, even when the inference feels certain. The inference only sets the recommended default; the user's selection is authoritative.
+
+Build the options dynamically:
+
+- **If a language was clearly inferred**: option 1 = the detected language, labeled `<Language> (Recommended)` (per the `AskUserQuestion` convention — recommended option first, `(Recommended)` suffix on the label), with the description noting it was detected from the user's first messages. Fill the remaining slots (up to 3) from `[English, Français, Español, Deutsch]`, skipping the one already shown as detected — so the total (excluding the auto-appended "Other") never exceeds 4 options.
+- **If inference is ambiguous** (no clear signal): show `[English, Français, Español, Deutsch]` with **no** option marked as detected/recommended — force a conscious choice.
+- The widget auto-appends a free-text "Other" option to every single-select `AskUserQuestion`; it lets the user type any language not listed (e.g. `日本語`, `Português`).
+
+Example JSON (clear inference, detected = Français):
+
+```json
+{
+  "questions": [
+    {
+      "question": "Which language should the vault be written in?",
+      "header": "Vault language",
+      "multiSelect": false,
+      "options": [
+        { "label": "Français (Recommended)", "description": "Detected from your first messages. All wiki pages, agents and comments will be in French." },
+        { "label": "English", "description": "Write the entire vault in English." },
+        { "label": "Español", "description": "Write the entire vault in Spanish." },
+        { "label": "Deutsch", "description": "Write the entire vault in German." }
+      ]
+    }
+  ]
+}
+```
+
+→ Store the chosen human label as `{{vault_language}}` (e.g. `English`, `Français`, `Español`, `Deutsch`, `日本語`). Run the rest of the interview and generate every file in that language. If the user picks "Other", normalize their free-text answer to a conventionally-capitalized human label (e.g. `french` → `French`, `francais` → `Français`). If the input is an ambiguous abbreviation (e.g. `por` → Portuguese or Polish?), ask the user to disambiguate rather than guessing.
 
 ### Q1 — Identity
 
@@ -350,6 +382,7 @@ Once every domain has been individually validated, show a full recap:
 
 **Identity**: {{name}} — {{role}}
 **Vault**: `{{vault_name}}`
+**Language**: {{vault_language}}
 **Cadence**: {{cadence}}
 **Source types**: {{source_types joined}}
 {{ "**Video storage**: " + video_cache_path if ingest_video_enabled else "" }}
@@ -373,13 +406,13 @@ Then:
     "multiSelect": false,
     "options": [
       {"label": "✅ All good, scaffold it", "description": "Run vault generation."},
-      {"label": "↩️ Restart the interview from scratch", "description": "Goes back to Q1. All answers are wiped."}
+      {"label": "↩️ Restart the interview from scratch", "description": "Goes back to Q0. All answers are wiped."}
     ]
   }]
 }
 ```
 
-If "↩️" → restart from Q1. Otherwise → Section 5.
+If "↩️" → restart from Q0. Otherwise → Section 5.
 
 ---
 
