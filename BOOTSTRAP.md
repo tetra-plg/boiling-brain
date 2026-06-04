@@ -53,7 +53,7 @@ Ask the questions **sequentially**. Store every answer in an internal variable. 
 
 Build the options dynamically:
 
-- **If a language was clearly inferred**: option 1 = the detected language, labeled `<Language> — detected from your first messages` (the recommended choice). Fill the remaining slots (up to 3) from `[English, Français, Español, Deutsch]`, skipping the one already shown as detected — so the total never exceeds 4 options before "Other".
+- **If a language was clearly inferred**: option 1 = the detected language, labeled `<Language> (Recommended)` (per the `AskUserQuestion` convention — recommended option first, `(Recommended)` suffix on the label), with the description noting it was detected from the user's first messages. Fill the remaining slots (up to 3) from `[English, Français, Español, Deutsch]`, skipping the one already shown as detected — so the total never exceeds 4 options before "Other".
 - **If inference is ambiguous** (no clear signal): show `[English, Français, Español, Deutsch]` with **no** option marked as detected/recommended — force a conscious choice.
 - The widget auto-appends a free-text "Other" option to every single-select `AskUserQuestion`; it lets the user type any language not listed (e.g. `日本語`, `Português`).
 
