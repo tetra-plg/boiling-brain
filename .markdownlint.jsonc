@@ -1,18 +1,46 @@
 {
-  // Pragmatic config for a docs/wiki repo with many existing files.
-  // Catches structural issues (broken refs, hard tabs, duplicate titles)
-  // but ignores cosmetic line-level rules.
+  // Semantic linting only. Prettier owns cosmetic formatting (see .prettierrc),
+  // so all purely stylistic rules are disabled here to avoid the two tools
+  // fighting. We keep the rules that catch real rendering/data defects.
   // See https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
   "default": true,
-  "MD013": false,          // line length
+
+  // --- Kept (semantic): real defects, repairable ---
+  // MD056 table-column-count   → extra cells silently dropped at render
+  // MD042 no-empty-links       → empty link target
+  // MD051 link-fragments       → anchor points to a missing heading
   "MD024": { "siblings_only": true }, // duplicate headings ok if not siblings
+
+  // --- Disabled: owned by Prettier (cosmetic) ---
+  "MD060": false,          // table-column-style (separator style) — 19k+ on real vault
+  "MD022": false,          // blanks around headings
+  "MD028": false,          // blanks inside blockquote
+  "MD029": false,          // ordered-list prefix style
+  "MD058": false,          // blanks around tables
+  "MD049": false,          // emphasis style
+  "MD050": false,          // strong style
+  "MD012": false,          // multiple consecutive blanks
+  "MD009": false,          // trailing spaces
+  "MD037": false,          // spaces inside emphasis (false positives on "* +")
+  "MD003": false,          // heading style
+  "MD047": false,          // single trailing newline
+  "MD026": false,          // trailing punctuation in heading
+  "MD014": false,          // $ before commands without output
+  "MD004": false,          // unordered-list bullet style
+
+  // --- Disabled: low value on ingested/concatenated content ---
+  "MD025": false,          // single H1 (pages use frontmatter title)
+  "MD001": false,          // heading increment (generated content skips levels)
+
+  // --- Disabled previously (kept for a docs/wiki repo) ---
+  "MD013": false,          // line length
   "MD031": false,          // blanks around fences
   "MD032": false,          // blanks around lists
   "MD033": false,          // inline HTML (used in templates)
   "MD034": false,          // bare URLs
   "MD036": false,          // emphasis-as-heading
-  "MD038": false,          // spaces inside code spans (false positives on indented code spans)
-  "MD040": false,          // fenced-code-language (many docs blocks have no language)
+  "MD038": false,          // spaces inside code spans
+  "MD040": false,          // fenced-code-language
   "MD041": false,          // first line top-level heading
   "MD046": { "style": "fenced" }
 }
