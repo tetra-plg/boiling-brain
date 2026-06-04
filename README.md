@@ -25,18 +25,18 @@ The pattern follows Karpathy's "knowledge compilation" idea: keep the source of 
 
 Karpathy's LLM Wiki is a **concept**: notes maintained by an LLM, with the LLM filling cross-references and refactoring on demand. BoilingBrain is an **opinionated, runnable implementation** of that concept — with concrete trade-offs you can either accept or fork. Specifically :
 
-| Dimension | Karpathy's sketch | BoilingBrain |
-|---|---|---|
-| **Source of truth** | Notes in a folder, LLM rewrites freely | `raw/` is immutable, hash-addressed (`source_sha256`); the wiki layer is always derivable |
-| **Agent topology** | One LLM doing everything | One **expert agent per domain**, declared at bootstrap, with deliverable signatures (cheatsheets, syntheses, diagrams) and per-domain prompts that evolve over time via `/evolve-agent` |
-| **Idempotence** | Manual | `/ingest` is hash-based and idempotent — re-running doesn't duplicate; `--force` re-applies new agent reflexes to existing sources |
-| **Multimodal** | Text-only typically | First-class video pipeline (`/ingest-video`): download → transcribe → frame extraction (mode A declarative or mode B image-diff induction) → markdown transcription of visuals (tables, Mermaid, LaTeX) so queries don't re-OCR each time |
-| **Queries at scale** | Load and read | **Tiered loading**: every page carries `summary_l0` (≤140 chars) + `summary_l1` (~50-150 words). Agents scan a domain via TOC L0, descend to L1 then L2 only when relevant — sublinear in body size |
-| **External code/docs** | Out of scope | `/sync-repos` snapshots GitHub repos by SHA into `raw/tracked-repos/<sha>/`, immutable, never overwritten |
-| **Self-improvement** | Implicit, ad-hoc | Explicit human-curated loop: each agent appends `Evolution suggestions` per ingest, `/evolve-agent <domain>` reviews + applies the diff, archives integrated suggestions |
-| **Architectural decisions** | Mixed into notes | ADR-lite in `wiki/decisions/` with a fixed structure (Problem → Options → Decision → Why → Open questions) |
+| Dimension                   | Karpathy's sketch                      | BoilingBrain                                                                                                                                                                                                                              |
+| --------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Source of truth**         | Notes in a folder, LLM rewrites freely | `raw/` is immutable, hash-addressed (`source_sha256`); the wiki layer is always derivable                                                                                                                                                 |
+| **Agent topology**          | One LLM doing everything               | One **expert agent per domain**, declared at bootstrap, with deliverable signatures (cheatsheets, syntheses, diagrams) and per-domain prompts that evolve over time via `/evolve-agent`                                                   |
+| **Idempotence**             | Manual                                 | `/ingest` is hash-based and idempotent — re-running doesn't duplicate; `--force` re-applies new agent reflexes to existing sources                                                                                                        |
+| **Multimodal**              | Text-only typically                    | First-class video pipeline (`/ingest-video`): download → transcribe → frame extraction (mode A declarative or mode B image-diff induction) → markdown transcription of visuals (tables, Mermaid, LaTeX) so queries don't re-OCR each time |
+| **Queries at scale**        | Load and read                          | **Tiered loading**: every page carries `summary_l0` (≤140 chars) + `summary_l1` (~50-150 words). Agents scan a domain via TOC L0, descend to L1 then L2 only when relevant — sublinear in body size                                       |
+| **External code/docs**      | Out of scope                           | `/sync-repos` snapshots GitHub repos by SHA into `raw/tracked-repos/<sha>/`, immutable, never overwritten                                                                                                                                 |
+| **Self-improvement**        | Implicit, ad-hoc                       | Explicit human-curated loop: each agent appends `Evolution suggestions` per ingest, `/evolve-agent <domain>` reviews + applies the diff, archives integrated suggestions                                                                  |
+| **Architectural decisions** | Mixed into notes                       | ADR-lite in `wiki/decisions/` with a fixed structure (Problem → Options → Decision → Why → Open questions)                                                                                                                                |
 
-Said otherwise: Karpathy says "let LLMs maintain a wiki." BoilingBrain says "*here's what the wiki layout, the agent contract, the ingest protocol and the evolution loop need to look like for that to actually scale past a few weeks of use.*" The opinions come from real usage — fork them if they don't fit.
+Said otherwise: Karpathy says "let LLMs maintain a wiki." BoilingBrain says "_here's what the wiki layout, the agent contract, the ingest protocol and the evolution loop need to look like for that to actually scale past a few weeks of use._" The opinions come from real usage — fork them if they don't fit.
 
 ## Prerequisites
 
@@ -60,7 +60,7 @@ Then in Claude Code:
 Read BOOTSTRAP.md and run the prompt.
 ```
 
-*Works in any language — the bootstrap interview adapts to your phrasing.*
+_Works in any language — the bootstrap interview adapts to your phrasing._
 
 The interview takes 5-10 minutes. At the end your vault is personalized, the template's git history is reset, and you can run your first `/ingest`. Then open `~/my-vault` in Obsidian and check the graph view.
 
@@ -158,19 +158,19 @@ New scripts should be placed in the existing feature directory that best fits th
 
 ## Slash commands shipped
 
-| Command | Purpose |
-|---|---|
-| `/ingest [path]` | Batch idempotent ingestion of files from `raw/` via domain experts. Hash-based, no duplicates. |
-| `/ingest-video <path-or-url>` | Pipeline: download → transcribe → ingest transcript → propose frame extraction (mode A / B / skip). |
-| `/query <question>` | Answer from indexed pages with citations; optionally archive the synthesis. |
-| `/save <slug>` | Archive the current synthesis into `wiki/syntheses/<slug>.md`. |
-| `/lint [domain]` | Detect contradictions, orphans, missing cross-references, gaps. |
-| `/evolve-agent <domain>` | Curated update to a domain expert's prompt, fed by accumulated `.suggestions.md`. |
+| Command                                | Purpose                                                                                                                                                                                                                        |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/ingest [path]`                       | Batch idempotent ingestion of files from `raw/` via domain experts. Hash-based, no duplicates.                                                                                                                                 |
+| `/ingest-video <path-or-url>`          | Pipeline: download → transcribe → ingest transcript → propose frame extraction (mode A / B / skip).                                                                                                                            |
+| `/query <question>`                    | Answer from indexed pages with citations; optionally archive the synthesis.                                                                                                                                                    |
+| `/save <slug>`                         | Archive the current synthesis into `wiki/syntheses/<slug>.md`.                                                                                                                                                                 |
+| `/lint [domain]`                       | Detect contradictions, orphans, missing cross-references, gaps.                                                                                                                                                                |
+| `/evolve-agent <domain>`               | Curated update to a domain expert's prompt, fed by accumulated `.suggestions.md`.                                                                                                                                              |
 | `/domain <add\|rename\|remove> <slug>` | Manage a domain's lifecycle post-bootstrap. Scans the vault, presents impact by bucket (canonical / frontmatter / wikilink / alias / composed / prose / log-tag / historical / drift), validates ambiguous cases case-by-case. |
-| `/sync-repos [names]` *(optional)* | Snapshot GitHub repos by SHA into `raw/tracked-repos/` (or any `dest` declared per source). |
-| `/update-vault` | Cherry-pick improvements from the upstream template into your vault instance (versioned migration machine). |
-| `/create-issue [type]` | Sanitize a draft and open an issue on the upstream template repo (auto-strips wikilinks, vault-specific slugs, private paths). Always validated by you before `gh issue create`. |
-| `/compress-bb` | Save the current session journal to `raw/notes/sessions/` for later ingestion. |
+| `/sync-repos [names]` _(optional)_     | Snapshot GitHub repos by SHA into `raw/tracked-repos/` (or any `dest` declared per source).                                                                                                                                    |
+| `/update-vault`                        | Cherry-pick improvements from the upstream template into your vault instance (versioned migration machine).                                                                                                                    |
+| `/create-issue [type]`                 | Sanitize a draft and open an issue on the upstream template repo (auto-strips wikilinks, vault-specific slugs, private paths). Always validated by you before `gh issue create`.                                               |
+| `/compress-bb`                         | Save the current session journal to `raw/notes/sessions/` for later ingestion.                                                                                                                                                 |
 
 ## MCP server (optional, v1.1+)
 
@@ -178,16 +178,16 @@ Run `bash scripts/mcp/setup-mcp.sh` once after bootstrap to register the `boilin
 
 **12 tools** are exposed, organised as a tiered-loading hierarchy (orient → drill → read). Full reference: [docs/mcp-tiered-loading.md](docs/mcp-tiered-loading.md).
 
-| Tool | Purpose |
-|---|---|
-| `scan_domain(domain)` | **Orient**: hub `summary_l1` + counts per type + top 10 pages by centrality (backlinks). ~860 tokens. Use FIRST. |
-| `scan_concepts(domain, query="", top=20)` | **Drill**: concepts in a domain, ranked by centrality. Optional query (case + separator insensitive). |
-| `scan_entities`, `scan_decisions`, `scan_syntheses`, `scan_cheatsheets`, `scan_diagrams` | Same semantics, per type. |
-| `scan_sources(domain, query, top=20)` | Same shape but query is **required** (sources too numerous without a target). |
-| `preview_page(page_path)` | L1: frontmatter (whitelisted fields) + `summary_l1`. |
-| `read_page(page_path)` | L2: full body. |
-| `search_wiki(query, limit=10)` | Cross-type, cross-domain. Format enriched: path, type, summary_l0, outgoing wikilinks. |
-| `drop_to_raw(subfolder, filename, content)` | Sanctioned write into `raw/` (server-side, bypasses the `protect-raw.sh` hook by design). Auto-signals via `cache/.pending-ingest`. |
+| Tool                                                                                     | Purpose                                                                                                                             |
+| ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `scan_domain(domain)`                                                                    | **Orient**: hub `summary_l1` + counts per type + top 10 pages by centrality (backlinks). ~860 tokens. Use FIRST.                    |
+| `scan_concepts(domain, query="", top=20)`                                                | **Drill**: concepts in a domain, ranked by centrality. Optional query (case + separator insensitive).                               |
+| `scan_entities`, `scan_decisions`, `scan_syntheses`, `scan_cheatsheets`, `scan_diagrams` | Same semantics, per type.                                                                                                           |
+| `scan_sources(domain, query, top=20)`                                                    | Same shape but query is **required** (sources too numerous without a target).                                                       |
+| `preview_page(page_path)`                                                                | L1: frontmatter (whitelisted fields) + `summary_l1`.                                                                                |
+| `read_page(page_path)`                                                                   | L2: full body.                                                                                                                      |
+| `search_wiki(query, limit=10)`                                                           | Cross-type, cross-domain. Format enriched: path, type, summary_l0, outgoing wikilinks.                                              |
+| `drop_to_raw(subfolder, filename, content)`                                              | Sanctioned write into `raw/` (server-side, bypasses the `protect-raw.sh` hook by design). Auto-signals via `cache/.pending-ingest`. |
 
 **Recommended pattern**: `scan_domain` → `scan_<type>(query=...)` → `preview_page` → `read_page`. Measured: ~96% token reduction vs a flat dump on a 388-page domain.
 
@@ -211,7 +211,7 @@ The template ships with **opt-in scaffolding** for the L3 layer of personal know
 
 - You're a **solo dev, researcher, PM or writer** building a personal knowledge base across 3-6 domains.
 - You already use **Claude Code** (CLI, desktop app, IDE extension, or claude.ai/code) and **Obsidian** — or want to.
-- You want a **thinking partner** that grounds its answers in *your* sources (with citations), not a chatbot guessing from training data.
+- You want a **thinking partner** that grounds its answers in _your_ sources (with citations), not a chatbot guessing from training data.
 - You'd rather **have an opinion than a blank page**: hash-keyed `raw/`, one expert agent per domain, mandatory frontmatter — these constraints feel like a feature, not a friction.
 - You want a vault that **scales past a few weeks** without falling into the "200 unlinked notes" trap.
 - You enjoy **owning your wiki layer** (the LLM writes it, you curate the prompts and the diff).
@@ -281,4 +281,4 @@ This template is opinionated. The opinions come from real usage. If you have a g
 
 ---
 
-*Generated as part of the Phase 2 scaffolding of the LLM Wiki bootstrap.*
+_Generated as part of the Phase 2 scaffolding of the LLM Wiki bootstrap._

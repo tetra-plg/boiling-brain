@@ -1,0 +1,7 @@
+# Raw sources are gitignored in vaults and never present on the remote.
+raw/
+# Generated / vendored.
+node_modules/
+.claude/worktrees/
+cache/
+dist/
