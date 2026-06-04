@@ -234,6 +234,26 @@ class ValidateWikiTest(unittest.TestCase):
             self.assertEqual(r.returncode, 1)
             self.assertIn("missing", r.stdout)
 
+    def test_conflict_marker_detected_repo_wide(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            make_vault(tmp, {"concepts/foo.md": GOOD_FM})
+            (tmp / "docs").mkdir()
+            (tmp / "docs" / "x.md").write_text(
+                "# X\n\n<<<<<<< HEAD\na\n=======\nb\n>>>>>>> other\n", encoding="utf-8")
+            r = run(tmp)
+            self.assertEqual(r.returncode, 1)
+            self.assertIn("conflict marker", r.stdout)
+
+    def test_conflict_marker_in_excluded_dir_ignored(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            make_vault(tmp, {"concepts/foo.md": GOOD_FM})
+            (tmp / "raw").mkdir()
+            (tmp / "raw" / "x.md").write_text("<<<<<<< HEAD\n", encoding="utf-8")
+            r = run(tmp)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

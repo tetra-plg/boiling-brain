@@ -6,6 +6,8 @@ Runs in CI (where raw/ is absent) and locally. For every wiki/**/*.md it checks:
   - [[wikilinks]] resolve to an existing wiki page (full path or bare slug)
   - internal relative markdown links / anchors resolve (non-raw, non-external)
   - frontmatter conforms to the per-type schema (see SCHEMA below)
+Plus a repo-wide scan for leftover git conflict markers in any markdown
+(`<<<<<<<` / `>>>>>>>`) — e.g. from an unresolved /update-vault 3-way merge.
 
 References under raw/ are SKIPPED: raw/ is gitignored and never present on the
 remote — its existence is the job of the local /lint command. External links
@@ -26,6 +28,9 @@ MDLINK_RE = re.compile(r"(?<!!)\[[^\]]*\]\(([^)]+)\)")
 EXTERNAL_RE = re.compile(r"^(https?:|mailto:|tel:)", re.IGNORECASE)
 FENCE_RE = re.compile(r"^(```|~~~)")
 INLINE_CODE_RE = re.compile(r"`[^`]*`")
+
+# Dirs excluded from the repo-wide conflict-marker scan (gitignored / VCS / editor).
+SCAN_EXCLUDE = {"node_modules", "raw", "cache", "dist", "worktrees", ".git", ".obsidian", "superpowers"}
 
 
 def iter_prose_lines(text):
@@ -149,6 +154,22 @@ def check_relative_links(relpath, abspath, text, wiki_root, repo_root, defects):
                 defects.append(f"{relpath}:{n} — broken relative link ({url})")
 
 
+def check_conflict_markers(repo_root, defects):
+    """Flag leftover git conflict markers in any markdown (repo-wide).
+
+    A 3-way merge (e.g. /update-vault propagation) writes `<<<<<<<` / `>>>>>>>`
+    markers on conflict; if left unresolved they must never reach a commit. We
+    scan all markdown outside gitignored/VCS dirs so the CI catches them.
+    """
+    for p in sorted(repo_root.rglob("*.md")):
+        if any(seg in SCAN_EXCLUDE for seg in p.relative_to(repo_root).parts):
+            continue
+        rel = str(p.relative_to(repo_root)).replace("\\", "/")
+        for n, line in enumerate(p.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+            if line.startswith("<<<<<<<") or line.startswith(">>>>>>>"):
+                defects.append(f"{rel}:{n} — git conflict marker ({line[:7]})")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=str(Path(__file__).resolve().parent.parent.parent),
@@ -168,6 +189,8 @@ def main():
         check_frontmatter(rel, text, defects)
         check_wikilinks(rel, text, relpaths, bare, defects)
         check_relative_links(rel, p, text, wiki_root, repo_root, defects)
+
+    check_conflict_markers(repo_root, defects)
 
     if defects:
         print(f"✗ wiki integrity: {len(defects)} defect(s)\n")
