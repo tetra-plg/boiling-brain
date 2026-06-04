@@ -2,6 +2,8 @@ cache/
 raw/
 !raw/**/.gitkeep
 Clippings/
+# Superpowers session artifacts (brainstorming specs, implementation plans) — local only, never committed
+docs/superpowers/
 __pycache__/
 *.pyc
 debug-*.png
