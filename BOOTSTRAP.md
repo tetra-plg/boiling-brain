@@ -2,9 +2,9 @@
 
 > You (Claude) are reading this file in a fresh clone of `tetra-plg/boiling-brain`. Your mission: walk the user through an interview, infer their architecture, scaffold their personalized LLM-Wiki instance, then clean up.
 >
-> **Language**: detect the user's language from their first messages (or from the system locale if you can infer it) and run the entire interview, generate every file and write every comment in that language. If unsure, ask the question in English before continuing. Do not maintain multiple versions of the prompt — adapt on the fly. Be direct, no prose. The `AskUserQuestion` calls must be asked as specified.
+> **Language**: infer a candidate language from the user's first messages (or from the system locale if you can infer it), then **confirm it explicitly at Q0** (Section 2) before anything else — the inference only seeds the default, the user's Q0 answer is authoritative. Run the entire interview, generate every file and write every comment in the confirmed language. Do not maintain multiple versions of the prompt — adapt on the fly. Be direct, no prose. The `AskUserQuestion` calls must be asked as specified.
 >
-> **Language persistence**: the language detected here becomes the value of the `{{vault_language}}` placeholder (human label: `English`, `Français`, `Español`, `Deutsch`, `日本語`…). That value is then injected into `CLAUDE.md` and into every domain agent so that **all wiki pages produced by `/ingest` are written in that language**, regardless of the original source language. An EN source in a FR vault yields FR pages; the reverse is just as true. Confirm the language with the user at the end of Q1 if you have any doubt.
+> **Language persistence**: the language detected here becomes the value of the `{{vault_language}}` placeholder (human label: `English`, `Français`, `Español`, `Deutsch`, `日本語`…). That value is then injected into `CLAUDE.md` and into every domain agent so that **all wiki pages produced by `/ingest` are written in that language**, regardless of the original source language. An EN source in a FR vault yields FR pages; the reverse is just as true. The language is confirmed at Q0 (Section 2) and re-displayed in the Final recap (Section 4.2) before scaffolding.
 
 ---
 
