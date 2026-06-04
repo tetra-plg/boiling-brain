@@ -47,14 +47,15 @@ def unmask(text: str) -> str:
     return text.replace(SENTINEL, "|")
 
 
-# Directories never formatted (mirrors .prettierignore + VCS/editor dirs).
-# A path is excluded if any of its segments matches one of these.
+# Directories never formatted. KEEP ALIGNED with .prettierignore and the
+# markdownlint globs in .github/workflows/lint.yml. A path is excluded if any
+# of its segments matches one of these (or starts with ".venv": virtualenvs).
 # "superpowers" = docs/superpowers/ (session artifacts, gitignored, never committed).
 EXCLUDE_DIRS = {"node_modules", "raw", "cache", "dist", "worktrees", ".git", ".obsidian", "superpowers"}
 
 
 def _excluded(path: str) -> bool:
-    return any(seg in EXCLUDE_DIRS for seg in Path(path).parts)
+    return any(seg in EXCLUDE_DIRS or seg.startswith(".venv") for seg in Path(path).parts)
 
 
 def expand(paths):
@@ -84,8 +85,11 @@ def run_prettier(files, cwd=None):
         raise RuntimeError(f"prettier failed:\n{proc.stderr}")
 
 
-def do_write(files):
-    """Mask in place → prettier --write (one call) → unmask in place."""
+MAX_WRITE_PASSES = 5
+
+
+def _format_pass(files):
+    """One mask in place → prettier --write (one call) → unmask in place."""
     masked = []
     try:
         for f in files:
@@ -100,6 +104,21 @@ def do_write(files):
         # Always restore, even if prettier raised, so we never leave masked files.
         for f in masked:
             Path(f).write_text(unmask(Path(f).read_text(encoding="utf-8")), encoding="utf-8")
+
+
+def do_write(files):
+    """Format to a fixed point: repeat the mask/prettier/unmask pass until a
+    pass changes nothing (some markdown needs 2+ passes to stabilise). Bounded
+    by MAX_WRITE_PASSES so we never loop forever."""
+    if not files:
+        return 0
+    for _ in range(MAX_WRITE_PASSES):
+        before = {f: Path(f).read_text(encoding="utf-8") for f in files}
+        _format_pass(files)
+        if all(Path(f).read_text(encoding="utf-8") == before[f] for f in files):
+            return 0
+    print(f"warning: did not reach a fixed point after {MAX_WRITE_PASSES} passes "
+          f"(run --check to see remaining files)", file=sys.stderr)
     return 0
 
 

@@ -102,6 +102,26 @@ class CheckTest(unittest.TestCase):
             r = run(["--check", "t.md"], cwd=str(tmp))
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
+    def test_venv_is_excluded(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            (tmp / ".prettierrc").write_text('{"proseWrap":"preserve"}', encoding="utf-8")
+            pkg = tmp / ".venv-voice" / "lib" / "numpy"
+            pkg.mkdir(parents=True)
+            # deliberately unformatted file inside a virtualenv
+            (pkg / "README.md").write_text("#  Bad\n\n\n\nx\n", encoding="utf-8")
+            r = run(["--check", "**/*.md"], cwd=str(tmp))
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)  # venv ignored → clean
+
+
+class ExpandTest(unittest.TestCase):
+    def test_excluded_dirs(self):
+        self.assertTrue(fmt._excluded(".venv-voice/lib/x.md"))
+        self.assertTrue(fmt._excluded("node_modules/p/README.md"))
+        self.assertTrue(fmt._excluded("docs/superpowers/specs/x.md"))
+        self.assertFalse(fmt._excluded("wiki/concepts/foo.md"))
+        self.assertFalse(fmt._excluded("docs/guide.md"))
+
 
 if __name__ == "__main__":
     unittest.main()

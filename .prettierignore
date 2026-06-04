@@ -5,3 +5,8 @@ node_modules/
 .claude/worktrees/
 cache/
 dist/
+# Python virtualenvs (LICENSE.md / README.md of installed packages).
+.venv/
+.venv-*/
+**/.venv/
+**/.venv-*/

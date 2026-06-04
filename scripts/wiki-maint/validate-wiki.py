@@ -162,7 +162,7 @@ def check_conflict_markers(repo_root, defects):
     scan all markdown outside gitignored/VCS dirs so the CI catches them.
     """
     for p in sorted(repo_root.rglob("*.md")):
-        if any(seg in SCAN_EXCLUDE for seg in p.relative_to(repo_root).parts):
+        if any(seg in SCAN_EXCLUDE or seg.startswith(".venv") for seg in p.relative_to(repo_root).parts):
             continue
         rel = str(p.relative_to(repo_root)).replace("\\", "/")
         for n, line in enumerate(p.read_text(encoding="utf-8", errors="replace").splitlines(), 1):

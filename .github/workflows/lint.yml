@@ -41,6 +41,8 @@ jobs:
             !**/raw/**
             !**/.claude/worktrees/**
             !**/cache/**
+            !**/.venv/**
+            !**/.venv-*/**
 
   wiki-integrity:
     name: wiki-integrity
