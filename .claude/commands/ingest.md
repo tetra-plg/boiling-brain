@@ -6,6 +6,7 @@ argument-hint: [--force] [--frames] [path-or-folder — empty = all of raw/]
 Run the INGEST workflow from CLAUDE.md on: $ARGUMENTS
 
 **Idempotent batch mode.** Behavior:
+
 - No argument → full sweep of `raw/`.
 - Argument = folder → scan that subtree.
 - Argument = file → force re-ingest **of that file only**.
@@ -27,12 +28,14 @@ MODIFIED raw/...    (covered-by: <slug>, sha-changed)   → covered but content 
 Detection is **robust**: it checks exact match on `source_path`, then on `covered_paths` (list of all raw paths covered by a composite page), then on parent directory. This avoids false "NEW" entries when an agent synthesized several files into a single page without listing each file individually.
 
 Arbitration:
+
 - `SKIP` → ignore (unless `--force` → treat as `MODIFIED`).
 - `NEW` / `MODIFIED` → proceed to step 2.
 
 **`--force` mode**: explicitly tell the expert agent in its prompt that the source has **already been ingested** (cite the existing source page) and that it's an **additive** re-ingest. The agent must read existing pages, identify what's missing, add only that, not rewrite content that's already correct. Update `ingested:` only if content was added.
 
 **`--frames` mode**: tell the agent the goal is **exclusively** to produce frame requests for this transcript. Spawn instruction:
+
 - Re-read the source transcript.
 - Produce a `## Frame requests` block per the vault convention (cf. CLAUDE.md).
 - **Don't modify anything else** in existing pages — no textual content update, no `ingested:` bump.
@@ -57,6 +60,7 @@ If video/audio/URL not transcribed → chain `scripts/video/transcribe.sh` first
 Read `.claude/agent-output-contract.md` once at the start of the run; inject it integrally into every spawn prompt below.
 
 For each validated agent, launch an `Agent` call with:
+
 - `subagent_type`: the chosen agent.
 - **Prompt** containing:
   - Path of the raw file to ingest.
@@ -108,10 +112,13 @@ mv "$PENDING.tmp" "$PENDING"
 ### 5. Final overall report
 
 Format:
+
 ```
 N new · M updated · K unchanged (skipped) · L orphans
 ```
+
 Followed by:
+
 - Per source: agent invoked, pages touched, deliverables produced.
 - Evolution suggestions surfaced (pointer to `.suggestions.md` files).
 - Contradictions detected (between sources or against the existing wiki).
@@ -123,3 +130,12 @@ Followed by:
 - One source = one main agent (even if cross-domain, one agent leads the `wiki/sources/` page; the others enrich concepts/entities in their domain).
 - If no expert agent fits and the user picks "other" → the main context performs the generic ingest (current fallback behavior).
 - If the `/evolve-agent <domain>` command exists, it consumes the `.suggestions.md` to evolve the agent's prompt.
+
+## Final step — normalise markdown
+
+After all pages are written/updated, format the produced markdown so it stays
+consistent and the CI `format-check` job passes:
+
+```bash
+npx -y prettier --write "wiki/**/*.md"
+```
