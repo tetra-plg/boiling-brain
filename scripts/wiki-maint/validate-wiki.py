@@ -47,10 +47,6 @@ def iter_prose_lines(text):
 
 
 REQUIRED_COMMON = ["type", "domains", "created", "summary_l0", "summary_l1"]
-VALID_TYPES = {
-    "concept", "entity", "decision", "synthesis",
-    "cheatsheet", "diagram", "source", "domain",
-}
 
 
 def parse_frontmatter(text):
@@ -89,9 +85,6 @@ def check_frontmatter(relpath, text, defects):
     for key in REQUIRED_COMMON:
         if key not in fm:
             defects.append(f"{relpath}:1 — frontmatter missing required field '{key}'")
-    t = fm.get("type", "")
-    if t and t not in VALID_TYPES:
-        defects.append(f"{relpath}:1 — frontmatter 'type: {t}' not in {sorted(VALID_TYPES)}")
     dom = fm.get("domains", "")
     if dom in ("", "[]", "[ ]"):
         defects.append(f"{relpath}:1 — frontmatter 'domains' is empty")
@@ -104,10 +97,6 @@ def check_frontmatter(relpath, text, defects):
         # present-but-empty block, or missing handled above
         if "summary_l1" in fm:
             defects.append(f"{relpath}:1 — frontmatter 'summary_l1' is empty")
-    if t == "decision":
-        status = fm.get("status", "")
-        if status not in ("pending", "accepted"):
-            defects.append(f"{relpath}:1 — decision frontmatter 'status' must be pending|accepted")
 
 
 def build_page_index(wiki_root):

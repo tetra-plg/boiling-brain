@@ -151,14 +151,36 @@ class ValidateWikiTest(unittest.TestCase):
             self.assertEqual(r.returncode, 1)
             self.assertIn("summary_l0", r.stdout)
 
-    def test_decision_requires_status(self):
+    def test_unconstrained_type_is_accepted(self):
         with tempfile.TemporaryDirectory() as d:
             tmp = Path(d)
-            body = GOOD_FM.replace("type: concept", "type: decision")
+            body = GOOD_FM.replace("type: concept", "type: index")
+            make_vault(tmp, {"index.md": body})
+            r = run(tmp)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_decision_status_not_constrained(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            body = GOOD_FM.replace("type: concept", "type: decision") + "status: redirect\n"
+            # note: status line is in body here, but even a decision with an
+            # arbitrary status in frontmatter must be accepted — build it properly:
+            body = textwrap.dedent("""\
+                ---
+                type: decision
+                domains: [poker]
+                created: 2026-05-01
+                status: redirect
+                summary_l0: "Short line"
+                summary_l1: |
+                  Two sentences of description here.
+                ---
+
+                # ADR
+                """)
             make_vault(tmp, {"decisions/adr.md": body})
             r = run(tmp)
-            self.assertEqual(r.returncode, 1)
-            self.assertIn("status", r.stdout)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
     def test_wikilink_inside_fenced_code_is_ignored(self):
         with tempfile.TemporaryDirectory() as d:
