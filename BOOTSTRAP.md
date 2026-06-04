@@ -43,9 +43,41 @@ An **LLM Wiki** is a personal wiki maintained by an LLM:
 
 ---
 
-## Section 2 — Step 1, Interview (7 questions)
+## Section 2 — Step 1, Interview (Q0 language gate + 7 questions)
 
 Ask the questions **sequentially**. Store every answer in an internal variable. **Move on only when the previous one is resolved.**
+
+### Q0 — Vault language
+
+**Before Q1**, confirm the language the entire vault will be written in. Infer a candidate from the user's first messages, then **always** ask via `AskUserQuestion` — never skip this, even when the inference feels certain. The inference only sets the recommended default; the user's selection is authoritative.
+
+Build the options dynamically:
+
+- **If a language was clearly inferred**: option 1 = the detected language, labeled `<Language> — detected from your first messages` (the recommended choice). Fill the remaining slots (4 options max) from `[English, Français, Español, Deutsch]`, skipping the one already shown as detected.
+- **If inference is ambiguous** (no clear signal): show `[English, Français, Español, Deutsch]` with **no** option marked as detected/recommended — force a conscious choice.
+- The auto-provided "Other" lets the user type any language not listed (e.g. `日本語`, `Português`).
+
+Example JSON (clear inference, detected = Français):
+
+```json
+{
+  "questions": [
+    {
+      "question": "Which language should the vault be written in?",
+      "header": "Vault language",
+      "multiSelect": false,
+      "options": [
+        { "label": "Français", "description": "Detected from your first messages. All wiki pages, agents and comments will be in French." },
+        { "label": "English", "description": "Write the entire vault in English." },
+        { "label": "Español", "description": "Write the entire vault in Spanish." },
+        { "label": "Deutsch", "description": "Write the entire vault in German." }
+      ]
+    }
+  ]
+}
+```
+
+→ Store the chosen human label as `{{vault_language}}` (e.g. `English`, `Français`, `Español`, `Deutsch`, `日本語`). Run the rest of the interview and generate every file in that language. If the user picks "Other", normalize their free-text answer to a human label.
 
 ### Q1 — Identity
 
