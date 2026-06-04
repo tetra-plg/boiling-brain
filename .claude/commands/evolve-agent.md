@@ -70,5 +70,5 @@ After all pages are written/updated, format the produced markdown so it stays
 consistent and the CI `format-check` job passes:
 
 ```bash
-npx -y prettier --write ".claude/agents/**/*.md" "wiki/**/*.md"
+python3 scripts/wiki-maint/format-md.py --write ".claude/agents/**/*.md" "wiki/**/*.md"
 ```

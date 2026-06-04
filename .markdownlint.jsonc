@@ -6,10 +6,16 @@
   "default": true,
 
   // --- Kept (semantic): real defects, repairable ---
-  // MD056 table-column-count   → extra cells silently dropped at render
   // MD042 no-empty-links       → empty link target
   // MD051 link-fragments       → anchor points to a missing heading
   "MD024": { "siblings_only": true }, // duplicate headings ok if not siblings
+
+  // --- Disabled: Obsidian-specific false positives ---
+  // MD056 table-column-count: Obsidian renders `a|b` code spans and [[x|y]]
+  // aliases as a single cell, but GFM/markdownlint count the inner pipe as an
+  // extra column. On a real vault this is ~overwhelmingly false positives
+  // (1700+ code spans). Table alignment is handled safely by format-md.py.
+  "MD056": false,
 
   // --- Disabled: owned by Prettier (cosmetic) ---
   "MD060": false,          // table-column-style (separator style) — 19k+ on real vault

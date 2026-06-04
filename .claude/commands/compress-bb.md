@@ -103,15 +103,7 @@ After successful persistence (either path), display:
 - A reminder: the file will be proposed for ingestion at the next session start (via the SessionStart hook).
 - The manual-ingest shortcut: `/ingest raw/notes/sessions/YYYY-MM-DD-<slug>.md`.
 
-## Final step — normalise markdown
-
-After all pages are written/updated, format the produced markdown so it stays
-consistent and the CI `format-check` job passes:
-
-```bash
-npx -y prettier --write "raw/notes/sessions/**/*.md"
-```
-
-> Note: `compress-bb` writes into `raw/`, which Prettier ignores by default via
-> `.prettierignore`. Pass the path explicitly (Prettier honours explicit args
-> over ignore patterns) so the session note is normalised before ingest.
+> Note: `/compress-bb` writes only into `raw/notes/sessions/`, which is gitignored
+> and never linted by CI. No formatting step is needed here — the session note is
+> normalised later, when `/ingest` turns it into `wiki/` pages (which `/ingest`
+> formats via `scripts/wiki-maint/format-md.py`).

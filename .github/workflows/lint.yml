@@ -20,7 +20,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: npx -y prettier --check "**/*.md"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      # Obsidian-safe formatter check (wraps Prettier; preserves pipes in
+      # wikilinks and code spans inside tables — see scripts/wiki-maint/format-md.py).
+      - run: python3 scripts/wiki-maint/format-md.py --check "**/*.md"
 
   markdownlint:
     name: markdownlint
@@ -34,6 +39,8 @@ jobs:
             **/*.md
             !**/node_modules/**
             !**/raw/**
+            !**/.claude/worktrees/**
+            !**/cache/**
 
   wiki-integrity:
     name: wiki-integrity
