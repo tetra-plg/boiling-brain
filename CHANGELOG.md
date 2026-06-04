@@ -50,6 +50,7 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 
 ### Fixed (alpha feedback)
 
+- **`BOOTSTRAP.md` — silent language miscapture for multilingual users** ([#53](https://github.com/tetra-plg/boiling-brain/issues/53)): language detection relied on two doubt-gated guardrails ("If unsure…", "Confirm… if you have any doubt"), so a confident-but-wrong inference (e.g. a French user writing their first messages in clean English) captured `{{vault_language}} = English` silently and propagated it to `CLAUDE.md` and every domain agent. Fix: a new unconditional `Q0 — Vault language` step (`AskUserQuestion`, inference seeds the default, user choice is authoritative); the two directives are de-gated; the language is re-displayed in the Final recap before scaffolding.
 - **`/compress-bb`**: document "When NOT to use" to avoid redundancy with substantive `raw/notes/` (#22).
 - **`scripts/wiki-maint/scan-raw.sh`**: avoid silent kill under `set -euo pipefail` when `source_sha256` absent on composite pages (#23).
 - **`/update-vault`**: track applied migrations individually via `applied-migrations:` field in `.claude/template-version` — fixes silent skip of migrations added retroactively (after a version bump). Vaults pre-v1.1.0 auto-populate the field at first run post-upgrade. (#31)
