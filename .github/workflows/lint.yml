@@ -5,13 +5,26 @@ on:
     branches: [develop, main]
   push:
     branches: [develop, main]
+  schedule:
+    # Weekly external-link report (non-blocking). Mondays 06:00 UTC.
+    - cron: "0 6 * * 1"
 
 permissions:
   contents: read
+  issues: write   # link-check-report opens/updates the dead-links issue
 
 jobs:
+  format-check:
+    name: format-check
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx -y prettier --check "**/*.md"
+
   markdownlint:
     name: markdownlint
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,12 +35,25 @@ jobs:
             !**/node_modules/**
             !**/raw/**
 
-  link-check:
-    name: link-check
+  wiki-integrity:
+    name: wiki-integrity
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: lycheeverse/lychee-action@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - run: python3 scripts/wiki-maint/validate-wiki.py
+
+  link-check-report:
+    name: link-check-report
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lychee external link report
+        uses: lycheeverse/lychee-action@v2
         with:
           args: >-
             --no-progress
@@ -36,5 +62,5 @@ jobs:
             --exclude 'mailto:'
             --accept '100..=103,200..=299,403,429'
             './**/*.md'
-          fail: true
+          fail: false
           # honors .lycheeignore for files/links generated at bootstrap time
