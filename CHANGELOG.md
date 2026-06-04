@@ -130,7 +130,7 @@ Launch readiness pass: every file shipped at bootstrap or propagated by `/update
 
 ### Fixed
 
-- **Source language vs vault language decoupling.** Before this fix, `CLAUDE.md.tpl` had `Français` hardcoded in its writing principles, and `domain-expert.md.tpl` had "titres en français". Consequence: an EN user bootstrapped a vault and every page produced by `/ingest` came out in French regardless of the source. The new `{{vault_language}}` placeholder + the explicit directive (*"Source language has no incidence on output language; quote sources verbatim, write commentary in the vault language"*) close that loop.
+- **Source language vs vault language decoupling.** Before this fix, `CLAUDE.md.tpl` had `Français` hardcoded in its writing principles, and `domain-expert.md.tpl` had "titres en français". Consequence: an EN user bootstrapped a vault and every page produced by `/ingest` came out in French regardless of the source. The new `{{vault_language}}` placeholder + the explicit directive (_"Source language has no incidence on output language; quote sources verbatim, write commentary in the vault language"_) close that loop.
 - **`/ingest-video` visual-mention detection was FR-only.** The `visual_mentions` counter relied on a regex of FR phrases (`regardez`, `voilà`, `cette grille`…), so on EN transcripts the counter silently stayed at 0 and Mode B (cross-induction) was never recommended. The pattern list is now bilingual EN+FR (extensible to other languages), restoring the recommendation logic for non-FR transcripts.
 
 ### Repo-level (post-merge, not in code)
@@ -138,7 +138,7 @@ Launch readiness pass: every file shipped at bootstrap or propagated by `/update
 These actions happen at release time outside the PR diff but are part of the v1.0.3 launch readiness:
 
 - **Default branch** switched from `develop` to `main` (the v1.0.3 commit is the cutover point).
-- **GitHub description** updated to *"Opinionated implementation of Karpathy's LLM Wiki pattern — maintained by domain-expert agents (Claude Code)."* (mentions Karpathy for post-thread discoverability).
+- **GitHub description** updated to _"Opinionated implementation of Karpathy's LLM Wiki pattern — maintained by domain-expert agents (Claude Code)."_ (mentions Karpathy for post-thread discoverability).
 - **GitHub topics** expanded to 8–10 covering `karpathy`, `llm-wiki`, `personal-knowledge-base`, `pkm`, `second-brain`, `claude-code`, `obsidian`, `agent-based`, `wiki-template`.
 - **Seed issues** opened to signal a live project (Bootstrap support for non-Claude-Code agents; "before/after" walkthrough; share-your-instance discussion).
 

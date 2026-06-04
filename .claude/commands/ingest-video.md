@@ -55,11 +55,13 @@ All expert agents have a `## Visual frames` section in their prompt — they can
 After the expert agent has returned its report, **propose** the extraction mode best suited to this video via `AskUserQuestion`. No silent switch.
 
 **Override flags** (consumed in priority, no proposal shown):
+
 - `--induction` → force mode B (cross-induction).
 - `--mode-a` → force mode A (frame requests from the agent).
 - `--skip-frames` → skip extraction.
 
 **Signals to compute** before the proposal:
+
 - `duration_min`: video duration in minutes (from the `duration` field of the `.meta.md` frontmatter).
 - `visual_mentions`: count of visual-pattern occurrences in the transcript. **Bilingual EN+FR list** (extend with other languages as needed depending on the source-transcript language):
   - **EN patterns**: `look at`, `here's`, `here is`, `you can see`, `you'll see`, `this diagram`, `this table`, `this chart`, `this graph`, `this figure`, `this slide`, `this image`, `this dashboard`, `this pipeline`, `this code`, `on screen`, `on the screen`, `take a look`, `notice this`.
@@ -69,6 +71,7 @@ After the expert agent has returned its report, **propose** the extraction mode 
 - `frame_requests_count`: number of entries in the agent's `## Frame requests` report block (0 if block absent).
 
 **Computed recommendation**:
+
 - **Recommend Mode A** if: `frame_requests_count` > 0 and consistent with `visual_mentions` (typical case: agent declared 2-4 frames on a conceptual video, or more on a dense video with many configurations).
 - **Recommend Mode B** if:
   - `duration_min ≥ 30` AND `mentions_per_min ≥ 0.3` AND `frame_requests_count` ≤ 30% of the "expected" count (`visual_mentions / 3` as a rough heuristic) → suspected under-extraction.
@@ -91,6 +94,7 @@ Options:
 The recommended option is marked "(Recommended)" and placed first.
 
 **Logging**: the final decision (mode + signals + any override) is journaled in `wiki/log.md` on the same line as the ingest:
+
 ```
 ## [YYYY-MM-DD] ingest-video | <title> (agent: <name>, mode: A|B|skip, duration Xm, Y mentions, Z frames)
 ```

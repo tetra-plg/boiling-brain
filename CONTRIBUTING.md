@@ -18,20 +18,20 @@ Thanks for your interest in BoilingBrain. This project is opinionated — the op
 
 This repo uses a simple [git flow](https://nvie.com/posts/a-successful-git-branching-model/) layout:
 
-| Branch | Role |
-|---|---|
-| `main` | Tagged releases only (`vX.Y.Z`). Updated by merging `develop` at release time. Protected. |
-| `develop` | **Default branch.** Integration line — all contributions land here first. Protected. |
-| `feature/<issue>-slug` | New feature, branched from `develop`, merged back to `develop`. |
-| `fix/<issue>-slug` | Bug fix, branched from `develop`, merged back to `develop`. |
-| `docs/<topic>` | Doc-only change, branched from `develop`, merged back to `develop`. |
+| Branch                 | Role                                                                                      |
+| ---------------------- | ----------------------------------------------------------------------------------------- |
+| `main`                 | Tagged releases only (`vX.Y.Z`). Updated by merging `develop` at release time. Protected. |
+| `develop`              | **Default branch.** Integration line — all contributions land here first. Protected.      |
+| `feature/<issue>-slug` | New feature, branched from `develop`, merged back to `develop`.                           |
+| `fix/<issue>-slug`     | Bug fix, branched from `develop`, merged back to `develop`.                               |
+| `docs/<topic>`         | Doc-only change, branched from `develop`, merged back to `develop`.                       |
 
 Contributor flow:
 
 1. **Open an issue** describing the bug or feature (skip only for trivial doc fixes).
 2. **Fork** the repo (external contributors) or create a branch directly (maintainers).
 3. **Branch from `develop`** with the naming convention above. Example: `feature/42-add-spanish-bootstrap`.
-4. **Commit** using [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, …). Describe the *why*, not the *what*.
+4. **Commit** using [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, …). Describe the _why_, not the _what_.
 5. **Open a PR targeting `develop`** (not `main`). Fill the PR template, link the issue.
 6. CI must pass and at least one approval is required before merge.
 7. Merges into `develop` use **squash merge** (one clean commit per PR).
@@ -58,7 +58,7 @@ The most consequential file is `BOOTSTRAP.md`. To test a change:
 - All in-prompt user-facing text in `BOOTSTRAP.md` is **French**. Translations (English, Spanish, etc.) would be a separate effort — not blocking for v1.
 - `*.tpl` files use `{{placeholder}}` syntax. New placeholders must be documented in `PLACEHOLDERS.md`.
 - No emojis in code or wiki files unless requested. Status indicators in BOOTSTRAP.md (✅, ⭐, etc.) are an exception.
-- Commit messages : describe the *why*, not the *what*. Reference the relevant phase if applicable (`phase 5c: <fix>`).
+- Commit messages : describe the _why_, not the _what_. Reference the relevant phase if applicable (`phase 5c: <fix>`).
 
 ## Code of Conduct
 

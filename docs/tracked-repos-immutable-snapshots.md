@@ -7,6 +7,7 @@
 The LLM Wiki rests on a strong Karpathy principle: **`raw/` is immutable**. One source = one hashed snapshot, never modified, referenced by `wiki/sources/` via `source_path` + `source_sha256`. The idempotence of `/ingest` depends on it, and the wiki layer is always derivable from `raw/`.
 
 But we often want to make queryable content that is **alive**:
+
 - Technical docs of components or frameworks we follow (release notes, README, docs/).
 - Standards specs that evolve (MCP, Agent Skills, etc.).
 - Project docs of repos under active development.
@@ -38,15 +39,15 @@ Two regimes coexist, increased complexity for `/ingest` and `/lint`. And above a
 
 - **Immutability preserved, zero exception.** Each snapshot is a new folder. Old ones are never modified or deleted.
 - **The event, not the date.** The shortsha is the natural unit: one merge = one snapshot, no noise if nothing moved.
-- **History becomes signal.** Contradictions between successive versions (v1 said X, v2 says Y) become capturable by `/lint` — exactly what Karpathy calls *knowledge compilation*.
+- **History becomes signal.** Contradictions between successive versions (v1 said X, v2 says Y) become capturable by `/lint` — exactly what Karpathy calls _knowledge compilation_.
 - **Hash-based idempotence keeps working.** `/ingest` detects via `source_sha256` that a snapshot's doc is identical to a previous one and skips.
 
 ### User interface
 
-| Invocation | Effect |
-|---|---|
-| `/sync-repos` | interactive multiSelect (avoids the unintended big run on N repos) |
-| `/sync-repos <name1> <name2>` | those sources only |
+| Invocation                    | Effect                                                             |
+| ----------------------------- | ------------------------------------------------------------------ |
+| `/sync-repos`                 | interactive multiSelect (avoids the unintended big run on N repos) |
+| `/sync-repos <name1> <name2>` | those sources only                                                 |
 
 ### Manifest schema
 

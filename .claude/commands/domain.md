@@ -73,41 +73,56 @@ Dispatch on the first word of `$ARGUMENTS`:
 
 3. **Per-bucket protocol**:
 
-   | Bucket | What | Pattern | Action |
-   |---|---|---|---|
-   | CANONICAL | Slug in the 5 active declarations | P-all | Substitute |
-   | FRONTMATTER | `domains:` field across `wiki/**/*.md` | P-all | Substitute |
-   | WIKILINK | `[[domains/<old>]]` no alias | P-all | Substitute |
-   | ALIAS | `[[domains/<old>\|Label]]` | P-1by1 | Dialog A |
-   | COMPOSED | Other kebab slugs containing `<old>` | P-1by1 | Dialog B |
-   | PROSE | Slug word in body. If >30 hits, propose initial P-none group "keep all, uncheck to rename" | P-1by1 | Dialog C |
-   | LOGTAG | Tagging patterns in `wiki/log.md` | P-none | Warn: rewriting a log tag = falsifying history |
-   | HIST | Refs in log / decisions / syntheses / sources | Skip default | `--include-historical` → P-none by sub-bucket |
-   | DRIFT | Numeric counts in prose (`N domains`, `N expert agents`) | — | Final warning, no auto-fix |
+   | Bucket      | What                                                                                       | Pattern      | Action                                         |
+   | ----------- | ------------------------------------------------------------------------------------------ | ------------ | ---------------------------------------------- |
+   | CANONICAL   | Slug in the 5 active declarations                                                          | P-all        | Substitute                                     |
+   | FRONTMATTER | `domains:` field across `wiki/**/*.md`                                                     | P-all        | Substitute                                     |
+   | WIKILINK    | `[[domains/<old>]]` no alias                                                               | P-all        | Substitute                                     |
+   | ALIAS       | `[[domains/<old>\|Label]]`                                                                 | P-1by1       | Dialog A                                       |
+   | COMPOSED    | Other kebab slugs containing `<old>`                                                       | P-1by1       | Dialog B                                       |
+   | PROSE       | Slug word in body. If >30 hits, propose initial P-none group "keep all, uncheck to rename" | P-1by1       | Dialog C                                       |
+   | LOGTAG      | Tagging patterns in `wiki/log.md`                                                          | P-none       | Warn: rewriting a log tag = falsifying history |
+   | HIST        | Refs in log / decisions / syntheses / sources                                              | Skip default | `--include-historical` → P-none by sub-bucket  |
+   | DRIFT       | Numeric counts in prose (`N domains`, `N expert agents`)                                   | —            | Final warning, no auto-fix                     |
 
    **Dialog A — ALIAS**:
+
    ```json
-   {"question": "Alias at <path>:<line> — '[[domains/<old>|<Label>]]'. Action?",
-    "options": [
-      {"label": "Rename slug + keep label", "description": "[[domains/<new>|<Label>]]"},
-      {"label": "Rename slug + sync label", "description": "[[domains/<new>|<NewLabel>]] (NewLabel derived: capitalize, hyphens → spaces; user-overridable via Other)"},
-      {"label": "Leave as-is", "description": "Skip this occurrence"}]}
+   {
+     "question": "Alias at <path>:<line> — '[[domains/<old>|<Label>]]'. Action?",
+     "options": [
+       { "label": "Rename slug + keep label", "description": "[[domains/<new>|<Label>]]" },
+       {
+         "label": "Rename slug + sync label",
+         "description": "[[domains/<new>|<NewLabel>]] (NewLabel derived: capitalize, hyphens → spaces; user-overridable via Other)"
+       },
+       { "label": "Leave as-is", "description": "Skip this occurrence" }
+     ]
+   }
    ```
 
    **Dialog B — COMPOSED**:
+
    ```json
-   {"question": "Composed slug '<composed>' at <path>:<line>. Rename?",
-    "options": [
-      {"label": "Leave as-is", "description": "Separate concept (Recommended)"},
-      {"label": "Rename", "description": "<composed> → <new-composed> everywhere"}]}
+   {
+     "question": "Composed slug '<composed>' at <path>:<line>. Rename?",
+     "options": [
+       { "label": "Leave as-is", "description": "Separate concept (Recommended)" },
+       { "label": "Rename", "description": "<composed> → <new-composed> everywhere" }
+     ]
+   }
    ```
 
    **Dialog C — PROSE**:
+
    ```json
-   {"question": "Prose at <path>:<line>. Context: '<line>'. Rename?",
-    "options": [
-      {"label": "Leave as-is", "description": "Natural-language word"},
-      {"label": "Rename", "description": "Substitute on this line"}]}
+   {
+     "question": "Prose at <path>:<line>. Context: '<line>'. Rename?",
+     "options": [
+       { "label": "Leave as-is", "description": "Natural-language word" },
+       { "label": "Rename", "description": "Substitute on this line" }
+     ]
+   }
    ```
 
 4. **Physical renames** — `mv` for `.claude/agents/<old>-expert.md` (+ `.suggestions[.archive].md` if present), `.claude/agent-memory/<old>${SUFFIX}/`, `wiki/domains/<old>.md`. Inside each renamed file, substitute slug + label references (frontmatter `name:`, `description:`, body).
@@ -132,26 +147,35 @@ If you catch yourself proposing batch deletion of content pages → abort, rebui
 
 ### Per-bucket by mode
 
-| Mode | B1-B4 | B5/B6/B7 | B8 HIST | B9 |
-|---|---|---|---|---|
-| `--archive` (default) | Edit (line / frontmatter / wikilink) | Skip silent → final warnings | Fully preserved, no prompt | Final warning |
-| `--include-historical` | Same as archive | Same | P-none by sub-bucket, action = edit (not delete) | Same |
-| `--purge` | Same as archive | P-1by1 (delete the occurrence) | Implies `--include-historical`; page deletion stays opt-in case-by-case | Same |
+| Mode                   | B1-B4                                | B5/B6/B7                       | B8 HIST                                                                 | B9            |
+| ---------------------- | ------------------------------------ | ------------------------------ | ----------------------------------------------------------------------- | ------------- |
+| `--archive` (default)  | Edit (line / frontmatter / wikilink) | Skip silent → final warnings   | Fully preserved, no prompt                                              | Final warning |
+| `--include-historical` | Same as archive                      | Same                           | P-none by sub-bucket, action = edit (not delete)                        | Same          |
+| `--purge`              | Same as archive                      | P-1by1 (delete the occurrence) | Implies `--include-historical`; page deletion stays opt-in case-by-case | Same          |
 
 **B2 FRONTMATTER — two steps**:
 
-- *Step 1*: P-all, remove `<slug>` from each `domains:` list (keep others). B8 HIST pages **excluded in `--archive`** (their frontmatter untouched).
-- *Step 2 — orphan dialog* (one-by-one, never batch, never pre-checked):
+- _Step 1_: P-all, remove `<slug>` from each `domains:` list (keep others). B8 HIST pages **excluded in `--archive`** (their frontmatter untouched).
+- _Step 2 — orphan dialog_ (one-by-one, never batch, never pre-checked):
 
-   ```json
-   {"question": "Page <path> orphan (domains: []) after removing <slug>. Action?",
+  ```json
+  {
+    "question": "Page <path> orphan (domains: []) after removing <slug>. Action?",
     "options": [
-      {"label": "Re-tag", "description": "Pick another domain from EXISTING_DOMAINS"},
-      {"label": "Leave orphan", "description": "domains: [] — page stays, flagged by /lint (Recommended)"},
-      {"label": "Delete the page", "description": "Explicit opt-in — only for mono-domain pure-description pages"}]}
-   ```
+      { "label": "Re-tag", "description": "Pick another domain from EXISTING_DOMAINS" },
+      {
+        "label": "Leave orphan",
+        "description": "domains: [] — page stays, flagged by /lint (Recommended)"
+      },
+      {
+        "label": "Delete the page",
+        "description": "Explicit opt-in — only for mono-domain pure-description pages"
+      }
+    ]
+  }
+  ```
 
-   If >3 orphans, present in alphabetical path order — user can answer "Leave orphan" rapidly.
+  If >3 orphans, present in alphabetical path order — user can answer "Leave orphan" rapidly.
 
 ### Phase 4 — Physical deletions (exhaustive)
 

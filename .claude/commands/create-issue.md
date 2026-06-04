@@ -32,6 +32,7 @@ Extract `<owner/repo>` from the remote URL (parse `https://github.com/<owner>/<r
 ## 2. Issue type determination
 
 Parse `$ARGUMENTS`:
+
 - First token = type, among `bug`, `enhancement` (alias `feature`), `docs`, `question`.
 - Rest = optional short description to pre-fill the title.
 
@@ -39,17 +40,31 @@ If type missing or invalid → `AskUserQuestion`:
 
 ```json
 {
-  "questions": [{
-    "question": "Which issue type do you want to create?",
-    "header": "Type",
-    "multiSelect": false,
-    "options": [
-      {"label": "bug", "description": "Something doesn't work as expected (sections: Context, Reproduction, Proposed fix, Test plan, Impact)"},
-      {"label": "enhancement", "description": "Improvement or new feature (sections: Problem, Proposal, Alternatives, Out-of-scope, Done criteria)"},
-      {"label": "docs", "description": "Gap or imprecision in template docs (sections: Section concerned, Gap observed, Suggestion)"},
-      {"label": "question", "description": "Usage or design question (sections: Context, Question, What was already tried)"}
-    ]
-  }]
+  "questions": [
+    {
+      "question": "Which issue type do you want to create?",
+      "header": "Type",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "bug",
+          "description": "Something doesn't work as expected (sections: Context, Reproduction, Proposed fix, Test plan, Impact)"
+        },
+        {
+          "label": "enhancement",
+          "description": "Improvement or new feature (sections: Problem, Proposal, Alternatives, Out-of-scope, Done criteria)"
+        },
+        {
+          "label": "docs",
+          "description": "Gap or imprecision in template docs (sections: Section concerned, Gap observed, Suggestion)"
+        },
+        {
+          "label": "question",
+          "description": "Usage or design question (sections: Context, Question, What was already tried)"
+        }
+      ]
+    }
+  ]
 }
 ```
 
@@ -64,6 +79,7 @@ If the label doesn't exist, create the issue without label (signal in the previe
 ## 3. Context collection
 
 Read the current conversation to identify the issue subject:
+
 - Which file / behavior / scenario is at stake?
 - Which observed-vs-expected error (for bug) / which gap (for enhancement / docs) / which point of confusion (for question)?
 - Are there relevant code excerpts, error traces, or commands?
@@ -75,6 +91,7 @@ If the description from `$ARGUMENTS` is provided, use it as a **candidate title*
 ### Structure by type
 
 **bug**:
+
 ```markdown
 ## Context
 
@@ -99,6 +116,7 @@ If the description from `$ARGUMENTS` is provided, use it as a **candidate title*
 ```
 
 **enhancement**:
+
 ```markdown
 ## Problem
 
@@ -123,6 +141,7 @@ If the description from `$ARGUMENTS` is provided, use it as a **candidate title*
 ```
 
 **docs**:
+
 ```markdown
 ## Section concerned
 
@@ -138,6 +157,7 @@ If the description from `$ARGUMENTS` is provided, use it as a **candidate title*
 ```
 
 **question**:
+
 ```markdown
 ## Context
 
@@ -161,6 +181,7 @@ Apply the rules of `.claude/rules/sanitization-issues.md` to the title **and** b
 - **Anonymization of concrete cases**: rephrase "18 BB pages had X" as "N pages affected (figure measured on the BoilingBrain reference vault)" or "Some vault pages had X".
 
 Build a **sanitization report** with:
+
 - List of silent transformations applied (can be copied for audit).
 - List of flagged elements awaiting user confirmation.
 
@@ -195,16 +216,24 @@ Then `AskUserQuestion`:
 
 ```json
 {
-  "questions": [{
-    "question": "What do you want to do with this draft?",
-    "header": "Issue",
-    "multiSelect": false,
-    "options": [
-      {"label": "✅ Create the issue", "description": "Creates the issue via gh issue create. Will return the URL."},
-      {"label": "✏️ Edit manually", "description": "Doesn't create anything. Shows the draft ready to copy-paste into the GitHub UI."},
-      {"label": "❌ Cancel", "description": "Aborts without creating anything."}
-    ]
-  }]
+  "questions": [
+    {
+      "question": "What do you want to do with this draft?",
+      "header": "Issue",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "✅ Create the issue",
+          "description": "Creates the issue via gh issue create. Will return the URL."
+        },
+        {
+          "label": "✏️ Edit manually",
+          "description": "Doesn't create anything. Shows the draft ready to copy-paste into the GitHub UI."
+        },
+        { "label": "❌ Cancel", "description": "Aborts without creating anything." }
+      ]
+    }
+  ]
 }
 ```
 
@@ -226,15 +255,23 @@ After successful creation, propose via `AskUserQuestion`:
 
 ```json
 {
-  "questions": [{
-    "question": "Add a tracker in wiki/radar.md?",
-    "header": "Radar",
-    "multiSelect": false,
-    "options": [
-      {"label": "✅ Yes, track in the radar", "description": "Adds an entry `- [ ] **[Template · YYYY-MM-DD]** <short description>. → <URL>` in wiki/radar.md \"To watch\" category"},
-      {"label": "❌ No, no local follow-up", "description": "The issue lives its life on GitHub only"}
-    ]
-  }]
+  "questions": [
+    {
+      "question": "Add a tracker in wiki/radar.md?",
+      "header": "Radar",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "✅ Yes, track in the radar",
+          "description": "Adds an entry `- [ ] **[Template · YYYY-MM-DD]** <short description>. → <URL>` in wiki/radar.md \"To watch\" category"
+        },
+        {
+          "label": "❌ No, no local follow-up",
+          "description": "The issue lives its life on GitHub only"
+        }
+      ]
+    }
+  ]
 }
 ```
 

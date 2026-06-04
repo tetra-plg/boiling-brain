@@ -42,6 +42,7 @@ echo "Target: ${TARGET_BRANCH} → ${TARGET_VERSION} (${TARGET_SHA:0:12}…)"
 ### 4. Compute the migration chain to apply
 
 A migration enters `MIGRATIONS_TO_APPLY` if either:
+
 - Its slug is NOT in `APPLIED_MIGRATIONS` (the normal "new migration" path), OR
 - Its slug IS in `APPLIED_MIGRATIONS` BUT its frontmatter contains `force-rerun: true` (the "re-evaluate on every update" path, used when a previously-applied migration ships a fix or extension that needs to re-execute on already-migrated vaults).
 
@@ -94,17 +95,31 @@ For each `CONFLICT <f>`, ask the user how to resolve:
 
 ```json
 {
-  "questions": [{
-    "question": "<f> has overlapping edits between your local version and the template update. How do you want to resolve it?",
-    "header": "Conflict: <basename>",
-    "multiSelect": false,
-    "options": [
-      {"label": "Keep merged version with markers", "description": "File contains <<<<<<< / ======= / >>>>>>> showing both sides. Edit it manually after this command, then re-stage."},
-      {"label": "Use template version (discard local edits)", "description": "Overwrite with the upstream template. Your local customisations on this file are lost."},
-      {"label": "Use vault version (discard template update)", "description": "Restore your local version. The file diverges from template until you re-run /update-vault and resolve."},
-      {"label": "Skip this file", "description": "Do not stage. The file stays in its current marker-annotated state until you handle it manually."}
-    ]
-  }]
+  "questions": [
+    {
+      "question": "<f> has overlapping edits between your local version and the template update. How do you want to resolve it?",
+      "header": "Conflict: <basename>",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "Keep merged version with markers",
+          "description": "File contains <<<<<<< / ======= / >>>>>>> showing both sides. Edit it manually after this command, then re-stage."
+        },
+        {
+          "label": "Use template version (discard local edits)",
+          "description": "Overwrite with the upstream template. Your local customisations on this file are lost."
+        },
+        {
+          "label": "Use vault version (discard template update)",
+          "description": "Restore your local version. The file diverges from template until you re-run /update-vault and resolve."
+        },
+        {
+          "label": "Skip this file",
+          "description": "Do not stage. The file stays in its current marker-annotated state until you handle it manually."
+        }
+      ]
+    }
+  ]
 }
 ```
 
@@ -136,6 +151,7 @@ Skipped: <files in UNSTAGE>
 For each migration in `MIGRATIONS_TO_APPLY` (ascending version order), invoke it as a sub-workflow. Migration files live under `scripts/migrations/v<X>-*.md` — read the file and execute its steps (AskUserQuestion, edits, commit).
 
 Each migration returns one of three verdicts:
+
 - **Applied**: file updated, dedicated commit by the migration. Append its slug to `APPLIED_MIGRATIONS`.
 - **Manual edit / Skipped**: do NOT append. The migration is re-proposed at the next `/update-vault`.
 
@@ -171,6 +187,7 @@ If `.claude/template-version` did not exist at session start (step 2 detected v1
 ## Notes
 
 Excluded from propagation (consumed at bootstrap or user-owned):
+
 - `*.tpl`, `BOOTSTRAP.md`, `PLACEHOLDERS.md`, `CONTRIBUTING.md` — bootstrap-only.
 - `CLAUDE.md` — user-owned; migrated only through `scripts/migrations/v<X>-*.md`.
 
