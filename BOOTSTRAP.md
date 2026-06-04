@@ -34,7 +34,7 @@ An **LLM Wiki** is a personal wiki maintained by an LLM:
 
 ### 1.4 What you'll do (overview)
 
-1. 7-question interview (Section 2).
+1. Interview: Q0 language gate + Q1–Q7 (Section 2).
 2. Inference of 5 properties per domain (Section 3).
 3. Per-domain + global validation (Section 4).
 4. Generation: placeholder substitution, per-domain duplication, conditional removals, this file moved to ADR, git reset (Section 5).
@@ -53,9 +53,9 @@ Ask the questions **sequentially**. Store every answer in an internal variable. 
 
 Build the options dynamically:
 
-- **If a language was clearly inferred**: option 1 = the detected language, labeled `<Language> — detected from your first messages` (the recommended choice). Fill the remaining slots (4 options max) from `[English, Français, Español, Deutsch]`, skipping the one already shown as detected.
+- **If a language was clearly inferred**: option 1 = the detected language, labeled `<Language> — detected from your first messages` (the recommended choice). Fill the remaining slots (up to 3) from `[English, Français, Español, Deutsch]`, skipping the one already shown as detected — so the total never exceeds 4 options before "Other".
 - **If inference is ambiguous** (no clear signal): show `[English, Français, Español, Deutsch]` with **no** option marked as detected/recommended — force a conscious choice.
-- The auto-provided "Other" lets the user type any language not listed (e.g. `日本語`, `Português`).
+- The widget auto-appends a free-text "Other" option to every single-select `AskUserQuestion`; it lets the user type any language not listed (e.g. `日本語`, `Português`).
 
 Example JSON (clear inference, detected = Français):
 
@@ -77,7 +77,7 @@ Example JSON (clear inference, detected = Français):
 }
 ```
 
-→ Store the chosen human label as `{{vault_language}}` (e.g. `English`, `Français`, `Español`, `Deutsch`, `日本語`). Run the rest of the interview and generate every file in that language. If the user picks "Other", normalize their free-text answer to a human label.
+→ Store the chosen human label as `{{vault_language}}` (e.g. `English`, `Français`, `Español`, `Deutsch`, `日本語`). Run the rest of the interview and generate every file in that language. If the user picks "Other", normalize their free-text answer to a conventionally-capitalized human label (e.g. `french` → `French`, `francais` → `Français`).
 
 ### Q1 — Identity
 
@@ -406,13 +406,13 @@ Then:
     "multiSelect": false,
     "options": [
       {"label": "✅ All good, scaffold it", "description": "Run vault generation."},
-      {"label": "↩️ Restart the interview from scratch", "description": "Goes back to Q1. All answers are wiped."}
+      {"label": "↩️ Restart the interview from scratch", "description": "Goes back to Q0. All answers are wiped."}
     ]
   }]
 }
 ```
 
-If "↩️" → restart from Q1. Otherwise → Section 5.
+If "↩️" → restart from Q0. Otherwise → Section 5.
 
 ---
 
