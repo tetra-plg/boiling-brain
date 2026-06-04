@@ -3,7 +3,7 @@
 Image-diff filtering — Étape 2 du runbook extraction-frames-induction.
 
 Usage :
-  scripts/diff-frames.py <samples_dir> [--roi x,y,w,h] [--threshold 12.0] [--cadence N] --output transitions.md
+  scripts/video/diff-frames.py <samples_dir> [--roi x,y,w,h] [--threshold 12.0] [--cadence N] --output transitions.md
 
 - Parcourt les samples par ordre lexicographique (sample-0001.png, sample-0002.png, …).
 - Pour chaque paire (n, n+1) : convertit en gris, applique le ROI optionnel (proportions 0..1),

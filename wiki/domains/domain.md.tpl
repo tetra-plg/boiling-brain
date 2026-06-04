@@ -32,7 +32,7 @@ _(to populate as ingests come in)_
 
 ## Video tooling
 
-- [[decisions/extraction-frames-induction-runbook|Frame-extraction-by-cross-induction runbook]] — 9-step pipeline invokable via `/ingest-video --induction` for visually dense {{domain_slug}} videos.
-- [[decisions/ingest-video-modes-a-b-generalisation|`/ingest-video` modes A/B]] — `/ingest-video` proposes the light mode (frame requests) or the heavy mode (cross-induction) based on visual density.
+- [Frame-extraction-by-cross-induction runbook](https://github.com/tetra-plg/boiling-brain/blob/main/docs/extraction-frames-induction-runbook.md) (template doc) — 9-step pipeline invokable via `/ingest-video --induction` for visually dense {{domain_slug}} videos.
+- [`/ingest-video` modes A/B](https://github.com/tetra-plg/boiling-brain/blob/main/docs/ingest-video-modes-a-b-generalisation.md) (template doc) — `/ingest-video` proposes the light mode (frame requests) or the heavy mode (cross-induction) based on visual density.
 
 {{related_domains_section}}

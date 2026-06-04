@@ -6,6 +6,7 @@ argument-hint: [--force] [--frames] [path-or-folder — empty = all of raw/]
 Run the INGEST workflow from CLAUDE.md on: $ARGUMENTS
 
 **Idempotent batch mode.** Behavior:
+
 - No argument → full sweep of `raw/`.
 - Argument = folder → scan that subtree.
 - Argument = file → force re-ingest **of that file only**.
@@ -16,7 +17,7 @@ For each in-scope file, from the **main context**:
 
 ### 1. State detection
 
-Run `bash scripts/scan-raw.sh [scope]` (no argument = all of `raw/`; with folder or file = subtree). The script outputs one line per file:
+Run `bash scripts/wiki-maint/scan-raw.sh [scope]` (no argument = all of `raw/`; with folder or file = subtree). The script outputs one line per file:
 
 ```
 NEW      raw/...    → never seen
@@ -27,18 +28,20 @@ MODIFIED raw/...    (covered-by: <slug>, sha-changed)   → covered but content 
 Detection is **robust**: it checks exact match on `source_path`, then on `covered_paths` (list of all raw paths covered by a composite page), then on parent directory. This avoids false "NEW" entries when an agent synthesized several files into a single page without listing each file individually.
 
 Arbitration:
+
 - `SKIP` → ignore (unless `--force` → treat as `MODIFIED`).
 - `NEW` / `MODIFIED` → proceed to step 2.
 
 **`--force` mode**: explicitly tell the expert agent in its prompt that the source has **already been ingested** (cite the existing source page) and that it's an **additive** re-ingest. The agent must read existing pages, identify what's missing, add only that, not rewrite content that's already correct. Update `ingested:` only if content was added.
 
 **`--frames` mode**: tell the agent the goal is **exclusively** to produce frame requests for this transcript. Spawn instruction:
+
 - Re-read the source transcript.
 - Produce a `## Frame requests` block per the vault convention (cf. CLAUDE.md).
 - **Don't modify anything else** in existing pages — no textual content update, no `ingested:` bump.
 - If no detectable visual in the transcript → answer "no frame to declare" and don't produce the block.
 
-If video/audio/URL not transcribed → chain `scripts/transcribe.sh` first.
+If video/audio/URL not transcribed → chain `scripts/video/transcribe.sh` first.
 
 ### 2. Expert-agent proposal (user validation)
 
@@ -54,27 +57,30 @@ If video/audio/URL not transcribed → chain `scripts/transcribe.sh` first.
 
 ### 3. Spawning the expert agent
 
+Read `.claude/agent-output-contract.md` once at the start of the run; inject it integrally into every spawn prompt below.
+
 For each validated agent, launch an `Agent` call with:
+
 - `subagent_type`: the chosen agent.
 - **Prompt** containing:
   - Path of the raw file to ingest.
   - List of titles of existing pages in the domain (`wiki/entities/`, `wiki/concepts/`, `wiki/cheatsheets/`, etc. depending on the agent's deliverables).
   - Path of `wiki/domains/<d>.md`.
-  - Instruction: execute the ingest end-to-end, then return the report in `## Ingest summary` + `## Evolution suggestions` format (cf. agent prompt).
+  - The full content of `.claude/agent-output-contract.md`.
+  - Instruction: execute the ingest end-to-end, then return the three blocks (`## Ingest summary`, `## Radar items`, `## Evolution suggestions`) per the contract. The agent **does not write** to `wiki/log.md`, `wiki/radar.md`, or `.claude/agents/*.suggestions.md` — the main context handles propagation.
 
 Cross-domain → multiple agents in parallel (same multi-tool call).
 
 ### 4. Collection and journaling
 
-When the agent(s) have returned their report:
+When the agent(s) have returned their report, the **main context** writes (never the agent):
 
-1. Append to `wiki/log.md`:
-   ```
-   ## [YYYY-MM-DD] ingest | <source title> (agent: <name>)
-   <summary of the Ingest summary block — pages created/updated, deliverables>
-   ```
-2. Append the `## Evolution suggestions` block to `.claude/agents/<domain>-expert.suggestions.md` (create if needed) with a `### [YYYY-MM-DD HH:MM] source: <path>` timestamp.
-3. Update `wiki/index.md` if the agent didn't already.
+1. **`wiki/log.md`** ← append summary line from `## Ingest summary` (`## [YYYY-MM-DD] ingest | <source title> (agent: <name>)` + 2-3 lines on pages created/updated/deliverables).
+2. **`wiki/radar.md`** ← append entries from `## Radar items` under the relevant thematic section. If no section matches, append to a `## Triage` block at the top of the file and flag this in the final report.
+3. **`.claude/agents/<domain>-expert.suggestions.md`** ← append the `## Evolution suggestions` block (timestamped `### [YYYY-MM-DD HH:MM] source: <path>`). Skip if the block is "N/A".
+4. **`wiki/index.md`** ← update if the agent's pages aren't already linked.
+
+Centralizing writes in the main context prevents drift and inconsistent formatting across agents.
 
 ### 4b. Frame extraction (if present)
 
@@ -82,20 +88,37 @@ If the agent's report contains a `## Frame requests` block, handle **before** th
 
 1. Check if a source video is available in `cache/videos/` (look for a file whose name matches the slug of the ingested transcript).
 2. If video available:
-   a. For each `FRAME: HH:MM:SS | slug | description` line: extract via `./scripts/extract-frames.sh <video_path> <timestamp> cache/frames/<slug>.png` (applies a default +5s offset — compensates for the lag between verbal mention and visual display).
+   a. For each `FRAME: HH:MM:SS | slug | description` line: extract via `./scripts/video/extract-frames.sh <video_path> <timestamp> cache/frames/<slug>.png` (applies a default +5s offset — compensates for the lag between verbal mention and visual display).
    b. Show all extracted frames to the user in a single batch (`AskUserQuestion`).
    c. On validation → `cp cache/frames/<slug>.png raw/frames/YYYY-MM-DD-<source-slug>-<slug>.png`.
-   d. On rejection → propose 3 quick alternatives without re-asking the user to specify an offset: extract at T-10s (`offset=-5`), T+0s (`offset=0`) and T+20s (`offset=15`) via `./scripts/extract-frames.sh <video> <timestamp> cache/frames/<slug>-altN.png <offset>`, show all 3 as a batch, validate or annotate `> [!question] Frame not extracted` if none works.
+   d. On rejection → propose 3 quick alternatives without re-asking the user to specify an offset: extract at T-10s (`offset=-5`), T+0s (`offset=0`) and T+20s (`offset=15`) via `./scripts/video/extract-frames.sh <video> <timestamp> cache/frames/<slug>-altN.png <offset>`, show all 3 as a batch, validate or annotate `> [!question] Frame not extracted` if none works.
 3. If no video in cache: tell the user the declared timestamps with the expected description — they can re-run manually or annotate the frames as `> [!question]`.
 4. Include in the final report: `Frames: N promoted · M rejected` (or `Frame requests: N declared — video not available in cache`).
+
+### 4c. Pending-ingest purge
+
+Remove from `cache/.pending-ingest` the paths processed in this run (NEW + MODIFIED) and the stale SKIP entries detected at step 1. The main context accumulates these throughout the run: `PROCESSED_PATHS` = all NEW + MODIFIED paths from step 1; `STALE_SKIP_PATHS` = SKIP entries that were already present in `.pending-ingest` at step 1.
+
+```bash
+PENDING="cache/.pending-ingest"
+[ -f "$PENDING" ] || exit 0
+printf '%s\n' "${PROCESSED_PATHS[@]}" "${STALE_SKIP_PATHS[@]}" \
+  | sort -u \
+  | grep -vFxf - "$PENDING" > "$PENDING.tmp" || true
+mv "$PENDING.tmp" "$PENDING"
+[ -s "$PENDING" ] || rm -f "$PENDING"
+```
 
 ### 5. Final overall report
 
 Format:
+
 ```
 N new · M updated · K unchanged (skipped) · L orphans
 ```
+
 Followed by:
+
 - Per source: agent invoked, pages touched, deliverables produced.
 - Evolution suggestions surfaced (pointer to `.suggestions.md` files).
 - Contradictions detected (between sources or against the existing wiki).
@@ -107,3 +130,12 @@ Followed by:
 - One source = one main agent (even if cross-domain, one agent leads the `wiki/sources/` page; the others enrich concepts/entities in their domain).
 - If no expert agent fits and the user picks "other" → the main context performs the generic ingest (current fallback behavior).
 - If the `/evolve-agent <domain>` command exists, it consumes the `.suggestions.md` to evolve the agent's prompt.
+
+## Final step — normalise markdown
+
+After all pages are written/updated, format the produced markdown so it stays
+consistent and the CI `format-check` job passes:
+
+```bash
+python3 scripts/wiki-maint/format-md.py --write "wiki/**/*.md"
+```

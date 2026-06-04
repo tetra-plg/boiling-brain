@@ -22,7 +22,7 @@ import sys
 import time
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 LOG_DIR = ROOT / "cache"
 LOG_FILE = LOG_DIR / "backfill-summaries.log"
 FAIL_FILE = LOG_DIR / "backfill-failed.log"

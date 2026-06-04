@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Usage:
-#   scripts/sample-frames.sh <video_path> <output_dir> [cadence_seconds]
+#   scripts/video/sample-frames.sh <video_path> <output_dir> [cadence_seconds]
 #
 # Produit:
 #   <output_dir>/sample-NNNN.png  (1280×720, échantillonnés toutes [cadence] secondes)
 #   <output_dir>/.cadence         (mémorise la cadence utilisée pour diff-frames.py)
 #
-# Étape 1 du runbook wiki/decisions/extraction-frames-induction-runbook.md.
+# Étape 1 du runbook docs/extraction-frames-induction-runbook.md (template repo).
 # Pour pointer vers un cache vidéo externe, exporter $LLMWIKI_VIDEO_CACHE avant l'appel.
 
 set -euo pipefail

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Usage : ./scripts/extract-frames.sh <video_path> <timestamp_HH:MM:SS> <output_path> [offset_seconds]
+# Usage : ./scripts/video/extract-frames.sh <video_path> <timestamp_HH:MM:SS> <output_path> [offset_seconds]
 # offset_seconds : décalage en secondes ajouté au timestamp (défaut : +5)
 # Pour pointer vers un cache vidéo externe, exporter $LLMWIKI_VIDEO_CACHE avant l'appel.
 set -e

@@ -15,13 +15,13 @@ Run the INGEST-VIDEO workflow from CLAUDE.md on: $ARGUMENTS
 
 - If YouTube URL: `yt-dlp -x --audio-format m4a -o "cache/audio/<slug>.%(ext)s" <url>`.
 - If local file: move into `${LLMWIKI_VIDEO_CACHE:-cache/videos}/`, then `ffmpeg -i <video> -vn -acodec copy cache/audio/<slug>.m4a`.
-- Local transcription (whisper.cpp or mlx-whisper) → `raw/transcripts/YYYY-MM-DD-<slug>.md` with timestamps. Use `scripts/transcribe.sh` which already covers these steps for both cases.
+- Local transcription (whisper.cpp or mlx-whisper) → `raw/transcripts/YYYY-MM-DD-<slug>.md` with timestamps. Use `scripts/video/transcribe.sh` which already covers these steps for both cases.
 - Create `raw/videos-meta/YYYY-MM-DD-<slug>.meta.md` (URL, duration, hash, location).
 - Purge `cache/audio/<slug>.m4a`.
 
 #### Video storage convention: `LLMWIKI_VIDEO_CACHE`
 
-Environment variable used by `scripts/transcribe.sh`, `scripts/sample-frames.sh` and `scripts/extract-frames.sh` to locate downloaded videos:
+Environment variable used by `scripts/video/transcribe.sh`, `scripts/video/sample-frames.sh` and `scripts/video/extract-frames.sh` to locate downloaded videos:
 
 - **Default**: `cache/videos/` (internal disk, inside the vault).
 - **Override**: export `LLMWIKI_VIDEO_CACHE` to an external disk or dedicated folder if video volume exceeds internal disk capacity.
@@ -55,11 +55,13 @@ All expert agents have a `## Visual frames` section in their prompt — they can
 After the expert agent has returned its report, **propose** the extraction mode best suited to this video via `AskUserQuestion`. No silent switch.
 
 **Override flags** (consumed in priority, no proposal shown):
+
 - `--induction` → force mode B (cross-induction).
 - `--mode-a` → force mode A (frame requests from the agent).
 - `--skip-frames` → skip extraction.
 
 **Signals to compute** before the proposal:
+
 - `duration_min`: video duration in minutes (from the `duration` field of the `.meta.md` frontmatter).
 - `visual_mentions`: count of visual-pattern occurrences in the transcript. **Bilingual EN+FR list** (extend with other languages as needed depending on the source-transcript language):
   - **EN patterns**: `look at`, `here's`, `here is`, `you can see`, `you'll see`, `this diagram`, `this table`, `this chart`, `this graph`, `this figure`, `this slide`, `this image`, `this dashboard`, `this pipeline`, `this code`, `on screen`, `on the screen`, `take a look`, `notice this`.
@@ -69,6 +71,7 @@ After the expert agent has returned its report, **propose** the extraction mode 
 - `frame_requests_count`: number of entries in the agent's `## Frame requests` report block (0 if block absent).
 
 **Computed recommendation**:
+
 - **Recommend Mode A** if: `frame_requests_count` > 0 and consistent with `visual_mentions` (typical case: agent declared 2-4 frames on a conceptual video, or more on a dense video with many configurations).
 - **Recommend Mode B** if:
   - `duration_min ≥ 30` AND `mentions_per_min ≥ 0.3` AND `frame_requests_count` ≤ 30% of the "expected" count (`visual_mentions / 3` as a rough heuristic) → suspected under-extraction.
@@ -91,6 +94,7 @@ Options:
 The recommended option is marked "(Recommended)" and placed first.
 
 **Logging**: the final decision (mode + signals + any override) is journaled in `wiki/log.md` on the same line as the ingest:
+
 ```
 ## [YYYY-MM-DD] ingest-video | <title> (agent: <name>, mode: A|B|skip, duration Xm, Y mentions, Z frames)
 ```
@@ -99,7 +103,7 @@ The recommended option is marked "(Recommended)" and placed first.
 
 For each `FRAME: HH:MM:SS | slug | description` line of the `## Frame requests` block:
 
-1. Extract the frame: `./scripts/extract-frames.sh <video_path> <timestamp> cache/frames/<slug>.png`.
+1. Extract the frame: `./scripts/video/extract-frames.sh <video_path> <timestamp> cache/frames/<slug>.png`.
 2. Show all extracted frames to the user as a batch via `AskUserQuestion`.
 3. On validation → `cp cache/frames/<slug>.png raw/frames/YYYY-MM-DD-<source-slug>-<slug>.png`.
 4. On rejection → propose a retry at timestamp ±X s, or annotate `> [!question] Frame not extracted` in the source page.
@@ -108,10 +112,10 @@ For each `FRAME: HH:MM:SS | slug | description` line of the `## Frame requests` 
 
 ### 4b. Mode B — cross-induction
 
-Follows the runbook [wiki/decisions/extraction-frames-induction-runbook.md](../../wiki/decisions/extraction-frames-induction-runbook.md):
+Follows the runbook [docs/extraction-frames-induction-runbook.md](https://github.com/tetra-plg/boiling-brain/blob/main/docs/extraction-frames-induction-runbook.md) (template doc, not in your vault):
 
-1. **Dense sampling**: `scripts/sample-frames.sh <video> /tmp/<slug>-samples/ <cadence>`. Cadence depends on video type (cf. runbook table, default 20 s for dense videos, 30 s for talks, 60 s for quizzes).
-2. **Image-diff**: `scripts/diff-frames.py /tmp/<slug>-samples/ [--roi …] [--threshold …] --output /tmp/<slug>-transitions.md`. ROI is only applied if a **domain annex** of the runbook justifies it for this video type; otherwise full frame by default.
+1. **Dense sampling**: `scripts/video/sample-frames.sh <video> /tmp/<slug>-samples/ <cadence>`. Cadence depends on video type (cf. runbook table, default 20 s for dense videos, 30 s for talks, 60 s for quizzes).
+2. **Image-diff**: `scripts/video/diff-frames.py /tmp/<slug>-samples/ [--roi …] [--threshold …] --output /tmp/<slug>-transitions.md`. ROI is only applied if a **domain annex** of the runbook justifies it for this video type; otherwise full frame by default.
 3. **Visual cataloging**: spawn an `Explore` agent with the transitions table and the prompt of Step 3 of the runbook → table classified `KEEP / DUPLICATE / SKIP`.
 4. **Transcript induction**: for each `KEEP` frame, extract the `[t-30s, t+30s]` transcript window and annotate it (citation, concept, justification). Downgrade to `SKIP` if no pedagogical justification. Output: `/tmp/<slug>-induction.md`.
 5. **Manual batch validation**: show the induction table to the user in a single `AskUserQuestion` multiSelect (Promote / Duplicate / Skip / Re-extract). The main context reads each candidate PNG and presents a textual description per option.

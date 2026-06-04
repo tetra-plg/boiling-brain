@@ -2,9 +2,9 @@
 
 > You (Claude) are reading this file in a fresh clone of `tetra-plg/boiling-brain`. Your mission: walk the user through an interview, infer their architecture, scaffold their personalized LLM-Wiki instance, then clean up.
 >
-> **Language**: detect the user's language from their first messages (or from the system locale if you can infer it) and run the entire interview, generate every file and write every comment in that language. If unsure, ask the question in English before continuing. Do not maintain multiple versions of the prompt — adapt on the fly. Be direct, no prose. The `AskUserQuestion` calls must be asked as specified.
+> **Language**: infer a candidate language from the user's first messages (or from the system locale if you can infer it), then **confirm it explicitly at Q0** (Section 2) before anything else — the inference only seeds the default, the user's Q0 answer is authoritative. Run the entire interview, generate every file and write every comment in the confirmed language. Do not maintain multiple versions of the prompt — adapt on the fly. Be direct, no prose. The `AskUserQuestion` calls must be asked as specified.
 >
-> **Language persistence**: the language detected here becomes the value of the `{{vault_language}}` placeholder (human label: `English`, `Français`, `Español`, `Deutsch`, `日本語`…). That value is then injected into `CLAUDE.md` and into every domain agent so that **all wiki pages produced by `/ingest` are written in that language**, regardless of the original source language. An EN source in a FR vault yields FR pages; the reverse is just as true. Confirm the language with the user at the end of Q1 if you have any doubt.
+> **Language persistence**: the language detected here becomes the value of the `{{vault_language}}` placeholder (human label: `English`, `Français`, `Español`, `Deutsch`, `日本語`…). That value is then injected into `CLAUDE.md` and into every domain agent so that **all wiki pages produced by `/ingest` are written in that language**, regardless of the original source language. An EN source in a FR vault yields FR pages; the reverse is just as true. The language is confirmed at Q0 (Section 2) and re-displayed in the Final recap (Section 4.2) before scaffolding.
 
 ---
 
@@ -34,7 +34,7 @@ An **LLM Wiki** is a personal wiki maintained by an LLM:
 
 ### 1.4 What you'll do (overview)
 
-1. 7-question interview (Section 2).
+1. Interview: Q0 language gate + Q1–Q7 (Section 2).
 2. Inference of 5 properties per domain (Section 3).
 3. Per-domain + global validation (Section 4).
 4. Generation: placeholder substitution, per-domain duplication, conditional removals, this file moved to ADR, git reset (Section 5).
@@ -43,22 +43,58 @@ An **LLM Wiki** is a personal wiki maintained by an LLM:
 
 ---
 
-## Section 2 — Step 1, Interview (7 questions)
+## Section 2 — Step 1, Interview (Q0 language gate + 7 questions)
 
 Ask the questions **sequentially**. Store every answer in an internal variable. **Move on only when the previous one is resolved.**
+
+### Q0 — Vault language
+
+**Before Q1**, confirm the language the entire vault will be written in. Infer a candidate from the user's first messages, then **always** ask via `AskUserQuestion` — never skip this, even when the inference feels certain. The inference only sets the recommended default; the user's selection is authoritative.
+
+Build the options dynamically:
+
+- **If a language was clearly inferred**: option 1 = the detected language, labeled `<Language> (Recommended)` (per the `AskUserQuestion` convention — recommended option first, `(Recommended)` suffix on the label), with the description noting it was detected from the user's first messages. Fill the remaining slots (up to 3) from `[English, Français, Español, Deutsch]`, skipping the one already shown as detected — so the total (excluding the auto-appended "Other") never exceeds 4 options.
+- **If inference is ambiguous** (no clear signal): show `[English, Français, Español, Deutsch]` with **no** option marked as detected/recommended — force a conscious choice.
+- The widget auto-appends a free-text "Other" option to every single-select `AskUserQuestion`; it lets the user type any language not listed (e.g. `日本語`, `Português`).
+
+Example JSON (clear inference, detected = Français):
+
+```json
+{
+  "questions": [
+    {
+      "question": "Which language should the vault be written in?",
+      "header": "Vault language",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "Français (Recommended)",
+          "description": "Detected from your first messages. All wiki pages, agents and comments will be in French."
+        },
+        { "label": "English", "description": "Write the entire vault in English." },
+        { "label": "Español", "description": "Write the entire vault in Spanish." },
+        { "label": "Deutsch", "description": "Write the entire vault in German." }
+      ]
+    }
+  ]
+}
+```
+
+→ Store the chosen human label as `{{vault_language}}` (e.g. `English`, `Français`, `Español`, `Deutsch`, `日本語`). Run the rest of the interview and generate every file in that language. If the user picks "Other", normalize their free-text answer to a conventionally-capitalized human label (e.g. `french` → `French`, `francais` → `Français`). If the input is an ambiguous abbreviation (e.g. `por` → Portuguese or Polish?), ask the user to disambiguate rather than guessing.
 
 ### Q1 — Identity
 
 Ask 2 plain-text questions, sequential, not via `AskUserQuestion`:
 
-1. "What's your full name? (e.g. *Maria Dupont*, *Carlos Silva*)"
+1. "What's your full name? (e.g. _Maria Dupont_, _Carlos Silva_)"
    → Store as `name`. Extract the **first name** (1st token before the space) lowercased to compute `vault_name = <firstname>-vault`.
    → For hyphenated first names ("Jean-Marc"), split on **spaces only**: `vault_name = jean-marc-vault`.
 
-2. "What's your short professional role (1 line)? (e.g. *Lead data engineer at Acme Corp*, *Post-doc researcher in genomics at CNRS*)"
+2. "What's your short professional role (1 line)? (e.g. _Lead data engineer at Acme Corp_, _Post-doc researcher in genomics at CNRS_)"
    → Store as `role`.
 
 **Parsing:**
+
 - `name` = raw answer to Q1.1 (e.g. `"Maria Dupont"`).
 - `role` = raw answer to Q1.2.
 - `vault_name` = `<first_token_lowercase>-vault`. The "first token" is obtained by splitting on **spaces only** (not on hyphens). So `"Maria Dupont"` → `maria-vault`, `"Jean-Marc Lefebvre"` → `jean-marc-vault`. Confirm silently, no dedicated question.
@@ -75,11 +111,13 @@ Tip: cluster rather than splinter when natural. No cap — declare as many as re
 ```
 
 **Parsing:**
+
 - `domains = [slugs...]`. Trim every slug. Validate kebab-case, fix silently otherwise.
 - If 0 domain → re-ask, saying at least 1 is needed.
 - For each slug, infer a `domain_label` via human title-casing (e.g. `astro-physics` → `Astronomy & Physics`, `ai` → `AI`). You will display it at validation time.
 
 **Slug → human-label mapping (domain title)**:
+
 - ASCII kebab-case slug (e.g. `market`, `paleo-dna`).
 - The human label is derived for display: capitalize + accents if relevant (e.g. `marche` → `Marché`, `paleo-dna` → `Paleo-DNA`).
 - On ambiguity (e.g. slug `cs` → `Computer Science` or `Customer Success`?), ask the user to confirm the human label.
@@ -111,6 +149,7 @@ Build the JSON dynamically:
 **Concrete example** for `domains = [poker, ai, factory, work, tech]`: 5 options labeled `poker`/`ai`/.../`tech` + the `none` option. Static description: "The hub pivot is the domain that tools or feeds the others. Example: AI feeds the Factory (agents) and Work (LLM management techniques)."
 
 **Parsing:**
+
 - `hub_pivot = <slug>` or `null` if "none".
 
 ### Q4 — Active projects
@@ -128,6 +167,7 @@ I'm rebuilding my Factory plugin in a multi-agent architecture
 ```
 
 **Automatic parsing**:
+
 - For every non-empty line, extract a kebab-case `slug` (2-4 keywords condensed from the sentence) and keep the full sentence as `description`.
 - Example: `"I'm following an MTT poker masterclass for 2026"` → `{slug: "mtt-poker-masterclass", description: "MTT poker masterclass 2026"}`.
 - If the line is too short to extract a meaningful slug → `project-1`, `project-2`, etc.
@@ -139,23 +179,32 @@ Multi-select 6 options:
 
 ```json
 {
-  "questions": [{
-    "question": "Which source types do you plan to ingest?",
-    "header": "Source types",
-    "multiSelect": true,
-    "options": [
-      {"label": "Personal notes", "description": "Reflections, takeaways, personal drafts."},
-      {"label": "Video transcripts", "description": "YouTube + local files. Enables /ingest-video and the frames pipeline."},
-      {"label": "PDFs", "description": "Papers, ebooks, slides."},
-      {"label": "Web clippings", "description": "Blog articles, threads, posts."},
-      {"label": "Official docs", "description": "SDKs, APIs, frameworks."},
-      {"label": "GitHub repos", "description": "Tracking evolving projects. Enables /sync-repos."}
-    ]
-  }]
+  "questions": [
+    {
+      "question": "Which source types do you plan to ingest?",
+      "header": "Source types",
+      "multiSelect": true,
+      "options": [
+        { "label": "Personal notes", "description": "Reflections, takeaways, personal drafts." },
+        {
+          "label": "Video transcripts",
+          "description": "YouTube + local files. Enables /ingest-video and the frames pipeline."
+        },
+        { "label": "PDFs", "description": "Papers, ebooks, slides." },
+        { "label": "Web clippings", "description": "Blog articles, threads, posts." },
+        { "label": "Official docs", "description": "SDKs, APIs, frameworks." },
+        {
+          "label": "GitHub repos",
+          "description": "Tracking evolving projects. Enables /sync-repos."
+        }
+      ]
+    }
+  ]
 }
 ```
 
 **Parsing:**
+
 - `source_types = [labels...]`.
 - `ingest_video_enabled = "Video transcripts" in source_types` (boolean).
 - `has_tracked_repos = "GitHub repos" in source_types` (boolean).
@@ -166,20 +215,29 @@ Single-select 3 options:
 
 ```json
 {
-  "questions": [{
-    "question": "At what cadence do you plan to ingest?",
-    "header": "Cadence",
-    "multiSelect": false,
-    "options": [
-      {"label": "< 1 per week", "description": "Low volume. Favors cost (haiku/medium by default)."},
-      {"label": "1 to 3 per week", "description": "Standard cadence."},
-      {"label": "> 3 per week", "description": "High volume. Favors quality (sonnet/high by default on dense non-pivot agents)."}
-    ]
-  }]
+  "questions": [
+    {
+      "question": "At what cadence do you plan to ingest?",
+      "header": "Cadence",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "< 1 per week",
+          "description": "Low volume. Favors cost (haiku/medium by default)."
+        },
+        { "label": "1 to 3 per week", "description": "Standard cadence." },
+        {
+          "label": "> 3 per week",
+          "description": "High volume. Favors quality (sonnet/high by default on dense non-pivot agents)."
+        }
+      ]
+    }
+  ]
 }
 ```
 
 **Parsing:**
+
 - `cadence ∈ {"low", "medium", "high"}`.
 
 ### Q7 — Video storage (conditional)
@@ -193,6 +251,7 @@ If you have an external SSD for heavy videos: provide its path (e.g. /Volumes/T7
 ```
 
 **Parsing:**
+
 - `video_cache_path` = answer, default `cache/videos/` if empty.
 
 ---
@@ -208,6 +267,7 @@ Phrases you'd hear in a video transcript of this domain that signal a visual is 
 **Generate the phrases in the vault language** (`{{vault_language}}` — captured at the very start of the interview). Example patterns are given in EN below; use them as a calibration template, then translate / adapt to the target language. If the user is German, generate German phrases; if Spanish, Spanish; etc. Don't mix languages.
 
 Calibration patterns:
+
 - **Data / numbers / matrices** (poker, finance, sport stats) → "look at the table", "here's the grid", "you can see them", "this column", "this cell".
 - **Schemas / architectures / flows** (ai, devops, factory, tech) → "this diagram", "here's the architecture", "this flowchart", "this arrow", "this component".
 - **Formulas / equations** (physics, math, astro) → "this formula", "here's the equation", "this proof", "this calculation".
@@ -221,6 +281,7 @@ Calibration patterns:
 ### B2 — `deliverables` (signature deliverable)
 
 Heuristic:
+
 - **Technical-dense** domain (numbers, ranges, rates, KPIs) → `[cheatsheets]`.
 - **Reflective** domain (patterns, frameworks, takeaways) → `[syntheses]`.
 - **Systems** domain (architectures, flows, components) → `[diagrams]`.
@@ -237,14 +298,15 @@ Always implicitly add the base deliverables: `[sources, entities, concepts]` (un
 
 Decision table:
 
-| Condition | model | effort | maxTurns |
-|---|---|---|---|
-| `is_hub_pivot = true` | `sonnet` | `high` | `80` |
-| Technical-dense domain (B2 contains `cheatsheets`) | `sonnet` | `high` | `60` |
-| `cadence = "high"` AND not pure reflective | `sonnet` | `high` | `60` |
-| Otherwise (default) | `haiku` | `medium` | `60` |
+| Condition                                          | model    | effort   | maxTurns |
+| -------------------------------------------------- | -------- | -------- | -------- |
+| `is_hub_pivot = true`                              | `sonnet` | `high`   | `80`     |
+| Technical-dense domain (B2 contains `cheatsheets`) | `sonnet` | `high`   | `60`     |
+| `cadence = "high"` AND not pure reflective         | `sonnet` | `high`   | `60`     |
+| Otherwise (default)                                | `haiku`  | `medium` | `60`     |
 
 **Priority on conflict**:
+
 1. `is_hub_pivot = true` → always `sonnet/high/80`.
 2. Otherwise, `deliverables` contains `cheatsheets` → `sonnet/high/60` (technical density justifies the cost even at low cadence).
 3. Otherwise, `cadence = high (>3/week)` → `sonnet/high/60` (volume justifies quality).
@@ -259,6 +321,7 @@ Trivial: `is_hub_pivot = (domain_slug == hub_pivot)`.
 For each domain, infer 4-6 useful formats to transcribe video frames into structured markdown.
 
 Patterns by domain type:
+
 - **Data / numbers / matrices** (poker, finance, sport stats): "Markdown table", "table with depth × position columns", "13×13 grid", "numerical leaderboard".
 - **Schemas / architectures / flows** (ai, factory, devops): "Mermaid diagram", "flowchart", "graph LR", "sequenceDiagram".
 - **Formulas / equations / proofs** (physics, math, biostat): "LaTeX block", "inline equation", "variables table", "step-by-step proof".
@@ -303,15 +366,20 @@ Then:
 
 ```json
 {
-  "questions": [{
-    "question": "Domain {{domain_slug}} — do you validate this config?",
-    "header": "Domain validation",
-    "multiSelect": false,
-    "options": [
-      {"label": "✅ Validate this domain", "description": "Keep the inference as-is."},
-      {"label": "✏️ Adjust", "description": "Edit one or more of the 5 properties (triggers, deliverables, co-ingest, model/effort/maxTurns, hub pivot)."}
-    ]
-  }]
+  "questions": [
+    {
+      "question": "Domain {{domain_slug}} — do you validate this config?",
+      "header": "Domain validation",
+      "multiSelect": false,
+      "options": [
+        { "label": "✅ Validate this domain", "description": "Keep the inference as-is." },
+        {
+          "label": "✏️ Adjust",
+          "description": "Edit one or more of the 5 properties (triggers, deliverables, co-ingest, model/effort/maxTurns, hub pivot)."
+        }
+      ]
+    }
+  ]
 }
 ```
 
@@ -325,17 +393,22 @@ On "✏️ Adjust":
 
 ```json
 {
-  "questions": [{
-    "question": "Which color for \"{{domain_slug}}\" in the Obsidian graph?",
-    "header": "Graph color",
-    "multiSelect": false,
-    "options": [
-      {"label": "🔵 Turquoise", "description": "#2BC7D3 — AI, tech, digital. rgb=2869203"},
-      {"label": "🟢 Green", "description": "#51C463 — sciences, health, nature. rgb=5358691"},
-      {"label": "🟠 Orange", "description": "#E07B39 — management, sport, competition. rgb=14711609"},
-      {"label": "🔴 Red", "description": "#E05252 — poker, gaming, intensity. rgb=14701138"}
-    ]
-  }]
+  "questions": [
+    {
+      "question": "Which color for \"{{domain_slug}}\" in the Obsidian graph?",
+      "header": "Graph color",
+      "multiSelect": false,
+      "options": [
+        { "label": "🔵 Turquoise", "description": "#2BC7D3 — AI, tech, digital. rgb=2869203" },
+        { "label": "🟢 Green", "description": "#51C463 — sciences, health, nature. rgb=5358691" },
+        {
+          "label": "🟠 Orange",
+          "description": "#E07B39 — management, sport, competition. rgb=14711609"
+        },
+        { "label": "🔴 Red", "description": "#E05252 — poker, gaming, intensity. rgb=14701138" }
+      ]
+    }
+  ]
 }
 ```
 
@@ -350,15 +423,18 @@ Once every domain has been individually validated, show a full recap:
 
 **Identity**: {{name}} — {{role}}
 **Vault**: `{{vault_name}}`
+**Language**: {{vault_language}}
 **Cadence**: {{cadence}}
 **Source types**: {{source_types joined}}
 {{ "**Video storage**: " + video_cache_path if ingest_video_enabled else "" }}
 
 **Active projects**:
+
 - {{ project_1.slug }} | {{ project_1.description }}
 - ...
 
 **Domains** ({{N}}):
+
 - {{ domain_1_slug }} {{ "⭐" if pivot }} — {{ deliverables }} — {{ model }}/{{ effort }}/{{ maxTurns }}
 - ...
 ```
@@ -367,19 +443,24 @@ Then:
 
 ```json
 {
-  "questions": [{
-    "question": "All good?",
-    "header": "Final validation",
-    "multiSelect": false,
-    "options": [
-      {"label": "✅ All good, scaffold it", "description": "Run vault generation."},
-      {"label": "↩️ Restart the interview from scratch", "description": "Goes back to Q1. All answers are wiped."}
-    ]
-  }]
+  "questions": [
+    {
+      "question": "All good?",
+      "header": "Final validation",
+      "multiSelect": false,
+      "options": [
+        { "label": "✅ All good, scaffold it", "description": "Run vault generation." },
+        {
+          "label": "↩️ Restart the interview from scratch",
+          "description": "Goes back to Q0. All answers are wiped."
+        }
+      ]
+    }
+  ]
 }
 ```
 
-If "↩️" → restart from Q1. Otherwise → Section 5.
+If "↩️" → restart from Q0. Otherwise → Section 5.
 
 ---
 
@@ -392,7 +473,7 @@ Run in **this exact order**. Use `Edit replace_all=true` or `sed` for substituti
 For each `.tpl` file in the repo (CLAUDE.md.tpl, wiki/index.md.tpl, wiki/log.md.tpl, wiki/overview.md.tpl, wiki/radar.md.tpl, wiki/domains/domain.md.tpl, .claude/agents/domain-expert.md.tpl, .claude/agent-memory/domain-memory.md.tpl):
 
 - Load the content.
-- Substitute every **global** placeholder: `{{name}}`, `{{vault_name}}`, `{{vault_language}}` (human label of the language detected at the interview — see *Language persistence* directive at the top of this prompt), `{{role}}`, `{{parcours_short}}`, `{{bootstrap_date}}`, `{{has_tracked_repos}}` (and its conditional sections: `{{slash_commands_extras}}`, `{{tracked_repos_arborescence}}`, `{{tracked_repos_cache}}`, `{{tracked_repos_scripts_extras}}`, `{{sync_repos_section}}`).
+- Substitute every **global** placeholder: `{{name}}`, `{{vault_name}}`, `{{vault_language}}` (human label of the language detected at the interview — see _Language persistence_ directive at the top of this prompt), `{{role}}`, `{{parcours_short}}`, `{{bootstrap_date}}`, `{{has_tracked_repos}}` (and its conditional sections: `{{slash_commands_extras}}`, `{{tracked_repos_arborescence}}`, `{{tracked_repos_cache}}`, `{{tracked_repos_scripts_extras}}`, `{{sync_repos_section}}`).
 - Substitute the computed **cross-domain** placeholders: `{{domains_section}}`, `{{domains_index_section}}`, `{{domains_links}}`, `{{projects_links}}`, `{{agents_section}}`.
 
 **Note**: `tracked-repos.config.json.tpl` contains no placeholder, skip substitution. The final rename is handled in Section 5.6.
@@ -437,9 +518,9 @@ Substitute.
 
 ```bash
 rm .claude/commands/ingest-video.md
-rm scripts/transcribe.sh scripts/sample-frames.sh scripts/extract-frames.sh scripts/diff-frames.py
-rm wiki/decisions/extraction-frames-induction-runbook.md
-rm wiki/decisions/ingest-video-modes-a-b-generalisation.md
+rm scripts/video/transcribe.sh scripts/video/sample-frames.sh scripts/video/extract-frames.sh scripts/video/diff-frames.py
+rm docs/extraction-frames-induction-runbook.md
+rm docs/ingest-video-modes-a-b-generalisation.md
 ```
 
 **If `has_tracked_repos = false`**:
@@ -448,7 +529,7 @@ rm wiki/decisions/ingest-video-modes-a-b-generalisation.md
 rm .claude/commands/sync-repos.md
 rm scripts/sync-repos.sh
 rm tracked-repos.config.json.tpl    # or its rendered output if already substituted
-rm wiki/decisions/tracked-repos-immutable-snapshots.md
+rm docs/tracked-repos-immutable-snapshots.md
 ```
 
 ### 5.6 Renaming substituted `.tpl` files to their final name
@@ -568,6 +649,35 @@ git add -A
 git commit -m "initial vault — generated via BOOTSTRAP.md on {{bootstrap_date}}"
 ```
 
+### 5.11 Optional MCP setup
+
+Ask:
+
+```json
+{
+  "questions": [
+    {
+      "question": "Do you want to enable the MCP server to access your wiki from any Claude Code instance?",
+      "header": "MCP Wiki",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "✅ Yes, set it up now",
+          "description": "Runs bash scripts/mcp/setup-mcp.sh. Prerequisites: Python 3 + internet connection for pip."
+        },
+        {
+          "label": "❌ No, I'll do it later",
+          "description": "Run bash scripts/mcp/setup-mcp.sh from the vault whenever you want."
+        }
+      ]
+    }
+  ]
+}
+```
+
+- **Yes**: run `bash scripts/mcp/setup-mcp.sh` (from the vault root). On pip error, show the error message + manual fallback: `pip install "fastmcp>=2.14"` then re-run.
+- **No**: skip.
+
 ---
 
 ## Section 6 — Step 5, Optional GitHub remote
@@ -576,16 +686,27 @@ Ask:
 
 ```json
 {
-  "questions": [{
-    "question": "Do you want to create a GitHub repo for your {{vault_name}} vault?",
-    "header": "Remote",
-    "multiSelect": false,
-    "options": [
-      {"label": "✅ Yes, private", "description": "gh repo create {{vault_name}} --private --source=. --push"},
-      {"label": "✅ Yes, public", "description": "gh repo create {{vault_name}} --public --source=. --push"},
-      {"label": "❌ No, I'll handle it manually", "description": "No action. You can add a remote later with git remote add origin <url>."}
-    ]
-  }]
+  "questions": [
+    {
+      "question": "Do you want to create a GitHub repo for your {{vault_name}} vault?",
+      "header": "Remote",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "✅ Yes, private",
+          "description": "gh repo create {{vault_name}} --private --source=. --push"
+        },
+        {
+          "label": "✅ Yes, public",
+          "description": "gh repo create {{vault_name}} --public --source=. --push"
+        },
+        {
+          "label": "❌ No, I'll handle it manually",
+          "description": "No action. You can add a remote later with git remote add origin <url>."
+        }
+      ]
+    }
+  ]
 }
 ```
 
@@ -596,6 +717,7 @@ Per the answer:
 - **Manual**: skip.
 
 **If `gh` is not installed or not authenticated** (catch the `gh repo create` error):
+
 - Switch to manual.
 - Show: "`gh` unavailable. To add a remote later: `gh auth login` then `gh repo create {{vault_name}} --private --source=. --push`."
 
@@ -616,7 +738,7 @@ Show a clean text message:
 
 Identity: {{name}} — {{role}}
 Active domains ({{N}}): {{ domain_1, domain_2, ... }}
-Available pipeline: /ingest, /query, /save, /lint, /evolve-agent{{ ", /ingest-video" if ingest_video_enabled }}{{ ", /sync-repos" if has_tracked_repos }}, /update-vault
+Available pipeline: /ingest, /query, /save, /lint, /evolve-agent{{ ", /ingest-video" if ingest_video_enabled }}{{ ", /sync-repos" if has_tracked_repos }}, /update-vault, /compress-bb
 
 Three guided next actions:
 
@@ -641,7 +763,7 @@ Happy ingesting.
 - `wiki/index.md`, `wiki/log.md`, `wiki/overview.md`, `wiki/radar.md`
 - For each domain: `wiki/domains/<slug>.md` + `.claude/agents/<slug>-expert.md` + `.claude/agent-memory/<slug>/MEMORY.md`
 - `wiki/decisions/bootstrap-prompt.md`, `wiki/decisions/placeholders-reference.md`
-- Conditional: `tracked-repos.config.json`, `wiki/decisions/tracked-repos-immutable-snapshots.md`, `wiki/decisions/extraction-frames-induction-runbook.md`, `wiki/decisions/ingest-video-modes-a-b-generalisation.md`
+- Conditional: `tracked-repos.config.json`, `docs/tracked-repos-immutable-snapshots.md`, `docs/extraction-frames-induction-runbook.md`, `docs/ingest-video-modes-a-b-generalisation.md`
 - `raw/` structure: `notes/`, `transcripts/`, `videos-meta/`, `frames/` (pre-existing via .gitkeep) + conditional (`pdfs/`, `articles/`, `docs/`)
 - `cache/` structure: `frames/` + conditional (`videos/inbox/`, `audio/`, `sync-repos/`)
 - `.obsidian/graph.json` (graph filters + colorGroups per domain) + `.obsidian/app.json`
@@ -650,7 +772,7 @@ Happy ingesting.
 ### B. Files NOT to touch
 
 - `LICENSE`, `.gitignore`, `README.md` (the README can be updated by the user later for their own instance — don't rewrite it during bootstrap).
-- `scripts/scan-raw.sh`, `scripts/backfill-summaries.py`, `scripts/enrich-hub.py` (generic, stay as-is).
+- `scripts/wiki-maint/scan-raw.sh`, `scripts/wiki-maint/backfill-summaries.py`, `scripts/wiki-maint/enrich-hub.py` (generic, stay as-is).
 - The non-conditional slash-commands: `/ingest`, `/query`, `/save`, `/lint`, `/evolve-agent`, `/update-vault`.
 
 ### C. If you get stuck
@@ -673,6 +795,7 @@ When `has_tracked_repos = true`, copy this block verbatim in place of the `{{syn
 Sync the docs of external GitHub repos (frameworks, tools, projects you follow) into `raw/`, while strictly preserving immutability.
 
 **Manifest**: `tracked-repos.config.json` at the vault root. Fields per source:
+
 - `name` (slug, invocation key), `repo` (`owner/name` GitHub, e.g. `vercel/next.js`, `nf-core/sarek`, `your-org/your-repo`), `branch` (typically `main`)
 - `dest` (vault-relative path, without the `<shortsha>/`) — free, you define the layout
 - `paths` (optional, default `default_paths` of the manifest) — only those paths are copied from the clone
@@ -683,10 +806,12 @@ Manifest-level defaults: `default_paths` and `default_exclude_paths`. These defa
 **SHA-keyed snapshot principle.** Each sync creates `<dest>/<shortsha>/` (shortsha = first 7 chars of the HEAD SHA of `branch`). If that folder already exists → skip. A merge into `main` upstream = a new SHA = a new snapshot beside the old. Old snapshots are **never** modified or deleted.
 
 **Target resolution** (main context):
+
 - no argument → interactive multiSelect (`AskUserQuestion`) over manifest sources, to avoid an unintended "sync all".
 - explicit names (`next sarek`) → those sources.
 
 **Mechanics** (`scripts/sync-repos.sh`):
+
 1. `gh api repos/<repo>/commits/<branch>` → HEAD SHA.
 2. If `<dest>/<shortsha>/` exists → `SKIPPED`.
 3. Otherwise: `gh repo clone --depth=1 -b <branch>` into `cache/sync-repos/<name>/`, copy listed `paths` to `<dest>/<shortsha>/`, write `.sync-meta.json` (repo, branch, sha, synced_at, paths), clean up the clone.
@@ -694,6 +819,7 @@ Manifest-level defaults: `default_paths` and `default_exclude_paths`. These defa
 **Chaining `/ingest`.** For each `CREATED <path>` line surfaced by the script: chain `/ingest <path>` sequentially.
 
 **Logging.** Entry in `wiki/log.md`:
+
 ```
 ## [YYYY-MM-DD] sync-repos | N snapshots created
 <list>
@@ -704,4 +830,4 @@ Manifest-level defaults: `default_paths` and `default_exclude_paths`. These defa
 
 ---
 
-*End of the portable prompt. Now run Section 2.*
+_End of the portable prompt. Now run Section 2._

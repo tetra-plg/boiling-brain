@@ -2,9 +2,9 @@
 # scan-raw.sh — Détecte l'état de chaque fichier raw vis-à-vis du wiki
 #
 # Usage:
-#   scripts/scan-raw.sh                   → scanne tout raw/
-#   scripts/scan-raw.sh raw/notes/foo.md  → fichier unique
-#   scripts/scan-raw.sh raw/tracked-repos/ → sous-arbre
+#   scripts/wiki-maint/scan-raw.sh                   → scanne tout raw/
+#   scripts/wiki-maint/scan-raw.sh raw/notes/foo.md  → fichier unique
+#   scripts/wiki-maint/scan-raw.sh raw/tracked-repos/ → sous-arbre
 #
 # Sortie par ligne :
 #   NEW      <rel-path>
@@ -16,7 +16,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-VAULT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+VAULT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 WIKI_SOURCES="$VAULT_ROOT/wiki/sources"
 
 # --- Collecte des fichiers à analyser ---
@@ -65,6 +65,19 @@ _safe_key() {
   printf '%q' "$1"
 }
 
+# Normalise un chemin pour la comparaison : NFC unicode + repli des apostrophes
+# typographiques (U+2019 RIGHT SINGLE QUOTATION MARK → U+0027 APOSTROPHE).
+# Les autres caractères typographiques sont volontairement hors scope en v1.1.0.
+_normalize_path() {
+  python3 - <<'PY' "$1"
+import sys, unicodedata
+p = sys.argv[1]
+p = unicodedata.normalize("NFC", p)
+p = p.replace("’", "'")
+sys.stdout.write(p)
+PY
+}
+
 # --- Construction de l'index : raw_path → (slug, sha256) ---
 # Charge une fois tous les wiki/sources pour éviter O(N×M) grep
 
@@ -88,7 +101,7 @@ while IFS= read -r source_file; do
       val=$(echo "$line" | sed 's/^source_path:[[:space:]]*//' | sed 's/^"//; s/"$//')
       if [ -n "$val" ]; then
         # Scalaire
-        path_to_slug["$(_safe_key "$val")"]="$slug"
+        path_to_slug["$(_safe_key "$(_normalize_path "$val")")"]="$slug"
         indexed_paths+=("$val")
         [ -z "$first_sp" ] && first_sp="$val"
         in_sp=0
@@ -115,7 +128,7 @@ while IFS= read -r source_file; do
       fi
       item=$(echo "$line" | sed 's/^[[:space:]]*-[[:space:]]*//' | sed 's/^"//; s/"$//' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
       if [ -n "$item" ]; then
-        path_to_slug["$(_safe_key "$item")"]="$slug"
+        path_to_slug["$(_safe_key "$(_normalize_path "$item")")"]="$slug"
         indexed_paths+=("$item")
         [ $in_sp -eq 1 ] && [ -z "$first_sp" ] && first_sp="$item"
       fi
@@ -136,18 +149,17 @@ while IFS= read -r source_file; do
       fi
       item=$(echo "$line" | sed 's/^[[:space:]]*-[[:space:]]*//' | sed 's/^"//; s/"$//' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
       if [ -n "$item" ]; then
-        path_to_slug["$(_safe_key "$item")"]="$slug"
+        path_to_slug["$(_safe_key "$(_normalize_path "$item")")"]="$slug"
         indexed_paths+=("$item")
       fi
     fi
   done < "$source_file"
 
-  # SHA stocké (uniquement pour le premier source_path scalaire)
+  # `source_sha256_composite:` ignoré : non comparable au sha d'un fichier individuel.
   if [ -n "$first_sp" ]; then
-    sha_line=$(grep "^source_sha256:" "$source_file" 2>/dev/null | head -1 | sed 's/^source_sha256:[[:space:]]*//')
-    # Ignore si c'est aussi une liste YAML (commence par vide → valeur vide)
+    sha_line=$(grep "^source_sha256:" "$source_file" 2>/dev/null | head -1 | sed 's/^source_sha256:[[:space:]]*//; s/^"//; s/"$//' || true)
     if [ -n "$sha_line" ] && [[ "$sha_line" != -* ]]; then
-      path_to_sha["$(_safe_key "$first_sp")"]="$sha_line"
+      path_to_sha["$(_safe_key "$(_normalize_path "$first_sp")")"]="$sha_line"
     fi
   fi
 
@@ -162,11 +174,11 @@ declare -A meta_to_slug  # safe_key(raw/videos-meta/SLUG.meta.md) → slug via t
 
 for indexed_path in "${indexed_paths[@]}"; do
   [ -z "$indexed_path" ] && continue
-  ip_key=$(_safe_key "$indexed_path")
+  ip_key=$(_safe_key "$(_normalize_path "$indexed_path")")
 
   # Index des répertoires implicites (≥4 niveaux de profondeur requis)
   idir="${indexed_path%/*}/"
-  idir_key=$(_safe_key "$idir")
+  idir_key=$(_safe_key "$(_normalize_path "$idir")")
   depth=$(printf '%s' "$idir" | tr -cd '/' | wc -c | tr -d ' ')
   if [ "$depth" -ge 4 ] && [ -z "${dir_to_slug[$idir_key]+_}" ]; then
     dir_to_slug["$idir_key"]="${path_to_slug[$ip_key]}"
@@ -177,7 +189,7 @@ for indexed_path in "${indexed_paths[@]}"; do
     filename="${indexed_path##*/}"
     filename="${filename%.md}"
     meta_path="raw/videos-meta/${filename}.meta.md"
-    meta_key=$(_safe_key "$meta_path")
+    meta_key=$(_safe_key "$(_normalize_path "$meta_path")")
     [ -z "${meta_to_slug[$meta_key]+_}" ] && meta_to_slug["$meta_key"]="${path_to_slug[$ip_key]}"
   fi
 done
@@ -187,7 +199,7 @@ done
 for abs_path in "${files[@]}"; do
   # Chemin relatif depuis la racine du vault
   rel="${abs_path#$VAULT_ROOT/}"
-  rel_key=$(_safe_key "$rel")
+  rel_key=$(_safe_key "$(_normalize_path "$rel")")
 
   # 1. Match exact sur source_path ou covered_paths
   if [ -n "${path_to_slug[$rel_key]+_}" ]; then
@@ -211,7 +223,7 @@ for abs_path in "${files[@]}"; do
     parent=$(dirname "$parent")
     [ "$parent" = "." ] || [ "$parent" = "raw" ] || [ "$parent" = "" ] && break
     parent_slash="${parent}/"
-    parent_key=$(_safe_key "$parent_slash")
+    parent_key=$(_safe_key "$(_normalize_path "$parent_slash")")
     if [ -n "${path_to_slug[$parent_key]+_}" ]; then
       covered="${path_to_slug[$parent_key]}"
       break
@@ -225,7 +237,7 @@ for abs_path in "${files[@]}"; do
 
   # 3. Match implicite : même répertoire qu'un fichier déjà indexé (≥4 niveaux de profondeur)
   rel_dir="$(dirname "$rel")/"
-  rel_dir_key=$(_safe_key "$rel_dir")
+  rel_dir_key=$(_safe_key "$(_normalize_path "$rel_dir")")
   if [ -n "${dir_to_slug[$rel_dir_key]+_}" ]; then
     echo "SKIP     $rel  (covered-by-dir-implicit: ${dir_to_slug[$rel_dir_key]})"
     continue

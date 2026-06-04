@@ -1,14 +1,6 @@
----
-type: decision
-domains: [meta]
-created: 2026-04-29
-updated: 2026-04-30
-sources: []
-summary_l0: "Long-video frame extraction: dense sampling + image-diff + cross-induction with transcript + batch validation + markdown transcription"
-summary_l1: |
-  This runbook describes a 9-step process to extract relevant frames from long videos (>30 min) where simple methods under-extract. Each step crosses several signals: dense sampling, pixel-diff computation, agent-driven visual cataloging, validation against the transcript (±30s), high-resolution extraction, batch manual validation, then markdown transcription of the content. Applicable to every wiki domain. Recommended for visually dense videos or suspected under-extraction.
----
 # Runbook — Frame extraction by cross-induction (sampling × image-diff × transcript × manual validation × markdown transcription)
+
+> **TL;DR:** 9-step process to extract relevant frames from long videos (>30 min) where simple methods under-extract. Each step crosses several signals: dense sampling, pixel-diff computation, agent-driven visual cataloging, validation against the transcript (±30s), high-resolution extraction, batch manual validation, then markdown transcription of the content. Applicable to every wiki domain. Recommended for visually dense videos or suspected under-extraction.
 
 > Cross-domain asset. Reusable by every expert agent of the wiki. Domain specifics (specific software UIs, OCR profiles, cheatsheet formats) are pushed into the **Domain annexes** section at the end of the runbook.
 
@@ -38,17 +30,18 @@ Long videos (>30 min) — coachings, conferences, software demos, UI tutorials, 
 
 **Default cadence by video type**:
 
-| Video type | Cadence | Typical sample volume |
-|---|---|---|
-| Dense coaching (matrix slides, grids, fast UI demos) | every 20 s | 100–250 |
-| Conference / talk with text slides | every 30 s | 60–150 |
-| Software demo / UI tutorial | every 20–30 s | 80–200 |
-| Punctuated interview / talking head | every 60 s | 30–80 |
-| Quiz / short slides | every 60 s | 30–60 |
+| Video type                                           | Cadence       | Typical sample volume |
+| ---------------------------------------------------- | ------------- | --------------------- |
+| Dense coaching (matrix slides, grids, fast UI demos) | every 20 s    | 100–250               |
+| Conference / talk with text slides                   | every 30 s    | 60–150                |
+| Software demo / UI tutorial                          | every 20–30 s | 80–200                |
+| Punctuated interview / talking head                  | every 60 s    | 30–80                 |
+| Quiz / short slides                                  | every 60 s    | 30–60                 |
 
-**Standard command** (packaged in [scripts/sample-frames.sh](../../scripts/sample-frames.sh)):
+**Standard command** (packaged in [scripts/video/sample-frames.sh](../../scripts/video/sample-frames.sh)):
+
 ```bash
-scripts/sample-frames.sh "$VIDEO" /tmp/<slug>-samples/ [cadence_seconds]
+scripts/video/sample-frames.sh "$VIDEO" /tmp/<slug>-samples/ [cadence_seconds]
 ```
 
 Output: 1280×720 PNGs in the samples folder, plus a `.cadence` file remembering the cadence for step 2.
@@ -59,9 +52,10 @@ Output: 1280×720 PNGs in the samples folder, plus a `.cadence` file remembering
 
 **Method**: for each `(sample_n, sample_n+1)` pair, compute the average grayscale pixel difference. Optionally restrict the computation to an **ROI** (region of interest) to ignore an unchanging zone (overlay, watermark, fixed webcam).
 
-**Command** (packaged in [scripts/diff-frames.py](../../scripts/diff-frames.py)):
+**Command** (packaged in [scripts/video/diff-frames.py](../../scripts/video/diff-frames.py)):
+
 ```bash
-scripts/diff-frames.py /tmp/<slug>-samples/ \
+scripts/video/diff-frames.py /tmp/<slug>-samples/ \
   [--roi x,y,w,h] \
   [--threshold 12.0] \
   --output /tmp/<slug>-transitions.md
@@ -97,11 +91,13 @@ For domains with their own UI-recognition heuristics (see Domain annexes), enric
 **Critical goal**: validate every `KEEP` frame by looking at **what the speaker says ±30 s around the timestamp**.
 
 For each `KEEP` frame from the step 3 table:
+
 - Extract the transcript window `[t-30s, t+30s]`.
 - Annotate: main quote (short verbatim), concept addressed, justification (why this frame deserves extraction).
 - If the transcript window mentions **no pedagogical element justifying the frame** → **DOWNGRADE to SKIP** even if marked KEEP at cataloging.
 
 **Benefits**:
+
 - Avoids "pretty but not pedagogical" frames.
 - Allows attaching a quote to every promoted frame (directly reusable in the markdown transcription of step 9).
 - Guarantees that videos are covered proportionally to their actual pedagogical richness.
@@ -124,11 +120,13 @@ ffmpeg -nostdin -i "$VIDEO" -ss 00:HH:MM:SS -frames:v 1 -q:v 1 \
 **Goal**: settle final ambiguities and capture nuances agents miss.
 
 **Single batch mode** (preferred to reduce interruptions):
+
 - All extracted frames presented in a single `AskUserQuestion` multiSelect.
 - Per-frame options: Promote / Duplicate / Skip / Re-extract (±5 s).
 - The main context reads each PNG (Claude vision) and presents a synthetic textual description to help the user decide without manually opening each image.
 
 **Frame-by-frame mode** (fallback for highly ambiguous videos):
+
 - `open /tmp/<slug>-finals/<frame>.png` → opens in Preview.
 - `Read` the frame → description.
 - `AskUserQuestion` one by one.
@@ -138,6 +136,7 @@ ffmpeg -nostdin -i "$VIDEO" -ss 00:HH:MM:SS -frames:v 1 -q:v 1 \
 ### Step 7 — Physical promotion to `raw/frames/`
 
 For each "Promote" frame:
+
 ```bash
 cp /tmp/<slug>-finals/<frame>.png \
    raw/frames/YYYY-MM-DD-<source-slug>-<final-slug>.png
@@ -146,6 +145,7 @@ cp /tmp/<slug>-finals/<frame>.png \
 ### Step 8 — Re-spawn expert agent (forced re-ingest)
 
 Re-spawn the domain expert agent in **forced re-ingest mode** on the source page, with the following context:
+
 - The list of promoted frames (paths `raw/frames/...`).
 - The induction table (transcript quote ±30 s + concept per frame).
 - Explicit instruction to enrich the relevant wiki pages (`wiki/sources/`, `wiki/concepts/`, `wiki/cheatsheets/`, `wiki/syntheses/`) with these frames.
@@ -159,15 +159,15 @@ The expert agent stays free in their editorial choices (which frame goes into wh
 
 For each promoted frame, the expert agent opens the PNG (`Read`) and writes the transcription into the wiki page that consumes the frame. Format depends on the visual type:
 
-| Type | Transcription format | Structural example |
-|---|---|---|
-| **Table / grid** | Markdown table reproducing line by line, column by column | `\| col1 \| col2 \|` |
-| **Schema / diagram** | Mermaid if topology allows, otherwise structured node + relations list | ` ```mermaid\ngraph TD ... ` or `- Node A → Node B (relation)` |
-| **Code / terminal** | Code block with detected language, reproduces the readable content | ` ```python\n... ` or ` ```bash\n... ` |
-| **Dashboard / KPI** | Markdown list of indicators with values and units | `- p95 latency: 312 ms` |
-| **Text slide** | Title + bullets, literal reproduction | `### <title>\n- bullet 1\n- bullet 2` |
-| **Photo / illustration** | Semantic description: subject, composition, caption if visible | "Photograph of a telescope, visible caption 'M51 — 60 min exposure'" |
-| **UI capture** | Structured description: interface zones, buttons / fields / values visible | `Left panel: list of N items. Right panel: form with 3 fields (X, Y, Z).` |
+| Type                     | Transcription format                                                       | Structural example                                                        |
+| ------------------------ | -------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| **Table / grid**         | Markdown table reproducing line by line, column by column                  | `\| col1 \| col2 \|`                                                      |
+| **Schema / diagram**     | Mermaid if topology allows, otherwise structured node + relations list     | ` ```mermaid\ngraph TD ... ` or `- Node A → Node B (relation)`            |
+| **Code / terminal**      | Code block with detected language, reproduces the readable content         | ` ```python\n... ` or ` ```bash\n... `                                    |
+| **Dashboard / KPI**      | Markdown list of indicators with values and units                          | `- p95 latency: 312 ms`                                                   |
+| **Text slide**           | Title + bullets, literal reproduction                                      | `### <title>\n- bullet 1\n- bullet 2`                                     |
+| **Photo / illustration** | Semantic description: subject, composition, caption if visible             | "Photograph of a telescope, visible caption 'M51 — 60 min exposure'"      |
+| **UI capture**           | Structured description: interface zones, buttons / fields / values visible | `Left panel: list of N items. Right panel: form with 3 fields (X, Y, Z).` |
 
 **Non-optional rule**: a promoted frame without markdown transcription is an ingest defect. If the agent can't transcribe (illegible image, insufficient zoom, irreducible ambiguity), it flags it as `> [!question]` rather than leaving the image orphaned.
 
@@ -185,10 +185,12 @@ Signals that orient toward `KEEP` rather than `DUPLICATE` or `SKIP` at Step 3:
 - **New chart / number** displayed.
 
 Signals that orient toward `DUPLICATE`:
+
 - Minor variant of the previous slide (cursor moved, progress bar advanced, value incremented).
 - Same slide commented over time.
 
 Signals that orient toward `SKIP`:
+
 - Talking head, library backdrop, pure transition (fade, black screen).
 - Intro / outro slide with no pedagogical content.
 
@@ -208,10 +210,10 @@ For heuristics specific to a piece of software or a course format, see **Domain 
 
 ## Existing tools to reuse
 
-- [scripts/transcribe.sh](../../scripts/transcribe.sh) — local Whisper (mlx-whisper).
-- [scripts/sample-frames.sh](../../scripts/sample-frames.sh) — Step 1.
-- [scripts/diff-frames.py](../../scripts/diff-frames.py) — Step 2.
-- [scripts/extract-frames.sh](../../scripts/extract-frames.sh) — one-shot extraction (`/ingest-video` mode A).
+- [scripts/video/transcribe.sh](../../scripts/video/transcribe.sh) — local Whisper (mlx-whisper).
+- [scripts/video/sample-frames.sh](../../scripts/video/sample-frames.sh) — Step 1.
+- [scripts/video/diff-frames.py](../../scripts/video/diff-frames.py) — Step 2.
+- [scripts/video/extract-frames.sh](../../scripts/video/extract-frames.sh) — one-shot extraction (`/ingest-video` mode A).
 - [/ingest-video](../../.claude/commands/ingest-video.md) — orchestrator, proposes mode A / B / Skip.
 - `AskUserQuestion` — interactive batch validation.
 
