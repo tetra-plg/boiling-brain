@@ -13,11 +13,11 @@ Use this workflow at the end of a substantive work session: analysis, decisions,
 
 If the session already produced a substantive `raw/notes/<topic>.md`, don't duplicate the content into a session journal.
 
-| Situation | Session journal | `.pending-ingest` |
-|-----------|-----------------|-------------------|
-| Existing note covers everything | skip | `grep -qFx <note> \|\| echo <note> >> .pending-ingest` |
-| Note + valuable uncaptured meta | 3-5 line pointer to the note | append the pointer (normal flow) |
-| No substantive note | normal flow (steps below) | normal flow |
+| Situation                       | Session journal              | `.pending-ingest`                                      |
+| ------------------------------- | ---------------------------- | ------------------------------------------------------ |
+| Existing note covers everything | skip                         | `grep -qFx <note> \|\| echo <note> >> .pending-ingest` |
+| Note + valuable uncaptured meta | 3-5 line pointer to the note | append the pointer (normal flow)                       |
+| No substantive note             | normal flow (steps below)    | normal flow                                            |
 
 The session journal is reserved for meta that would be lost otherwise: scope pivots, tooling friction, verbal decision reasoning. `cache/.session-pending` is orthogonal (SESSION START signal, deleted right after the proposal).
 
@@ -43,18 +43,23 @@ themes: [list of themes covered]
 # Session — <slug> (YYYY-MM-DD)
 
 ## Context
+
 <What was ongoing before the session: project state, starting goal.>
 
 ## What was done
+
 <List of concrete actions: files created/modified, decisions made, problems solved.>
 
 ## Learnings & insights
+
 <What emerged from the session: new understandings, observed patterns, surprises.>
 
 ## Open questions
+
 <What remains unclear or to resolve in the next session.>
 
 ## Next steps
+
 <Concrete actions identified for follow-up.>
 ```
 
@@ -93,6 +98,12 @@ Followed by a fenced code block containing the journal content (the YAML-frontma
 ### 4. Confirm to the user
 
 After successful persistence (either path), display:
+
 - The path created: `raw/notes/sessions/YYYY-MM-DD-<slug>.md`.
 - A reminder: the file will be proposed for ingestion at the next session start (via the SessionStart hook).
 - The manual-ingest shortcut: `/ingest raw/notes/sessions/YYYY-MM-DD-<slug>.md`.
+
+> Note: `/compress-bb` writes only into `raw/notes/sessions/`, which is gitignored
+> and never linted by CI. No formatting step is needed here — the session note is
+> normalised later, when `/ingest` turns it into `wiki/` pages (which `/ingest`
+> formats via `scripts/wiki-maint/format-md.py`).

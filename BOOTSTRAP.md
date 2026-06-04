@@ -67,7 +67,10 @@ Example JSON (clear inference, detected = Français):
       "header": "Vault language",
       "multiSelect": false,
       "options": [
-        { "label": "Français (Recommended)", "description": "Detected from your first messages. All wiki pages, agents and comments will be in French." },
+        {
+          "label": "Français (Recommended)",
+          "description": "Detected from your first messages. All wiki pages, agents and comments will be in French."
+        },
         { "label": "English", "description": "Write the entire vault in English." },
         { "label": "Español", "description": "Write the entire vault in Spanish." },
         { "label": "Deutsch", "description": "Write the entire vault in German." }
@@ -83,14 +86,15 @@ Example JSON (clear inference, detected = Français):
 
 Ask 2 plain-text questions, sequential, not via `AskUserQuestion`:
 
-1. "What's your full name? (e.g. *Maria Dupont*, *Carlos Silva*)"
+1. "What's your full name? (e.g. _Maria Dupont_, _Carlos Silva_)"
    → Store as `name`. Extract the **first name** (1st token before the space) lowercased to compute `vault_name = <firstname>-vault`.
    → For hyphenated first names ("Jean-Marc"), split on **spaces only**: `vault_name = jean-marc-vault`.
 
-2. "What's your short professional role (1 line)? (e.g. *Lead data engineer at Acme Corp*, *Post-doc researcher in genomics at CNRS*)"
+2. "What's your short professional role (1 line)? (e.g. _Lead data engineer at Acme Corp_, _Post-doc researcher in genomics at CNRS_)"
    → Store as `role`.
 
 **Parsing:**
+
 - `name` = raw answer to Q1.1 (e.g. `"Maria Dupont"`).
 - `role` = raw answer to Q1.2.
 - `vault_name` = `<first_token_lowercase>-vault`. The "first token" is obtained by splitting on **spaces only** (not on hyphens). So `"Maria Dupont"` → `maria-vault`, `"Jean-Marc Lefebvre"` → `jean-marc-vault`. Confirm silently, no dedicated question.
@@ -107,11 +111,13 @@ Tip: cluster rather than splinter when natural. No cap — declare as many as re
 ```
 
 **Parsing:**
+
 - `domains = [slugs...]`. Trim every slug. Validate kebab-case, fix silently otherwise.
 - If 0 domain → re-ask, saying at least 1 is needed.
 - For each slug, infer a `domain_label` via human title-casing (e.g. `astro-physics` → `Astronomy & Physics`, `ai` → `AI`). You will display it at validation time.
 
 **Slug → human-label mapping (domain title)**:
+
 - ASCII kebab-case slug (e.g. `market`, `paleo-dna`).
 - The human label is derived for display: capitalize + accents if relevant (e.g. `marche` → `Marché`, `paleo-dna` → `Paleo-DNA`).
 - On ambiguity (e.g. slug `cs` → `Computer Science` or `Customer Success`?), ask the user to confirm the human label.
@@ -143,6 +149,7 @@ Build the JSON dynamically:
 **Concrete example** for `domains = [poker, ai, factory, work, tech]`: 5 options labeled `poker`/`ai`/.../`tech` + the `none` option. Static description: "The hub pivot is the domain that tools or feeds the others. Example: AI feeds the Factory (agents) and Work (LLM management techniques)."
 
 **Parsing:**
+
 - `hub_pivot = <slug>` or `null` if "none".
 
 ### Q4 — Active projects
@@ -160,6 +167,7 @@ I'm rebuilding my Factory plugin in a multi-agent architecture
 ```
 
 **Automatic parsing**:
+
 - For every non-empty line, extract a kebab-case `slug` (2-4 keywords condensed from the sentence) and keep the full sentence as `description`.
 - Example: `"I'm following an MTT poker masterclass for 2026"` → `{slug: "mtt-poker-masterclass", description: "MTT poker masterclass 2026"}`.
 - If the line is too short to extract a meaningful slug → `project-1`, `project-2`, etc.
@@ -171,23 +179,32 @@ Multi-select 6 options:
 
 ```json
 {
-  "questions": [{
-    "question": "Which source types do you plan to ingest?",
-    "header": "Source types",
-    "multiSelect": true,
-    "options": [
-      {"label": "Personal notes", "description": "Reflections, takeaways, personal drafts."},
-      {"label": "Video transcripts", "description": "YouTube + local files. Enables /ingest-video and the frames pipeline."},
-      {"label": "PDFs", "description": "Papers, ebooks, slides."},
-      {"label": "Web clippings", "description": "Blog articles, threads, posts."},
-      {"label": "Official docs", "description": "SDKs, APIs, frameworks."},
-      {"label": "GitHub repos", "description": "Tracking evolving projects. Enables /sync-repos."}
-    ]
-  }]
+  "questions": [
+    {
+      "question": "Which source types do you plan to ingest?",
+      "header": "Source types",
+      "multiSelect": true,
+      "options": [
+        { "label": "Personal notes", "description": "Reflections, takeaways, personal drafts." },
+        {
+          "label": "Video transcripts",
+          "description": "YouTube + local files. Enables /ingest-video and the frames pipeline."
+        },
+        { "label": "PDFs", "description": "Papers, ebooks, slides." },
+        { "label": "Web clippings", "description": "Blog articles, threads, posts." },
+        { "label": "Official docs", "description": "SDKs, APIs, frameworks." },
+        {
+          "label": "GitHub repos",
+          "description": "Tracking evolving projects. Enables /sync-repos."
+        }
+      ]
+    }
+  ]
 }
 ```
 
 **Parsing:**
+
 - `source_types = [labels...]`.
 - `ingest_video_enabled = "Video transcripts" in source_types` (boolean).
 - `has_tracked_repos = "GitHub repos" in source_types` (boolean).
@@ -198,20 +215,29 @@ Single-select 3 options:
 
 ```json
 {
-  "questions": [{
-    "question": "At what cadence do you plan to ingest?",
-    "header": "Cadence",
-    "multiSelect": false,
-    "options": [
-      {"label": "< 1 per week", "description": "Low volume. Favors cost (haiku/medium by default)."},
-      {"label": "1 to 3 per week", "description": "Standard cadence."},
-      {"label": "> 3 per week", "description": "High volume. Favors quality (sonnet/high by default on dense non-pivot agents)."}
-    ]
-  }]
+  "questions": [
+    {
+      "question": "At what cadence do you plan to ingest?",
+      "header": "Cadence",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "< 1 per week",
+          "description": "Low volume. Favors cost (haiku/medium by default)."
+        },
+        { "label": "1 to 3 per week", "description": "Standard cadence." },
+        {
+          "label": "> 3 per week",
+          "description": "High volume. Favors quality (sonnet/high by default on dense non-pivot agents)."
+        }
+      ]
+    }
+  ]
 }
 ```
 
 **Parsing:**
+
 - `cadence ∈ {"low", "medium", "high"}`.
 
 ### Q7 — Video storage (conditional)
@@ -225,6 +251,7 @@ If you have an external SSD for heavy videos: provide its path (e.g. /Volumes/T7
 ```
 
 **Parsing:**
+
 - `video_cache_path` = answer, default `cache/videos/` if empty.
 
 ---
@@ -240,6 +267,7 @@ Phrases you'd hear in a video transcript of this domain that signal a visual is 
 **Generate the phrases in the vault language** (`{{vault_language}}` — captured at the very start of the interview). Example patterns are given in EN below; use them as a calibration template, then translate / adapt to the target language. If the user is German, generate German phrases; if Spanish, Spanish; etc. Don't mix languages.
 
 Calibration patterns:
+
 - **Data / numbers / matrices** (poker, finance, sport stats) → "look at the table", "here's the grid", "you can see them", "this column", "this cell".
 - **Schemas / architectures / flows** (ai, devops, factory, tech) → "this diagram", "here's the architecture", "this flowchart", "this arrow", "this component".
 - **Formulas / equations** (physics, math, astro) → "this formula", "here's the equation", "this proof", "this calculation".
@@ -253,6 +281,7 @@ Calibration patterns:
 ### B2 — `deliverables` (signature deliverable)
 
 Heuristic:
+
 - **Technical-dense** domain (numbers, ranges, rates, KPIs) → `[cheatsheets]`.
 - **Reflective** domain (patterns, frameworks, takeaways) → `[syntheses]`.
 - **Systems** domain (architectures, flows, components) → `[diagrams]`.
@@ -269,14 +298,15 @@ Always implicitly add the base deliverables: `[sources, entities, concepts]` (un
 
 Decision table:
 
-| Condition | model | effort | maxTurns |
-|---|---|---|---|
-| `is_hub_pivot = true` | `sonnet` | `high` | `80` |
-| Technical-dense domain (B2 contains `cheatsheets`) | `sonnet` | `high` | `60` |
-| `cadence = "high"` AND not pure reflective | `sonnet` | `high` | `60` |
-| Otherwise (default) | `haiku` | `medium` | `60` |
+| Condition                                          | model    | effort   | maxTurns |
+| -------------------------------------------------- | -------- | -------- | -------- |
+| `is_hub_pivot = true`                              | `sonnet` | `high`   | `80`     |
+| Technical-dense domain (B2 contains `cheatsheets`) | `sonnet` | `high`   | `60`     |
+| `cadence = "high"` AND not pure reflective         | `sonnet` | `high`   | `60`     |
+| Otherwise (default)                                | `haiku`  | `medium` | `60`     |
 
 **Priority on conflict**:
+
 1. `is_hub_pivot = true` → always `sonnet/high/80`.
 2. Otherwise, `deliverables` contains `cheatsheets` → `sonnet/high/60` (technical density justifies the cost even at low cadence).
 3. Otherwise, `cadence = high (>3/week)` → `sonnet/high/60` (volume justifies quality).
@@ -291,6 +321,7 @@ Trivial: `is_hub_pivot = (domain_slug == hub_pivot)`.
 For each domain, infer 4-6 useful formats to transcribe video frames into structured markdown.
 
 Patterns by domain type:
+
 - **Data / numbers / matrices** (poker, finance, sport stats): "Markdown table", "table with depth × position columns", "13×13 grid", "numerical leaderboard".
 - **Schemas / architectures / flows** (ai, factory, devops): "Mermaid diagram", "flowchart", "graph LR", "sequenceDiagram".
 - **Formulas / equations / proofs** (physics, math, biostat): "LaTeX block", "inline equation", "variables table", "step-by-step proof".
@@ -335,15 +366,20 @@ Then:
 
 ```json
 {
-  "questions": [{
-    "question": "Domain {{domain_slug}} — do you validate this config?",
-    "header": "Domain validation",
-    "multiSelect": false,
-    "options": [
-      {"label": "✅ Validate this domain", "description": "Keep the inference as-is."},
-      {"label": "✏️ Adjust", "description": "Edit one or more of the 5 properties (triggers, deliverables, co-ingest, model/effort/maxTurns, hub pivot)."}
-    ]
-  }]
+  "questions": [
+    {
+      "question": "Domain {{domain_slug}} — do you validate this config?",
+      "header": "Domain validation",
+      "multiSelect": false,
+      "options": [
+        { "label": "✅ Validate this domain", "description": "Keep the inference as-is." },
+        {
+          "label": "✏️ Adjust",
+          "description": "Edit one or more of the 5 properties (triggers, deliverables, co-ingest, model/effort/maxTurns, hub pivot)."
+        }
+      ]
+    }
+  ]
 }
 ```
 
@@ -357,17 +393,22 @@ On "✏️ Adjust":
 
 ```json
 {
-  "questions": [{
-    "question": "Which color for \"{{domain_slug}}\" in the Obsidian graph?",
-    "header": "Graph color",
-    "multiSelect": false,
-    "options": [
-      {"label": "🔵 Turquoise", "description": "#2BC7D3 — AI, tech, digital. rgb=2869203"},
-      {"label": "🟢 Green", "description": "#51C463 — sciences, health, nature. rgb=5358691"},
-      {"label": "🟠 Orange", "description": "#E07B39 — management, sport, competition. rgb=14711609"},
-      {"label": "🔴 Red", "description": "#E05252 — poker, gaming, intensity. rgb=14701138"}
-    ]
-  }]
+  "questions": [
+    {
+      "question": "Which color for \"{{domain_slug}}\" in the Obsidian graph?",
+      "header": "Graph color",
+      "multiSelect": false,
+      "options": [
+        { "label": "🔵 Turquoise", "description": "#2BC7D3 — AI, tech, digital. rgb=2869203" },
+        { "label": "🟢 Green", "description": "#51C463 — sciences, health, nature. rgb=5358691" },
+        {
+          "label": "🟠 Orange",
+          "description": "#E07B39 — management, sport, competition. rgb=14711609"
+        },
+        { "label": "🔴 Red", "description": "#E05252 — poker, gaming, intensity. rgb=14701138" }
+      ]
+    }
+  ]
 }
 ```
 
@@ -388,10 +429,12 @@ Once every domain has been individually validated, show a full recap:
 {{ "**Video storage**: " + video_cache_path if ingest_video_enabled else "" }}
 
 **Active projects**:
+
 - {{ project_1.slug }} | {{ project_1.description }}
 - ...
 
 **Domains** ({{N}}):
+
 - {{ domain_1_slug }} {{ "⭐" if pivot }} — {{ deliverables }} — {{ model }}/{{ effort }}/{{ maxTurns }}
 - ...
 ```
@@ -400,15 +443,20 @@ Then:
 
 ```json
 {
-  "questions": [{
-    "question": "All good?",
-    "header": "Final validation",
-    "multiSelect": false,
-    "options": [
-      {"label": "✅ All good, scaffold it", "description": "Run vault generation."},
-      {"label": "↩️ Restart the interview from scratch", "description": "Goes back to Q0. All answers are wiped."}
-    ]
-  }]
+  "questions": [
+    {
+      "question": "All good?",
+      "header": "Final validation",
+      "multiSelect": false,
+      "options": [
+        { "label": "✅ All good, scaffold it", "description": "Run vault generation." },
+        {
+          "label": "↩️ Restart the interview from scratch",
+          "description": "Goes back to Q0. All answers are wiped."
+        }
+      ]
+    }
+  ]
 }
 ```
 
@@ -425,7 +473,7 @@ Run in **this exact order**. Use `Edit replace_all=true` or `sed` for substituti
 For each `.tpl` file in the repo (CLAUDE.md.tpl, wiki/index.md.tpl, wiki/log.md.tpl, wiki/overview.md.tpl, wiki/radar.md.tpl, wiki/domains/domain.md.tpl, .claude/agents/domain-expert.md.tpl, .claude/agent-memory/domain-memory.md.tpl):
 
 - Load the content.
-- Substitute every **global** placeholder: `{{name}}`, `{{vault_name}}`, `{{vault_language}}` (human label of the language detected at the interview — see *Language persistence* directive at the top of this prompt), `{{role}}`, `{{parcours_short}}`, `{{bootstrap_date}}`, `{{has_tracked_repos}}` (and its conditional sections: `{{slash_commands_extras}}`, `{{tracked_repos_arborescence}}`, `{{tracked_repos_cache}}`, `{{tracked_repos_scripts_extras}}`, `{{sync_repos_section}}`).
+- Substitute every **global** placeholder: `{{name}}`, `{{vault_name}}`, `{{vault_language}}` (human label of the language detected at the interview — see _Language persistence_ directive at the top of this prompt), `{{role}}`, `{{parcours_short}}`, `{{bootstrap_date}}`, `{{has_tracked_repos}}` (and its conditional sections: `{{slash_commands_extras}}`, `{{tracked_repos_arborescence}}`, `{{tracked_repos_cache}}`, `{{tracked_repos_scripts_extras}}`, `{{sync_repos_section}}`).
 - Substitute the computed **cross-domain** placeholders: `{{domains_section}}`, `{{domains_index_section}}`, `{{domains_links}}`, `{{projects_links}}`, `{{agents_section}}`.
 
 **Note**: `tracked-repos.config.json.tpl` contains no placeholder, skip substitution. The final rename is handled in Section 5.6.
@@ -607,15 +655,23 @@ Ask:
 
 ```json
 {
-  "questions": [{
-    "question": "Do you want to enable the MCP server to access your wiki from any Claude Code instance?",
-    "header": "MCP Wiki",
-    "multiSelect": false,
-    "options": [
-      {"label": "✅ Yes, set it up now", "description": "Runs bash scripts/mcp/setup-mcp.sh. Prerequisites: Python 3 + internet connection for pip."},
-      {"label": "❌ No, I'll do it later", "description": "Run bash scripts/mcp/setup-mcp.sh from the vault whenever you want."}
-    ]
-  }]
+  "questions": [
+    {
+      "question": "Do you want to enable the MCP server to access your wiki from any Claude Code instance?",
+      "header": "MCP Wiki",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "✅ Yes, set it up now",
+          "description": "Runs bash scripts/mcp/setup-mcp.sh. Prerequisites: Python 3 + internet connection for pip."
+        },
+        {
+          "label": "❌ No, I'll do it later",
+          "description": "Run bash scripts/mcp/setup-mcp.sh from the vault whenever you want."
+        }
+      ]
+    }
+  ]
 }
 ```
 
@@ -630,16 +686,27 @@ Ask:
 
 ```json
 {
-  "questions": [{
-    "question": "Do you want to create a GitHub repo for your {{vault_name}} vault?",
-    "header": "Remote",
-    "multiSelect": false,
-    "options": [
-      {"label": "✅ Yes, private", "description": "gh repo create {{vault_name}} --private --source=. --push"},
-      {"label": "✅ Yes, public", "description": "gh repo create {{vault_name}} --public --source=. --push"},
-      {"label": "❌ No, I'll handle it manually", "description": "No action. You can add a remote later with git remote add origin <url>."}
-    ]
-  }]
+  "questions": [
+    {
+      "question": "Do you want to create a GitHub repo for your {{vault_name}} vault?",
+      "header": "Remote",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "✅ Yes, private",
+          "description": "gh repo create {{vault_name}} --private --source=. --push"
+        },
+        {
+          "label": "✅ Yes, public",
+          "description": "gh repo create {{vault_name}} --public --source=. --push"
+        },
+        {
+          "label": "❌ No, I'll handle it manually",
+          "description": "No action. You can add a remote later with git remote add origin <url>."
+        }
+      ]
+    }
+  ]
 }
 ```
 
@@ -650,6 +717,7 @@ Per the answer:
 - **Manual**: skip.
 
 **If `gh` is not installed or not authenticated** (catch the `gh repo create` error):
+
 - Switch to manual.
 - Show: "`gh` unavailable. To add a remote later: `gh auth login` then `gh repo create {{vault_name}} --private --source=. --push`."
 
@@ -727,6 +795,7 @@ When `has_tracked_repos = true`, copy this block verbatim in place of the `{{syn
 Sync the docs of external GitHub repos (frameworks, tools, projects you follow) into `raw/`, while strictly preserving immutability.
 
 **Manifest**: `tracked-repos.config.json` at the vault root. Fields per source:
+
 - `name` (slug, invocation key), `repo` (`owner/name` GitHub, e.g. `vercel/next.js`, `nf-core/sarek`, `your-org/your-repo`), `branch` (typically `main`)
 - `dest` (vault-relative path, without the `<shortsha>/`) — free, you define the layout
 - `paths` (optional, default `default_paths` of the manifest) — only those paths are copied from the clone
@@ -737,10 +806,12 @@ Manifest-level defaults: `default_paths` and `default_exclude_paths`. These defa
 **SHA-keyed snapshot principle.** Each sync creates `<dest>/<shortsha>/` (shortsha = first 7 chars of the HEAD SHA of `branch`). If that folder already exists → skip. A merge into `main` upstream = a new SHA = a new snapshot beside the old. Old snapshots are **never** modified or deleted.
 
 **Target resolution** (main context):
+
 - no argument → interactive multiSelect (`AskUserQuestion`) over manifest sources, to avoid an unintended "sync all".
 - explicit names (`next sarek`) → those sources.
 
 **Mechanics** (`scripts/sync-repos.sh`):
+
 1. `gh api repos/<repo>/commits/<branch>` → HEAD SHA.
 2. If `<dest>/<shortsha>/` exists → `SKIPPED`.
 3. Otherwise: `gh repo clone --depth=1 -b <branch>` into `cache/sync-repos/<name>/`, copy listed `paths` to `<dest>/<shortsha>/`, write `.sync-meta.json` (repo, branch, sha, synced_at, paths), clean up the clone.
@@ -748,6 +819,7 @@ Manifest-level defaults: `default_paths` and `default_exclude_paths`. These defa
 **Chaining `/ingest`.** For each `CREATED <path>` line surfaced by the script: chain `/ingest <path>` sequentially.
 
 **Logging.** Entry in `wiki/log.md`:
+
 ```
 ## [YYYY-MM-DD] sync-repos | N snapshots created
 <list>
@@ -758,4 +830,4 @@ Manifest-level defaults: `default_paths` and `default_exclude_paths`. These defa
 
 ---
 
-*End of the portable prompt. Now run Section 2.*
+_End of the portable prompt. Now run Section 2._

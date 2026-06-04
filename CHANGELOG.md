@@ -39,6 +39,15 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 - **`revisit_after` frontmatter field** on `type: decision` and `type: concept` pages (opt-in). (#18)
 - **`/lint`**: flag ADRs ≥ 90 days without `verdict`, and pages whose `revisit_after` is past. (#18)
 
+### Added (CI revamp for living vaults)
+
+- **CI recalibrated for content vaults** — `.github/workflows/lint.yml` no longer blocks on inevitable noise. Three blocking jobs on push/PR: `format-check` (Prettier `--check`), `markdownlint` (semantic rules only), and `wiki-integrity` (new); plus a weekly **non-blocking** `link-check-report` for external links (lychee, `fail: false`) instead of failing every push on dead third-party URLs. Rationale: the remote vault is a read-only artifact (`raw/` and the LLM are local-only), so CI does deterministic validation only — it blocks on what is repairable and meaningful, never on inevitable noise (rotting web links, cosmetic style of generated content).
+- **Prettier as the markdown formatter** — new `.prettierrc` (`proseWrap: preserve`) and `.prettierignore` (excludes `raw/`, `node_modules/`, `.claude/worktrees/`). Markdown is clean and consistent by construction. `.markdownlint.jsonc` recalibrated to **semantic rules only** (MD056 table-column-count, MD042 empty-links, MD051 link-fragments, MD024) and disables the cosmetic rules now owned by Prettier — including **MD060** pre-emptively (invisible on the action's markdownlint v0.34 but explodes on upgrade).
+- **`scripts/wiki-maint/validate-wiki.py`** (+ `test_validate_wiki.py`, 18 stdlib `unittest` tests) — deterministic integrity checker for broken `[[wikilinks]]`, broken internal relative links/anchors, and per-type frontmatter conformance (required fields present, `domains` non-empty, `summary_l0` ≤140 mono-line, `summary_l1` present — both required for tiered loading). Vocabulary is **open** (no closed `type`/`status` list — judging vocabulary is the semantic `/lint`'s job). Skips `raw/` targets (local-only) and understands Obsidian table-alias escapes (`[[target\|alias]]`).
+- **`/format`** — new command running `prettier --write` on demand and for the one-shot normalisation of a pre-formatter vault.
+- **Generation commands format their output** — `/ingest`, `/save`, `/evolve-agent`, `/compress-bb` run `prettier --write` on the markdown they produce, keeping the CI `format-check` job green.
+- **`/lint`** — now also verifies that the `raw/` source files cited in each page's `sources:` exist on disk (the local counterpart of the CI, which cannot see `raw/`).
+
 ### Fixed (alpha feedback)
 
 - **`BOOTSTRAP.md` — silent language miscapture for multilingual users** ([#53](https://github.com/tetra-plg/boiling-brain/issues/53)): language detection relied on two doubt-gated guardrails ("If unsure…", "Confirm… if you have any doubt"), so a confident-but-wrong inference (e.g. a French user writing their first messages in clean English) captured `{{vault_language}} = English` silently and propagated it to `CLAUDE.md` and every domain agent. Fix: a new unconditional `Q0 — Vault language` step (`AskUserQuestion`, inference seeds the default, user choice is authoritative); the two directives are de-gated; the language is re-displayed in the Final recap before scaffolding.
@@ -131,7 +140,7 @@ Launch readiness pass: every file shipped at bootstrap or propagated by `/update
 
 ### Fixed
 
-- **Source language vs vault language decoupling.** Before this fix, `CLAUDE.md.tpl` had `Français` hardcoded in its writing principles, and `domain-expert.md.tpl` had "titres en français". Consequence: an EN user bootstrapped a vault and every page produced by `/ingest` came out in French regardless of the source. The new `{{vault_language}}` placeholder + the explicit directive (*"Source language has no incidence on output language; quote sources verbatim, write commentary in the vault language"*) close that loop.
+- **Source language vs vault language decoupling.** Before this fix, `CLAUDE.md.tpl` had `Français` hardcoded in its writing principles, and `domain-expert.md.tpl` had "titres en français". Consequence: an EN user bootstrapped a vault and every page produced by `/ingest` came out in French regardless of the source. The new `{{vault_language}}` placeholder + the explicit directive (_"Source language has no incidence on output language; quote sources verbatim, write commentary in the vault language"_) close that loop.
 - **`/ingest-video` visual-mention detection was FR-only.** The `visual_mentions` counter relied on a regex of FR phrases (`regardez`, `voilà`, `cette grille`…), so on EN transcripts the counter silently stayed at 0 and Mode B (cross-induction) was never recommended. The pattern list is now bilingual EN+FR (extensible to other languages), restoring the recommendation logic for non-FR transcripts.
 
 ### Repo-level (post-merge, not in code)
@@ -139,7 +148,7 @@ Launch readiness pass: every file shipped at bootstrap or propagated by `/update
 These actions happen at release time outside the PR diff but are part of the v1.0.3 launch readiness:
 
 - **Default branch** switched from `develop` to `main` (the v1.0.3 commit is the cutover point).
-- **GitHub description** updated to *"Opinionated implementation of Karpathy's LLM Wiki pattern — maintained by domain-expert agents (Claude Code)."* (mentions Karpathy for post-thread discoverability).
+- **GitHub description** updated to _"Opinionated implementation of Karpathy's LLM Wiki pattern — maintained by domain-expert agents (Claude Code)."_ (mentions Karpathy for post-thread discoverability).
 - **GitHub topics** expanded to 8–10 covering `karpathy`, `llm-wiki`, `personal-knowledge-base`, `pkm`, `second-brain`, `claude-code`, `obsidian`, `agent-based`, `wiki-template`.
 - **Seed issues** opened to signal a live project (Bootstrap support for non-Claude-Code agents; "before/after" walkthrough; share-your-instance discussion).
 

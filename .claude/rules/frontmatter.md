@@ -33,10 +33,10 @@ updated: YYYY-MM-DD
 ## Fields specific to `type: source` pages
 
 ```yaml
-source_path: "raw/<folder>/<file>.md"        # mandatory, non-empty, real existing path
-source_sha256: "<64-character hex hash>"     # mandatory, non-empty
-ingested: YYYY-MM-DD                         # date of ingestion by the agent
-covered_paths:                               # optional: if the page synthesizes multiple raws
+source_path: "raw/<folder>/<file>.md" # mandatory, non-empty, real existing path
+source_sha256: "<64-character hex hash>" # mandatory, non-empty
+ingested: YYYY-MM-DD # date of ingestion by the agent
+covered_paths: # optional: if the page synthesizes multiple raws
   - "raw/<folder>/<file1>.md"
   - "raw/<folder>/<file2>.md"
 ```
@@ -60,10 +60,10 @@ If the file cannot be hashed (invalid path, access error), the ingestion fails â
 ## Fields specific to `type: decision` pages
 
 ```yaml
-status: pending | accepted                            # mandatory
-verdict: null | validated | invalidated | partial     # optional, null until reality validates
-verdict_date: null | YYYY-MM-DD                       # optional, must accompany verdict
-verdict_evidence: null | "short narrative"            # optional, must accompany verdict
+status: pending | accepted # mandatory
+verdict: null | validated | invalidated | partial # optional, null until reality validates
+verdict_date: null | YYYY-MM-DD # optional, must accompany verdict
+verdict_evidence: null | "short narrative" # optional, must accompany verdict
 ```
 
 ADRs without `verdict` after **90 days** are flagged by `/lint` (forces L3 confrontation with reality).
@@ -71,7 +71,7 @@ ADRs without `verdict` after **90 days** are flagged by `/lint` (forces L3 confr
 ## Optional `revisit_after` field
 
 ```yaml
-revisit_after: YYYY-MM-DD     # on type: decision and type: concept pages
+revisit_after: YYYY-MM-DD # on type: decision and type: concept pages
 ```
 
 `/lint` flags pages whose `revisit_after` date has passed. Use this to schedule a re-read of a concept or decision (e.g. after a related project ships, after a major external change).

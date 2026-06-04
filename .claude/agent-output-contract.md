@@ -6,6 +6,7 @@ Every expert agent invoked by `/ingest` returns **three parsable markdown blocks
 
 ```markdown
 ## Ingest summary
+
 - Pages created: [[wiki/sources/...]], [[wiki/concepts/...]], …
 - Pages updated: …
 - Deliverables produced: …
@@ -13,12 +14,14 @@ Every expert agent invoked by `/ingest` returns **three parsable markdown blocks
 - Cross-domain: […]
 
 ## Radar items
+
 - Specific observations attached to a named source / timestamp / project.
 - Missing facts ("what is the exact value of X?").
 - "If 2nd occurrence of X, create concept Y" (threshold not met).
 - Content gaps to fill via a future ingest.
 
 ## Evolution suggestions
+
 - Concept broadened to the domain (derived from a specific observation).
 - Behavioral rule applicable to any future ingest **independent of the content**.
 - Structural blind spot of the prompt.
@@ -32,7 +35,7 @@ For every specific observation, apply the **double jump**:
 1. **Broadened concept?** → `## Evolution suggestions` (transverse rule)
 2. **Specific detail not covered by this ingest?** → `## Radar items` (to investigate)
 
-**Decisive test** for `Evolution suggestions`: *"Would this rule still hold if the source was about another actor in the domain?"* If no → not transverse → `Radar items`.
+**Decisive test** for `Evolution suggestions`: _"Would this rule still hold if the source was about another actor in the domain?"_ If no → not transverse → `Radar items`.
 
 ## Examples
 

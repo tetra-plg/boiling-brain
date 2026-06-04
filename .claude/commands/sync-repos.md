@@ -29,11 +29,13 @@ Avoids an unintended "sync all" (N repos = N clones).
 ### 3. Script invocation
 
 Call `scripts/sync-repos.sh` with the final list of names:
+
 ```bash
 scripts/sync-repos.sh <name1> <name2>
 ```
 
 The script writes to stdout lines of three forms:
+
 - `CREATED <vault-relative-path>` — a new snapshot.
 - `SKIPPED <name> (sha <shortsha> already snapshotted)` — no upstream merge since the last sync.
 - `ERROR <name> <message>` — failure (clone, missing paths, repo unreachable).
@@ -61,6 +63,7 @@ Errors:
 ```
 
 Append to `wiki/log.md`:
+
 ```
 ## [YYYY-MM-DD] sync-repos | N snapshots created
 <list of created and ingested snapshots>

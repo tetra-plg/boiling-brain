@@ -11,6 +11,7 @@ Before this decision, two video frame-extraction pipelines coexisted but neither
 2. **Heavy mode ("cross-induction")** — 8-step pipeline documented in [extraction-frames-induction-runbook](extraction-frames-induction-runbook.md). No integration into `/ingest-video`, no packaged script (ffmpeg/Python commands inline in the runbook), runbook initially scoped to a single use case.
 
 Consequences:
+
 - Several agents could capture nothing visual from their videos.
 - Heavy mode stayed a sub-case, while visually dense videos exist in every domain (software demos, tool captures, dashboards, schemas).
 - No tooling to reproduce the heavy mode outside of a human copy-pasting ffmpeg commands.
@@ -28,7 +29,7 @@ Consequences:
 ### A. The two modes coexist and are usable by every agent
 
 - **Mode A (light, frame requests)**: `## Visual frames` section inserted into every expert agent prompt generated from the template, with domain-specific verbal triggers.
-- **Mode B (heavy, cross-induction)**: [extraction-frames-induction-runbook](extraction-frames-induction-runbook.md) runbook *domain-agnostic*, domain specifics moved to **Domain annexes**. The pipeline is driven by `/ingest-video` and the main context, not by the agent — so no agent prompt changes for mode B.
+- **Mode B (heavy, cross-induction)**: [extraction-frames-induction-runbook](extraction-frames-induction-runbook.md) runbook _domain-agnostic_, domain specifics moved to **Domain annexes**. The pipeline is driven by `/ingest-video` and the main context, not by the agent — so no agent prompt changes for mode B.
 
 ### B. `/ingest-video` proposes the right mode, the user picks
 
@@ -52,14 +53,14 @@ Every promoted frame (mode A as well as mode B) **must** be transcribed as struc
 
 ## Scope of changes
 
-| File | Action |
-|---|---|
-| [extraction-frames-induction-runbook](extraction-frames-induction-runbook.md) | Domain-agnostic rewrite + Domain annexes (empty skeletons to enrich as ingests come in) + Step 9 |
-| `.claude/agents/<domain>-expert.md` (all) | `## Visual frames` section (mode A) with domain triggers + mandatory markdown transcription |
-| [scripts/video/sample-frames.sh](../../scripts/video/sample-frames.sh), [scripts/video/diff-frames.py](../../scripts/video/diff-frames.py) | Packaged in the template |
-| [.claude/commands/ingest-video.md](../../.claude/commands/ingest-video.md) | A/B dispatcher (user proposal) + mode B pipeline branch |
-| [CLAUDE.md](../../CLAUDE.md) | INGEST-VIDEO section updated |
-| `wiki/domains/<d>.md` | Cross-ref to the runbook |
+| File                                                                                                                                       | Action                                                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| [extraction-frames-induction-runbook](extraction-frames-induction-runbook.md)                                                              | Domain-agnostic rewrite + Domain annexes (empty skeletons to enrich as ingests come in) + Step 9 |
+| `.claude/agents/<domain>-expert.md` (all)                                                                                                  | `## Visual frames` section (mode A) with domain triggers + mandatory markdown transcription      |
+| [scripts/video/sample-frames.sh](../../scripts/video/sample-frames.sh), [scripts/video/diff-frames.py](../../scripts/video/diff-frames.py) | Packaged in the template                                                                         |
+| [.claude/commands/ingest-video.md](../../.claude/commands/ingest-video.md)                                                                 | A/B dispatcher (user proposal) + mode B pipeline branch                                          |
+| [CLAUDE.md](../../CLAUDE.md)                                                                                                               | INGEST-VIDEO section updated                                                                     |
+| `wiki/domains/<d>.md`                                                                                                                      | Cross-ref to the runbook                                                                         |
 
 ## Open questions
 

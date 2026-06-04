@@ -21,6 +21,7 @@ If the suggestions file doesn't exist or is empty → tell the user, suggest the
 ### 2. Analyze
 
 For each accumulated suggestion:
+
 - Classify: **recurring pattern** (≥2 occurrences) / **blind spot** / **prompt proposal** / **deliverable proposal**.
 - Deduplicate equivalent suggestions.
 - Filter: keep what's **recurring** or **clearly structural**. Discard isolated anecdotal items (but don't archive them — they may become recurring later).
@@ -28,12 +29,14 @@ For each accumulated suggestion:
 ### 3. Propose a revision diff
 
 Present a **concise revision plan** to the user:
+
 - List of suggestions kept (and why).
 - List of suggestions discarded for this iteration (with reason).
 - **Proposed diff** on `.claude/agents/$ARGUMENTS-expert.md`: sections added, modified, removed.
 - Expected impact on next ingests (in 2-3 lines).
 
 Ask for validation via `AskUserQuestion` with options:
+
 - **Apply the diff** (default option if relevant).
 - **Modify** (user specifies what should change).
 - **Defer** (do nothing, suggestions stay pending).
@@ -60,3 +63,12 @@ Ask for validation via `AskUserQuestion` with options:
 - **Human curation, not silent self-modification** — the agent proposes, the user validates.
 - **No regression**: the diff respects the existing structure (frontmatter, sections, tone). We add or refine, we don't refactor without reason.
 - **Traceability**: every evolution is logged, every integrated suggestion is archived with its date and origin.
+
+## Final step — normalise markdown
+
+After all pages are written/updated, format the produced markdown so it stays
+consistent and the CI `format-check` job passes:
+
+```bash
+python3 scripts/wiki-maint/format-md.py --write ".claude/agents/**/*.md" "wiki/**/*.md"
+```
