@@ -160,6 +160,38 @@ class ValidateWikiTest(unittest.TestCase):
             self.assertEqual(r.returncode, 1)
             self.assertIn("status", r.stdout)
 
+    def test_wikilink_inside_fenced_code_is_ignored(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            body = GOOD_FM + "\n```bash\nif [[concepts/missing]]; then :; fi\n```\n"
+            make_vault(tmp, {"concepts/foo.md": body})
+            r = run(tmp)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_wikilink_inside_inline_code_is_ignored(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            body = GOOD_FM + "\nUse `[[concepts/missing]]` in shell.\n"
+            make_vault(tmp, {"concepts/foo.md": body})
+            r = run(tmp)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_relative_link_inside_fenced_code_is_ignored(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            body = GOOD_FM + "\n```\nsee [x](./nope.md)\n```\n"
+            make_vault(tmp, {"concepts/foo.md": body})
+            r = run(tmp)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_raw_prefixed_relative_link_is_skipped(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            body = GOOD_FM + "\n[src](raw/articles/x.md)\n"
+            make_vault(tmp, {"sources/s.md": body})
+            r = run(tmp)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

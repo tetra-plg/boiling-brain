@@ -24,6 +24,27 @@ from pathlib import Path
 WIKILINK_RE = re.compile(r"\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]")
 MDLINK_RE = re.compile(r"(?<!!)\[[^\]]*\]\(([^)]+)\)")
 EXTERNAL_RE = re.compile(r"^(https?:|mailto:|tel:)", re.IGNORECASE)
+FENCE_RE = re.compile(r"^(```|~~~)")
+INLINE_CODE_RE = re.compile(r"`[^`]*`")
+
+
+def iter_prose_lines(text):
+    """Yield (line_number, code-stripped line) for lines outside code.
+
+    Skips fenced code blocks (``` / ~~~, incl. indented fences) entirely and
+    strips inline code spans (`...`) from the remaining lines, so that
+    [[wikilinks]] and [x](y) links inside code are never flagged. Line numbers
+    stay accurate (fenced lines are skipped, not renumbered).
+    """
+    in_fence = False
+    for n, line in enumerate(text.splitlines(), 1):
+        if FENCE_RE.match(line.strip()):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        yield n, INLINE_CODE_RE.sub("", line)
+
 
 REQUIRED_COMMON = ["type", "domains", "created", "summary_l0", "summary_l1"]
 VALID_TYPES = {
@@ -100,7 +121,7 @@ def build_page_index(wiki_root):
 
 
 def check_wikilinks(relpath, text, relpaths, bare, defects):
-    for n, line in enumerate(text.splitlines(), 1):
+    for n, line in iter_prose_lines(text):
         for m in WIKILINK_RE.finditer(line):
             target = m.group(1).strip()
             if target.startswith("raw/"):
@@ -114,13 +135,17 @@ def check_wikilinks(relpath, text, relpaths, bare, defects):
 
 def check_relative_links(relpath, abspath, text, wiki_root, repo_root, defects):
     base = abspath.parent
-    for n, line in enumerate(text.splitlines(), 1):
+    for n, line in iter_prose_lines(text):
         for m in MDLINK_RE.finditer(line):
             url = m.group(1).split()[0].strip()  # drop optional "title"
             if EXTERNAL_RE.match(url) or url.startswith("#") or url.startswith("[["):
                 continue
             path_part = url.split("#", 1)[0]
             if not path_part:
+                continue
+            # Links written as raw/... point at the top-level raw store (absent
+            # on the remote) — skip before any path resolution.
+            if path_part.startswith("raw/"):
                 continue
             target = (base / path_part).resolve()
             # Skip anything that resolves under raw/ (absent on the remote).
