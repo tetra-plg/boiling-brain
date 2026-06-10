@@ -204,3 +204,32 @@ def read_page_data(page_path):
 
 def read_page_md(data):
     return data["content"]
+
+
+# ---- preview_page --------------------------------------------------------
+def preview_page_data(page_path):
+    target = _resolve_in_vault(page_path)
+    try:
+        content = target.read_text(encoding="utf-8")
+    except Exception as e:
+        raise WikiLookupError(f"Erreur de lecture : {e}")
+    fm, body = _parse_front(content)
+    # Whitelist caps verbosity — mirrors the historical preview_page output.
+    preview_fields = ("type", "domains", "created", "updated", "summary_l0",
+                      "sources", "status", "verdict")
+    frontmatter = {k: fm[k] for k in preview_fields if k in fm}
+    l1 = fm.get("summary_l1", "") or ""
+    body_snippet = None if l1 else body.strip()[:300]
+    return {"page_path": page_path, "frontmatter": frontmatter,
+            "summary_l1": l1, "body_snippet": body_snippet}
+
+
+def preview_page_md(data):
+    lines = [f"# Preview : {data['page_path']}\n"]
+    for k, v in data["frontmatter"].items():
+        lines.append(f"**{k}**: {v}")
+    if data["summary_l1"]:
+        lines.append(f"\n## summary_l1\n{data['summary_l1']}")
+    else:
+        lines.append(f"\n## Début de page\n{data['body_snippet']}…")
+    return "\n".join(lines)

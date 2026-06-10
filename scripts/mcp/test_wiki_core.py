@@ -121,5 +121,28 @@ class TestReadPage(WikiCoreTestBase):
         self.assertIn("path traversal", str(ctx.exception))
 
 
+class TestPreviewPage(WikiCoreTestBase):
+    def test_preview_with_summary_l1(self):
+        data = wiki_core.preview_page_data("wiki/concepts/alpha.md")
+        self.assertEqual(data["frontmatter"]["type"], "concept")
+        self.assertEqual(data["summary_l1"], "Alpha is the central concept.")
+        self.assertIsNone(data["body_snippet"])
+        md = wiki_core.preview_page_md(data)
+        self.assertTrue(md.startswith("# Preview : wiki/concepts/alpha.md"))
+        self.assertIn("**type**: concept", md)
+        self.assertIn("## summary_l1\nAlpha is the central concept.", md)
+
+    def test_preview_without_summary_l1_falls_back_to_snippet(self):
+        # beta.md has no summary_l1
+        data = wiki_core.preview_page_data("wiki/concepts/beta.md")
+        self.assertEqual(data["summary_l1"], "")
+        self.assertIsNotNone(data["body_snippet"])
+        self.assertIn("## Début de page", wiki_core.preview_page_md(data))
+
+    def test_preview_missing_raises(self):
+        with self.assertRaises(wiki_core.WikiLookupError):
+            wiki_core.preview_page_data("wiki/concepts/ghost.md")
+
+
 if __name__ == "__main__":
     unittest.main()
