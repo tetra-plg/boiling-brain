@@ -190,3 +190,17 @@ def _resolve_in_vault(page_path):
     if not target.exists():
         raise WikiLookupError(f"Page introuvable : {page_path}")
     return target
+
+
+# ---- read_page -----------------------------------------------------------
+def read_page_data(page_path):
+    target = _resolve_in_vault(page_path)
+    try:
+        content = target.read_text(encoding="utf-8")
+    except Exception as e:
+        raise WikiLookupError(f"Erreur de lecture : {e}")
+    return {"page_path": page_path, "content": content}
+
+
+def read_page_md(data):
+    return data["content"]

@@ -103,5 +103,23 @@ class TestHelpers(WikiCoreTestBase):
         self.assertEqual(wiki_core._domain_pages("nope"), [])
 
 
+class TestReadPage(WikiCoreTestBase):
+    def test_read_returns_full_content(self):
+        data = wiki_core.read_page_data("wiki/concepts/alpha.md")
+        self.assertEqual(data["page_path"], "wiki/concepts/alpha.md")
+        self.assertIn("# Alpha", data["content"])
+        self.assertEqual(wiki_core.read_page_md(data), data["content"])
+
+    def test_read_missing_raises(self):
+        with self.assertRaises(wiki_core.WikiLookupError) as ctx:
+            wiki_core.read_page_data("wiki/concepts/ghost.md")
+        self.assertEqual(str(ctx.exception), "Page introuvable : wiki/concepts/ghost.md")
+
+    def test_read_path_traversal_raises(self):
+        with self.assertRaises(wiki_core.WikiLookupError) as ctx:
+            wiki_core.read_page_data("../../etc/passwd")
+        self.assertIn("path traversal", str(ctx.exception))
+
+
 if __name__ == "__main__":
     unittest.main()
