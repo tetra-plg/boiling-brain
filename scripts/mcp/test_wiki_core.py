@@ -258,5 +258,106 @@ class TestScanDomain(WikiCoreTestBase):
         self.assertEqual(str(ctx.exception), "Aucune page trouvée pour le domaine « nope ».")
 
 
+import os  # noqa: E402
+import importlib.util  # noqa: E402
+
+
+def _fastmcp_available():
+    try:
+        import fastmcp  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+_HAS_FASTMCP = _fastmcp_available()
+
+
+def _load_mcp_module_fresh():
+    """Load mcp-wiki.py fresh by path (its hyphenated name isn't importable).
+    Its inner `import wiki_core` resolves to the already-imported module, so
+    configuring wiki_core also configures what the server sees."""
+    spec = importlib.util.spec_from_file_location(
+        "mcp_wiki_fresh", str(Path(__file__).resolve().parent / "mcp-wiki.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+@unittest.skipUnless(_HAS_FASTMCP, "fastmcp not installed")
+class TestMcpParity(WikiCoreTestBase):
+    """Byte-for-byte parity between wiki_core *_md(*_data(...)) and the MCP tools."""
+
+    def setUp(self):
+        super().setUp()                       # builds vault, configures wiki_core
+        # Resolve symlinks (macOS /var -> /private/var) so the vault root matches
+        # the canonical paths drop_to_raw derives via Path.resolve(), as a real
+        # WIKI_PATH (env var / repo root) would already be canonical.
+        self.vault = self.vault.resolve()
+        self._prev_env = os.environ.get("WIKI_PATH")
+        os.environ["WIKI_PATH"] = str(self.vault)
+        self.m = _load_mcp_module_fresh()
+        # The rewritten server always delegates to wiki_core; fail loudly if not.
+        self.assertTrue(hasattr(self.m, "wiki_core"),
+                        "mcp-wiki.py loaded without a wiki_core attribute")
+        self.m.wiki_core.configure(self.vault)
+        wiki_core.configure(self.vault)
+
+    def tearDown(self):
+        if self._prev_env is None:
+            os.environ.pop("WIKI_PATH", None)
+        else:
+            os.environ["WIKI_PATH"] = self._prev_env
+        super().tearDown()
+
+    def test_scan_domain_parity(self):
+        self.assertEqual(self.m.scan_domain("demo"),
+                         wiki_core.scan_domain_md(wiki_core.scan_domain_data("demo")))
+
+    def test_scan_concepts_parity(self):
+        self.assertEqual(self.m.scan_concepts("demo"),
+                         wiki_core.scan_type_md(wiki_core.scan_type_data("demo", "concept")))
+
+    def test_scan_sources_refusal_parity(self):
+        self.assertEqual(self.m.scan_sources("demo"),
+                         self._safe_md(lambda: wiki_core.scan_sources_data("demo")))
+
+    def test_preview_parity(self):
+        self.assertEqual(self.m.preview_page("wiki/concepts/alpha.md"),
+                         wiki_core.preview_page_md(wiki_core.preview_page_data("wiki/concepts/alpha.md")))
+
+    def test_read_parity(self):
+        self.assertEqual(self.m.read_page("wiki/concepts/alpha.md"),
+                         wiki_core.read_page_md(wiki_core.read_page_data("wiki/concepts/alpha.md")))
+
+    def test_search_parity(self):
+        self.assertEqual(self.m.search_wiki("alpha"),
+                         wiki_core.search_wiki_md(wiki_core.search_wiki_data("alpha")))
+
+    def test_missing_page_parity(self):
+        self.assertEqual(self.m.read_page("wiki/x/ghost.md"),
+                         self._safe_md(lambda: wiki_core.read_page_data("wiki/x/ghost.md")))
+
+    def test_drop_to_raw_writes_file_and_signals(self):
+        result = self.m.drop_to_raw("notes", "task7-check.md", "# Hello\nbody\n")
+        dest = self.vault / "raw" / "notes" / "task7-check.md"
+        self.assertTrue(dest.exists())
+        self.assertEqual(dest.read_text(encoding="utf-8"), "# Hello\nbody\n")
+        self.assertIn("Fichier créé", result)
+        pending = (self.vault / "cache" / ".pending-ingest").read_text(encoding="utf-8")
+        self.assertIn("raw/notes/task7-check.md", pending)
+
+    def test_drop_to_raw_rejects_path_traversal(self):
+        result = self.m.drop_to_raw("../evil", "x.md", "nope")
+        self.assertIn("path traversal détecté", result)
+        self.assertFalse((self.vault / "raw" / "evil").exists())
+
+    def _safe_md(self, fn):
+        try:
+            return str(fn())
+        except wiki_core.WikiLookupError as e:
+            return str(e)
+
+
 if __name__ == "__main__":
     unittest.main()
