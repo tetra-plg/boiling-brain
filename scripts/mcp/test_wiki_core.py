@@ -144,5 +144,41 @@ class TestPreviewPage(WikiCoreTestBase):
             wiki_core.preview_page_data("wiki/concepts/ghost.md")
 
 
+class TestSearchWiki(WikiCoreTestBase):
+    def test_search_ranks_by_centrality_and_uses_canonical_path(self):
+        data = wiki_core.search_wiki_data("alpha")
+        self.assertEqual(data["query"], "alpha")
+        paths = [r["path"] for r in data["results"]]
+        # alpha (4 backlinks) ranks before beta (2); paths are 'wiki/....md'
+        self.assertTrue(all(p.startswith("wiki/") and p.endswith(".md") for p in paths))
+        self.assertLess(paths.index("wiki/concepts/alpha.md"),
+                        paths.index("wiki/concepts/beta.md"))
+        self.assertEqual(data["results"][0]["backlinks"], 4)
+
+    def test_search_no_match_is_empty_not_error(self):
+        data = wiki_core.search_wiki_data("zzzznomatch")
+        self.assertEqual(data["results"], [])
+        self.assertEqual(wiki_core.search_wiki_md(data),
+                         "Aucun résultat pour « zzzznomatch ».")
+
+    def test_search_empty_query_raises(self):
+        with self.assertRaises(wiki_core.WikiLookupError) as ctx:
+            wiki_core.search_wiki_data("   ")
+        self.assertEqual(str(ctx.exception), "Requête vide.")
+
+    def test_search_null_summary_l0_renders_dash(self):
+        # A page whose summary_l0 is explicitly null must render "—", not "None".
+        extra = self.vault / "wiki" / "concepts" / "nullsum.md"
+        extra.write_text(
+            "---\ntype: concept\ndomains: [demo]\nsummary_l0: null\n---\n"
+            "# Nullsum\nUniquetokenxyz here.\n", encoding="utf-8")
+        wiki_core.configure(self.vault)  # reset caches after adding a file
+        data = wiki_core.search_wiki_data("uniquetokenxyz")
+        self.assertEqual(data["results"][0]["summary_l0"], "")
+        md = wiki_core.search_wiki_md(data)
+        self.assertIn("(concept) — — — wikilinks:", md)
+        self.assertNotIn("None", md)
+
+
 if __name__ == "__main__":
     unittest.main()

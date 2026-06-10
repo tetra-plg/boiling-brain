@@ -233,3 +233,48 @@ def preview_page_md(data):
     else:
         lines.append(f"\n## Début de page\n{data['body_snippet']}…")
     return "\n".join(lines)
+
+
+# ---- search_wiki ---------------------------------------------------------
+def search_wiki_data(query, limit=10):
+    tokens = _normalize_query(query)
+    if not tokens:
+        raise WikiLookupError("Requête vide.")
+    scored = []
+    for p in _all_wiki_pages():
+        try:
+            content = p.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        fm, body = _parse_front(content)
+        haystack = _normalize_haystack(" ".join([
+            str(fm.get("summary_l0", "")),
+            str(fm.get("summary_l1", "")),
+            p.stem,
+            body,
+        ]))
+        if _all_tokens_present(tokens, haystack):
+            centrality = _compute_centrality(str(p.relative_to(WIKI_PATH)))
+            scored.append((centrality, p, fm, body))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    kept = scored[:limit]
+    results = [{
+        "path": str(p.relative_to(WIKI_PATH)),
+        "type": fm.get("type", ""),
+        "summary_l0": fm.get("summary_l0") or "",
+        "backlinks": c,
+        "wikilinks": _outgoing_wikilinks(body, limit=3),
+    } for c, p, fm, body in kept]
+    return {"query": query, "limit": limit, "results": results}
+
+
+def search_wiki_md(data):
+    results = data["results"]
+    if not results:
+        return f"Aucun résultat pour « {data['query']} »."
+    lines = [f"# Résultats pour « {data['query']} » ({len(results)})", ""]
+    for r in results:
+        l0 = r["summary_l0"] or "—"
+        wl = ", ".join(r["wikilinks"]) if r["wikilinks"] else "—"
+        lines.append(f"- {r['path']} ({r['type']}) — {l0} — wikilinks: [{wl}]")
+    return "\n".join(lines)
