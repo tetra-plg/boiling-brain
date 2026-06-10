@@ -6,6 +6,19 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 
 ---
 
+## [v1.1.1] — unreleased
+
+### Added
+
+- **`scripts/mcp/wiki-cli.py`**: headless CLI front over the wiki, for scriptable / containerised consumers without an MCP client. Exposes the 11 read tools as subcommands (`scan-domain`, `scan-concepts`, `scan-entities`, `scan-decisions`, `scan-syntheses`, `scan-cheatsheets`, `scan-diagrams`, `scan-sources`, `preview`, `read`, `search`). Markdown by default; `--json` emits a stable, machine-readable shape (the `path` fields are vault-relative and reinjectable into `preview` / `read`). Exit code `0` on success or a legitimate empty result, `2` (message on stderr) on a lookup error (page not found, empty domain, path traversal, `scan-sources` without a query). Targets a vault via `WIKI_PATH` or `--wiki-path`. No `fastmcp` dependency. (#57)
+- **`scripts/mcp/wiki_core.py`**: dependency-free query layer shared by the MCP server and the CLI. Each read tool is split into `<tool>_data()` (structured, JSON-able — the source of truth) and `<tool>_md()` (human-readable markdown). PyYAML stays optional (frontmatter features degrade gracefully when it is absent). (#57)
+- **`scripts/mcp/test_wiki_core.py` + `scripts/mcp/test_wiki_cli.py`**: `unittest` suites covering MCP↔core parity (fastmcp-gated, self-skips without fastmcp), CLI↔core markdown parity, exit codes, and JSON shape. (#57)
+- **`docs/mcp-tiered-loading.md`**: new "CLI mode (no MCP client)" section documenting the headless entry point, the subcommand surface, and the JSON contract. (#57)
+
+### Changed
+
+- **`scripts/mcp/mcp-wiki.py`**: refactored (550 → 153 lines) into a thin FastMCP wrapper that delegates to `wiki_core`. **No behaviour change** — the 12 tool descriptions and signatures are byte-identical (MCP schema unchanged) and every tool's markdown output is byte-identical to v1.1.0 (guaranteed by the parity tests and the `smoke_test.py` token gates). (#57)
+
 ## [v1.1.0] — 2026-05-25
 
 ### Added
