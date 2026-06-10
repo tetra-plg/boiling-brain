@@ -19,8 +19,8 @@ jobs:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.x"
       # Obsidian-safe formatter check (wraps Prettier; preserves pipes in
@@ -32,8 +32,8 @@ jobs:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: DavidAnson/markdownlint-cli2-action@v16
+      - uses: actions/checkout@v6
+      - uses: DavidAnson/markdownlint-cli2-action@v23
         with:
           globs: |
             **/*.md
@@ -49,8 +49,8 @@ jobs:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.x"
       - run: python3 scripts/wiki-maint/validate-wiki.py
@@ -60,7 +60,7 @@ jobs:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Lychee external link report
         uses: lycheeverse/lychee-action@v2
         with:
