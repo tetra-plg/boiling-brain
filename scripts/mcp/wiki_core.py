@@ -374,3 +374,85 @@ def scan_sources_data(domain, query="", top=20):
             f"ou scan_concepts(\"{domain}\")."
         )
     return scan_type_data(domain, "source", query, top)
+
+
+# ---- scan_domain ---------------------------------------------------------
+def scan_domain_data(domain):
+    """Return a structured overview of a domain: page count, hub summary,
+    type counts sorted by descending count, and top-10 most central pages.
+
+    Raises WikiLookupError when the domain has zero pages.
+    """
+    pages = _domain_pages(domain)
+    if not pages:
+        raise WikiLookupError(f"Aucune page trouvée pour le domaine « {domain} ».")
+    hub_path = WIKI_DIR / "domains" / f"{domain}.md"
+    hub_l1 = ""
+    if hub_path.exists():
+        try:
+            hub_fm, _ = _parse_front(hub_path.read_text(encoding="utf-8"))
+            hub_l1 = hub_fm.get("summary_l1", "") or ""
+        except Exception:
+            hub_l1 = ""
+    counts = {}
+    for p in pages:
+        try:
+            fm, _ = _parse_front(p.read_text(encoding="utf-8"))
+            t = str(fm.get("type", "")).strip().lower()
+            counts[t] = counts.get(t, 0) + 1
+        except Exception:
+            continue
+    sorted_counts = sorted(counts.items(), key=lambda kv: -kv[1])
+    ranked = []
+    for p in pages:
+        try:
+            fm, _ = _parse_front(p.read_text(encoding="utf-8"))
+        except Exception:
+            fm = {}
+        c = _compute_centrality(str(p.relative_to(WIKI_PATH)))
+        ranked.append((c, p, fm))
+    ranked.sort(key=lambda x: x[0], reverse=True)
+    top_central = [{
+        "path": str(p.relative_to(WIKI_PATH)),
+        "type": fm.get("type", ""),
+        "backlinks": c,
+        # Use `or ""` (not str(...)) so YAML-null summary_l0 becomes "" not "None".
+        "summary_l0": fm.get("summary_l0") or "",
+    } for c, p, fm in ranked[:10]]
+    return {
+        "domain": domain,
+        "page_count": len(pages),
+        "hub_summary_l1": hub_l1,
+        "counts": [{"type": t, "n": n} for t, n in sorted_counts],
+        "top_central": top_central,
+    }
+
+
+def scan_domain_md(data):
+    """Render scan_domain_data() output as a human-readable markdown string."""
+    domain = data["domain"]
+    lines = [f"# Domaine {domain} ({data['page_count']} pages)\n"]
+    if data["hub_summary_l1"]:
+        lines.append("## Hub\n")
+        lines.append(data["hub_summary_l1"].strip())
+        lines.append("")
+    lines.append("## Structure")
+    type_to_tool = {v: k for k, v in _TYPE_TOOL_TO_FRONTMATTER.items()}
+    for entry in data["counts"]:
+        t, n = entry["type"], entry["n"]
+        tool = type_to_tool.get(t)
+        if tool == "sources":
+            hint = f'scan_sources("{domain}", query=...)  [query required]'
+        elif tool:
+            hint = f'scan_{tool}("{domain}")'
+        else:
+            hint = "(no dedicated scan tool for this type)"
+        lines.append(f"- {t}: {n} → {hint}")
+    lines.append("")
+    lines.append("## Top 10 pages centrales (par backlinks)")
+    for r in data["top_central"]:
+        p = WIKI_PATH / r["path"]
+        rel_dir = str(p.parent.relative_to(WIKI_DIR))
+        l0 = r["summary_l0"] or "—"
+        lines.append(f"- {rel_dir}/{p.stem} ({r['type']}, {r['backlinks']} backlinks) — {l0}")
+    return "\n".join(lines)

@@ -231,5 +231,32 @@ class TestScanType(WikiCoreTestBase):
         self.assertEqual(parsed["results"], [])
 
 
+class TestScanDomain(WikiCoreTestBase):
+    def test_domain_overview_structure(self):
+        data = wiki_core.scan_domain_data("demo")
+        self.assertEqual(data["page_count"], 5)
+        self.assertEqual(data["hub_summary_l1"], "Hub of the demo domain for tests.")
+        # counts sorted by -n: concept(2) first
+        self.assertEqual(data["counts"][0], {"type": "concept", "n": 2})
+        # top_central ranked by backlinks, canonical paths
+        self.assertEqual(data["top_central"][0]["path"], "wiki/concepts/alpha.md")
+        self.assertEqual(data["top_central"][0]["backlinks"], 4)
+
+    def test_domain_md_rendering(self):
+        md = wiki_core.scan_domain_md(wiki_core.scan_domain_data("demo"))
+        self.assertTrue(md.startswith("# Domaine demo (5 pages)"))
+        self.assertIn("## Hub", md)
+        self.assertIn("## Structure", md)
+        self.assertIn("- concept: 2 → scan_concepts(\"demo\")", md)
+        self.assertIn("## Top 10 pages centrales (par backlinks)", md)
+        # display path is rel_dir/slug, not the canonical wiki/...md
+        self.assertIn("- concepts/alpha (concept, 4 backlinks) — Alpha concept", md)
+
+    def test_empty_domain_raises(self):
+        with self.assertRaises(wiki_core.WikiLookupError) as ctx:
+            wiki_core.scan_domain_data("nope")
+        self.assertEqual(str(ctx.exception), "Aucune page trouvée pour le domaine « nope ».")
+
+
 if __name__ == "__main__":
     unittest.main()
