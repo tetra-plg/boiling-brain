@@ -11,6 +11,9 @@
 #   - Claude Code CLI (`claude`)
 #   - Python 3.9+
 #   - fastmcp (installé automatiquement via pipx si dispo, sinon pip --user)
+#   - For headless / scriptable access without an MCP client, use wiki-cli.py
+#     (same query layer via wiki_core, no fastmcp dependency):
+#       python3 scripts/mcp/wiki-cli.py search "<query>" --json
 
 set -euo pipefail
 
