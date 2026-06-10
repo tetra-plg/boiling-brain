@@ -99,5 +99,32 @@ class TestWikiCli(unittest.TestCase):
         self.assertIn("**type**: concept", r.stdout)
 
 
+class TestCliMcpMdParity(unittest.TestCase):
+    """The CLI markdown output (default) must equal wiki_core's *_md output —
+    i.e. the same bytes a consumer would get from the MCP tool."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.vault = Path(self._tmp.name)
+        make_vault(self.vault)
+        sys.path.insert(0, str(CLI.parent))
+        import wiki_core
+        self.wiki_core = wiki_core
+        wiki_core.configure(self.vault)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_search_md_matches_core(self):
+        r = run(self.vault, "search", "alpha")
+        expected = self.wiki_core.search_wiki_md(self.wiki_core.search_wiki_data("alpha"))
+        self.assertEqual(r.stdout.rstrip("\n"), expected)
+
+    def test_scan_domain_md_matches_core(self):
+        r = run(self.vault, "scan-domain", "demo")
+        expected = self.wiki_core.scan_domain_md(self.wiki_core.scan_domain_data("demo"))
+        self.assertEqual(r.stdout.rstrip("\n"), expected)
+
+
 if __name__ == "__main__":
     unittest.main()
