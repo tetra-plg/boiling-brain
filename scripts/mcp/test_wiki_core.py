@@ -180,5 +180,56 @@ class TestSearchWiki(WikiCoreTestBase):
         self.assertNotIn("None", md)
 
 
+class TestScanType(WikiCoreTestBase):
+    def test_concepts_ranked_by_centrality(self):
+        data = wiki_core.scan_type_data("demo", "concept")
+        slugs = [r["slug"] for r in data["results"]]
+        self.assertEqual(slugs, ["alpha", "beta"])  # 4 backlinks before 2
+        md = wiki_core.scan_type_md(data)
+        self.assertTrue(md.startswith("# Concepts dans demo — top 2 par centralité"))
+        self.assertIn("- alpha — Alpha concept", md)
+
+    def test_concepts_with_query_header(self):
+        data = wiki_core.scan_type_data("demo", "concept", query="alpha")
+        md = wiki_core.scan_type_md(data)
+        self.assertIn("pour « alpha »", md)
+
+    def test_empty_domain_raises(self):
+        with self.assertRaises(wiki_core.WikiLookupError) as ctx:
+            wiki_core.scan_type_data("nope", "concept")
+        self.assertEqual(str(ctx.exception),
+                         "Aucune page de type « concept » dans le domaine « nope ».")
+
+    def test_type_absent_in_populated_domain_is_empty(self):
+        data = wiki_core.scan_type_data("demo", "diagram")  # no diagrams in demo
+        self.assertEqual(data["results"], [])
+        self.assertEqual(data["_reason"], "no_typed")
+        self.assertEqual(wiki_core.scan_type_md(data),
+                         "Aucune page de type « diagram » dans le domaine « demo ».")
+
+    def test_query_no_match_is_empty(self):
+        data = wiki_core.scan_type_data("demo", "concept", query="zzzz")
+        self.assertEqual(data["results"], [])
+        self.assertEqual(data["_reason"], "no_match")
+        self.assertIn("ne matche « zzzz »", wiki_core.scan_type_md(data))
+
+    def test_scan_sources_without_query_raises_guidance(self):
+        with self.assertRaises(wiki_core.WikiLookupError) as ctx:
+            wiki_core.scan_sources_data("demo")
+        self.assertIn("sans query retournerait 1 sources", str(ctx.exception))
+
+    def test_scan_sources_with_query(self):
+        data = wiki_core.scan_sources_data("demo", query="source")
+        self.assertEqual(data["type"], "source")
+        self.assertEqual(len(data["results"]), 1)
+
+    def test_to_json_strips_underscore_keys(self):
+        import json as _json
+        data = wiki_core.scan_type_data("demo", "diagram")  # has _reason
+        parsed = _json.loads(wiki_core.to_json(data))
+        self.assertNotIn("_reason", parsed)
+        self.assertEqual(parsed["results"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

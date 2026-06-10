@@ -278,3 +278,99 @@ def search_wiki_md(data):
         wl = ", ".join(r["wikilinks"]) if r["wikilinks"] else "—"
         lines.append(f"- {r['path']} ({r['type']}) — {l0} — wikilinks: [{wl}]")
     return "\n".join(lines)
+
+
+# ---- scan_<type> ---------------------------------------------------------
+def scan_type_data(domain, type_singular, query="", top=20):
+    """Return structured scan results for a given type within a domain.
+
+    Raises WikiLookupError when the domain has zero pages (empty domain).
+    Returns an empty results list with a _reason key when the domain exists
+    but has no pages of the requested type, or when the query yields no match.
+    The _reason key is a presentation hint stripped from to_json() output.
+    """
+    domain_pages = _domain_pages(domain)
+    if not domain_pages:
+        raise WikiLookupError(
+            f"Aucune page de type « {type_singular} » dans le domaine « {domain} ».")
+    typed = []
+    for p in domain_pages:
+        try:
+            fm, body = _parse_front(p.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if str(fm.get("type", "")).strip().lower() != type_singular:
+            continue
+        typed.append((p, fm, body))
+    base = {"domain": domain, "type": type_singular, "query": query, "top": top}
+    if not typed:
+        return {**base, "results": [], "_reason": "no_typed"}
+    if query.strip():
+        tokens = _normalize_query(query)
+        scored = []
+        for p, fm, body in typed:
+            haystack = _normalize_haystack(" ".join([
+                str(fm.get("summary_l0", "")),
+                str(fm.get("summary_l1", "")),
+                p.stem,
+                body,
+            ]))
+            if _all_tokens_present(tokens, haystack):
+                centrality = _compute_centrality(str(p.relative_to(WIKI_PATH)))
+                scored.append((centrality, p, fm))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        kept = scored[:top]
+        if not kept:
+            return {**base, "results": [], "_reason": "no_match"}
+    else:
+        ranked = []
+        for p, fm, _b in typed:
+            centrality = _compute_centrality(str(p.relative_to(WIKI_PATH)))
+            ranked.append((centrality, p, fm))
+        ranked.sort(key=lambda x: x[0], reverse=True)
+        kept = ranked[:top]
+    results = [{
+        "path": str(p.relative_to(WIKI_PATH)),
+        "slug": p.stem,
+        "type": type_singular,
+        # Use `or ""` (not str(...)) so YAML-null summary_l0 becomes "" not "None".
+        "summary_l0": fm.get("summary_l0") or "",
+        "backlinks": c,
+    } for c, p, fm in kept]
+    return {**base, "results": results}
+
+
+def scan_type_md(data):
+    """Render scan_type_data() output as a human-readable markdown string."""
+    type_singular = data["type"]
+    type_plural = _TYPE_PLURAL.get(type_singular, type_singular.capitalize())
+    domain, query = data["domain"], data["query"]
+    if not data["results"]:
+        if data.get("_reason") == "no_match":
+            return (f"Aucune page de type « {type_singular} » dans « {domain} » "
+                    f"ne matche « {query} ».")
+        return f"Aucune page de type « {type_singular} » dans le domaine « {domain} »."
+    header = (f"# {type_plural} dans {domain} — top {len(data['results'])}"
+              + (f" pour « {query} »" if query.strip() else " par centralité"))
+    lines = [header, ""]
+    for r in data["results"]:
+        l0 = r["summary_l0"] or "—"
+        lines.append(f"- {r['slug']} — {l0}")
+    return "\n".join(lines)
+
+
+def scan_sources_data(domain, query="", top=20):
+    """scan_type_data wrapper for sources that requires a non-empty query.
+
+    Raises WikiLookupError with guidance when query is empty, matching the
+    legacy scan_sources behaviour (too many sources to be useful without a target).
+    """
+    if not query.strip():
+        n_sources = sum(1 for p in _domain_pages(domain) if _safe_get_type(p) == "source")
+        raise WikiLookupError(
+            f"scan_sources(\"{domain}\") sans query retournerait {n_sources} sources, peu utile.\n"
+            f"Préciser une query : scan_sources(\"{domain}\", query=\"<topic>\").\n"
+            f"Pour explorer le domaine sans cible, préférer scan_domain(\"{domain}\") "
+            f"ou scan_concepts(\"{domain}\")."
+        )
+    return scan_type_data(domain, "source", query, top)
