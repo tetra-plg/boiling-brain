@@ -258,6 +258,49 @@ class TestScanDomain(WikiCoreTestBase):
         self.assertEqual(str(ctx.exception), "Aucune page trouvée pour le domaine « nope ».")
 
 
+class TestListDomains(WikiCoreTestBase):
+    def setUp(self):
+        super().setUp()
+        agents_dir = self.vault / ".claude" / "agents"
+        agents_dir.mkdir(parents=True, exist_ok=True)
+        (agents_dir / "demo-expert.md").write_text(
+            "---\nname: demo-expert\n---\n", encoding="utf-8")
+        orphan = self.vault / "wiki" / "domains" / "orphan.md"
+        orphan.write_text(
+            "---\ntype: domain\ndomains: [orphan]\n"
+            "summary_l0: \"Orphan domain, no expert yet\"\n---\n# Orphan\n",
+            encoding="utf-8")
+        wiki_core.configure(self.vault)  # reset caches after adding files
+
+    def test_list_domains_reports_expert_presence(self):
+        data = wiki_core.list_domains_data()
+        by_slug = {d["slug"]: d for d in data["domains"]}
+        self.assertEqual(set(by_slug), {"demo", "orphan"})
+        self.assertEqual(by_slug["demo"]["has_expert"], True)
+        self.assertEqual(by_slug["demo"]["summary_l0"], "Demo domain hub")
+        self.assertEqual(by_slug["orphan"]["has_expert"], False)
+        self.assertEqual(by_slug["orphan"]["summary_l0"], "Orphan domain, no expert yet")
+
+    def test_list_domains_md_flags_missing_expert(self):
+        md = wiki_core.list_domains_md(wiki_core.list_domains_data())
+        self.assertIn("- demo (agent expert disponible) — Demo domain hub", md)
+        self.assertIn(
+            "- orphan (pas d'agent expert (domain_hint inutilisable)) — "
+            "Orphan domain, no expert yet", md)
+
+    def test_list_domains_empty_vault(self):
+        empty = tempfile.TemporaryDirectory()
+        try:
+            wiki_core.configure(Path(empty.name))
+            data = wiki_core.list_domains_data()
+            self.assertEqual(data["domains"], [])
+            self.assertEqual(wiki_core.list_domains_md(data),
+                             "Aucun domaine déclaré dans ce vault.")
+        finally:
+            empty.cleanup()
+            wiki_core.configure(self.vault)
+
+
 import os  # noqa: E402
 import importlib.util  # noqa: E402
 
