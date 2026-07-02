@@ -4,6 +4,8 @@
 Run: cd scripts/mcp && python3 -m unittest test_wiki_core
 Does NOT require fastmcp (the parity test self-skips if fastmcp is absent).
 """
+import json
+import subprocess
 import sys
 import tempfile
 import textwrap
@@ -499,6 +501,105 @@ class TestIngestTool(McpModuleTestBase):
         with patch.object(self.m.subprocess, "run", side_effect=PermissionError("not executable")):
             result = self.m.ingest(path)
         self.assertIn("interrompue de façon inattendue", result)
+
+
+class TestIngestHeadlessGuard(unittest.TestCase):
+    """Tests for scripts/mcp/ingest-headless-guard.sh — a PreToolUse hook script,
+    invoked directly via subprocess with crafted JSON on stdin. No real claude
+    session or MCP module involved."""
+
+    GUARD = str(Path(__file__).resolve().parent / "ingest-headless-guard.sh")
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.vault = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _run_hook(self, tool_name, tool_input):
+        payload = json.dumps({"tool_name": tool_name, "tool_input": tool_input})
+        env = dict(os.environ, VAULT_PATH=str(self.vault))
+        return subprocess.run(
+            [self.GUARD], input=payload, capture_output=True, text=True,
+            env=env, timeout=10)
+
+    def test_allows_write_to_wiki_source(self):
+        result = self._run_hook(
+            "Write", {"file_path": str(self.vault / "wiki/sources/foo.md")})
+        self.assertEqual(result.returncode, 0)
+
+    def test_allows_write_to_wiki_nested_path(self):
+        result = self._run_hook(
+            "Write", {"file_path": str(self.vault / "wiki/domains/tech.md")})
+        self.assertEqual(result.returncode, 0)
+
+    def test_allows_write_to_suggestions_file(self):
+        result = self._run_hook(
+            "Write",
+            {"file_path": str(self.vault / ".claude/agents/tech-expert.suggestions.md")})
+        self.assertEqual(result.returncode, 0)
+
+    def test_denies_write_outside_wiki(self):
+        result = self._run_hook("Write", {"file_path": str(self.vault / "CLAUDE.md")})
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("hors périmètre", result.stderr)
+
+    def test_denies_write_to_scripts(self):
+        result = self._run_hook("Write", {"file_path": str(self.vault / "scripts/evil.sh")})
+        self.assertEqual(result.returncode, 2)
+
+    def test_allows_scan_raw_bash(self):
+        result = self._run_hook("Bash", {"command": "bash scripts/wiki-maint/scan-raw.sh"})
+        self.assertEqual(result.returncode, 0)
+
+    def test_allows_shasum(self):
+        result = self._run_hook("Bash", {"command": "shasum -a 256 raw/notes/x.md"})
+        self.assertEqual(result.returncode, 0)
+
+    def test_allows_format_md(self):
+        result = self._run_hook(
+            "Bash",
+            {"command": 'python3 scripts/wiki-maint/format-md.py --write "wiki/**/*.md"'})
+        self.assertEqual(result.returncode, 0)
+
+    def test_allows_pending_ingest_purge(self):
+        cmd = 'PENDING="cache/.pending-ingest"\n[ -f "$PENDING" ] || exit 0\n'
+        result = self._run_hook("Bash", {"command": cmd})
+        self.assertEqual(result.returncode, 0)
+
+    def test_denies_arbitrary_bash(self):
+        result = self._run_hook("Bash", {"command": "rm -rf /"})
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("hors allowlist", result.stderr)
+
+    def test_denies_clean_looking_but_unexpected_bash(self):
+        # No dangerous metacharacters, but still outside the workflow's known
+        # operations — this is the exact case a denylist-of-metacharacters
+        # would miss and an allowlist correctly catches.
+        result = self._run_hook("Bash", {"command": "mv wiki/log.md /tmp/exfil.md"})
+        self.assertEqual(result.returncode, 2)
+
+    def test_allows_bash_from_local_allowlist_extension(self):
+        claude_dir = self.vault / ".claude"
+        claude_dir.mkdir(parents=True, exist_ok=True)
+        (claude_dir / "ingest-bash-allowlist.local.txt").write_text(
+            "curl -s https://api.example.com/\n", encoding="utf-8")
+        result = self._run_hook(
+            "Bash", {"command": "curl -s https://api.example.com/status"})
+        self.assertEqual(result.returncode, 0)
+
+    def test_bash_not_on_local_allowlist_still_denied(self):
+        claude_dir = self.vault / ".claude"
+        claude_dir.mkdir(parents=True, exist_ok=True)
+        (claude_dir / "ingest-bash-allowlist.local.txt").write_text(
+            "curl -s https://api.example.com/\n", encoding="utf-8")
+        result = self._run_hook("Bash", {"command": "rm -rf /"})
+        self.assertEqual(result.returncode, 2)
+
+    def test_other_tools_unrestricted(self):
+        result = self._run_hook("Read", {"file_path": str(self.vault / "wiki/anything.md")})
+        self.assertEqual(result.returncode, 0)
 
 
 if __name__ == "__main__":
