@@ -144,6 +144,18 @@ def search_wiki(query: str, limit: int = 10) -> str:
 
 @mcp.tool(
     description=(
+        "List valid domain slugs for this vault, with a short description and whether "
+        "a domain-expert agent exists for it. Call this BEFORE ingest(domain_hint=...) "
+        "to know which hints are valid — domains are added/renamed dynamically via "
+        "/domain, so hardcoding slugs in a third-party app will drift."
+    )
+)
+def list_domains() -> str:
+    return _md(wiki_core.list_domains_md, wiki_core.list_domains_data)
+
+
+@mcp.tool(
+    description=(
         "Drop a file into raw/ and signal it for ingestion next Claude Code session. "
         "Use to add notes, articles, or clips to the wiki from any Claude Code instance. "
         "subfolder: subpath under raw/ (e.g. 'notes', 'articles', 'clippings'). "

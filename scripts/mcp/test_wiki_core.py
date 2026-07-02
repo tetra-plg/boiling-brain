@@ -377,6 +377,10 @@ class TestMcpParity(WikiCoreTestBase):
         self.assertEqual(self.m.search_wiki("alpha"),
                          wiki_core.search_wiki_md(wiki_core.search_wiki_data("alpha")))
 
+    def test_list_domains_parity(self):
+        self.assertEqual(self.m.list_domains(),
+                         wiki_core.list_domains_md(wiki_core.list_domains_data()))
+
     def test_missing_page_parity(self):
         self.assertEqual(self.m.read_page("wiki/x/ghost.md"),
                          self._safe_md(lambda: wiki_core.read_page_data("wiki/x/ghost.md")))
