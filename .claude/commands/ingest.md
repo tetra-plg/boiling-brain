@@ -1,6 +1,6 @@
 ---
 description: Ingest sources from raw/ into the wiki via a domain-expert agent (batch, idempotent, hash-based)
-argument-hint: [--force] [--frames] [path-or-folder — empty = all of raw/]
+argument-hint: [--force] [--frames] [--headless] [--domain-hint=<slug>] [path-or-folder — empty = all of raw/]
 ---
 
 Run the INGEST workflow from CLAUDE.md on: $ARGUMENTS
@@ -12,6 +12,8 @@ Run the INGEST workflow from CLAUDE.md on: $ARGUMENTS
 - Argument = file → force re-ingest **of that file only**.
 - `--force` flag (combinable with folder or full sweep) → treat every file as **modified**, even if its sha256 is unchanged. Useful after an expert agent evolved (`/evolve-agent`) to apply the new reflexes to already-ingested sources. **No duplicates created**: re-ingest updates existing pages (sources, entities, concepts) rather than creating new ones with different slugs.
 - `--frames` flag (combinable with `--force` and a file/folder) → tells the agent the goal is to **extract missing visual frames**. The agent must re-read the transcript, produce a `## Frame requests` block per the convention, and not modify anything else in existing pages. Usable alone (`--frames`) or combined (`--force --frames`) on an already-ingested transcript.
+- `--headless` flag → **non-interactive mode**, intended for a single file argument (not a folder or full sweep — batch triage of ambiguous cases still needs a human). Replaces every point that would otherwise call `AskUserQuestion` with a deterministic rule (see step 2 and step 4b). Set automatically by the `ingest(path, domain_hint)` MCP tool in `scripts/mcp/mcp-wiki.py` — not intended for manual interactive use.
+- `--domain-hint=<slug>` flag (combinable with `--headless` only) → skips expert-agent disambiguation in step 2 if `.claude/agents/<slug>-expert.md` exists. Ignored (falls back to normal step-2 resolution) if `<slug>` has no matching expert agent.
 
 For each in-scope file, from the **main context**:
 
@@ -43,17 +45,21 @@ Arbitration:
 
 If video/audio/URL not transcribed → chain `scripts/video/transcribe.sh` first.
 
-### 2. Expert-agent proposal (user validation)
+### 2. Expert-agent proposal (user validation) — or automatic resolution in `--headless` mode
 
 **Ingest is delegated to a domain-expert agent.** The main context doesn't write pages — it dispatches.
 
 1. Analyze the source: title, location in `raw/`, content excerpt (~200 lines), cross-ref with `wiki/domains/`.
 2. Propose one or more expert agents from those present in `.claude/agents/` (each domain declared at bootstrap has its `<domain>-expert.md`) with **confidence level** and **short justification**.
-3. Ask validation via `AskUserQuestion`:
+3. **Not `--headless`** → ask validation via `AskUserQuestion`:
    - **High confidence** → "Recommended" option as default + 2-3 alternatives + "other".
    - **Low / ambiguous confidence** → list of available experts without recommendation + "other".
    - **Obvious cross-domain** → multiSelect to spawn several experts in parallel.
-4. If the user chooses "other" or customizes, honor their pick.
+4. **`--headless`** → resolve without asking, in this order:
+   a. `--domain-hint=<slug>` given and `.claude/agents/<slug>-expert.md` exists → use that agent directly, skip the confidence analysis from steps 1-2.
+   b. Otherwise, if steps 1-2's analysis produced exactly **one** candidate at **high confidence** → use it directly.
+   c. Otherwise (ambiguous, cross-domain, low/medium confidence, or an invalid `--domain-hint`) → **do not ingest this file**. Leave its path in `cache/.pending-ingest` (do not add it to `PROCESSED_PATHS` in step 4c), and record it for the final report's `needs-human-triage` section (step 5) with the candidates considered and why none was auto-selected. An invalid `--domain-hint` (slug with no matching `.claude/agents/<slug>-expert.md`) is treated exactly like no hint at all — fall through to (b).
+5. If the user chooses "other" or customizes (non-headless only), honor their pick.
 
 ### 3. Spawning the expert agent
 
@@ -108,6 +114,8 @@ printf '%s\n' "${PROCESSED_PATHS[@]}" "${STALE_SKIP_PATHS[@]}" \
 mv "$PENDING.tmp" "$PENDING"
 [ -s "$PENDING" ] || rm -f "$PENDING"
 ```
+
+`--headless` files deferred to `needs-human-triage` (step 2, branch 4c above) are excluded from `PROCESSED_PATHS` — they remain in `.pending-ingest` for a future interactive run.
 
 ### 5. Final overall report
 
