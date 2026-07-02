@@ -57,6 +57,10 @@ except Exception:
   Bash)
     command=$(printf '%s' "$input" | python3 -c "import sys, json; print(json.load(sys.stdin).get('tool_input', {}).get('command', ''))")
 
+    if [[ "$command" == *".."* ]]; then
+      deny "commande Bash contenant « .. » (traversal potentiel) : $command"
+    fi
+
     has_shell_metachars() {
       case "$1" in
         *';'*|*'&'*|*'|'*|*'`'*|*'$('*|*$'\n'*) return 0 ;;

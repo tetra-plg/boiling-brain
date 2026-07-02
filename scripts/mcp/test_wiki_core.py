@@ -721,6 +721,18 @@ class TestIngestHeadlessGuard(unittest.TestCase):
             env=env, timeout=10)
         self.assertEqual(result.returncode, 2)
 
+    def test_denies_shasum_path_traversal(self):
+        result = self._run_hook(
+            "Bash",
+            {"command": "shasum -a 256 raw/../../../etc/passwd"})
+        self.assertEqual(result.returncode, 2)
+
+    def test_denies_scan_raw_path_traversal(self):
+        result = self._run_hook(
+            "Bash",
+            {"command": "bash scripts/wiki-maint/scan-raw.sh ../../etc"})
+        self.assertEqual(result.returncode, 2)
+
 
 if __name__ == "__main__":
     unittest.main()
