@@ -8,6 +8,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+from unittest.mock import patch, MagicMock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -409,6 +410,71 @@ class TestMcpParity(McpModuleTestBase):
             return str(fn())
         except wiki_core.WikiLookupError as e:
             return str(e)
+
+
+@unittest.skipUnless(_HAS_FASTMCP, "fastmcp not installed")
+class TestIngestTool(McpModuleTestBase):
+    """Tests for the ingest() MCP tool. subprocess.run is mocked throughout —
+    no real `claude` CLI invocation happens here."""
+
+    def _write_raw_note(self, rel="notes/note.md", body="hello"):
+        dest = self.vault / "raw" / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(body, encoding="utf-8")
+        return f"raw/{rel}"
+
+    def test_ingest_success_returns_stdout(self):
+        path = self._write_raw_note()
+        fake = MagicMock(returncode=0,
+                          stdout="N new · 0 updated\n\n## Pages\n- wiki/sources/x.md (source, new)\n",
+                          stderr="")
+        with patch.object(self.m.subprocess, "run", return_value=fake) as mock_run:
+            result = self.m.ingest(path)
+        self.assertIn("## Pages", result)
+        called_cmd = mock_run.call_args.args[0]
+        self.assertEqual(called_cmd, ["claude", "-p", f"/ingest {path} --headless"])
+
+    def test_ingest_with_domain_hint_appends_flag(self):
+        path = self._write_raw_note()
+        fake = MagicMock(returncode=0, stdout="ok", stderr="")
+        with patch.object(self.m.subprocess, "run", return_value=fake) as mock_run:
+            self.m.ingest(path, domain_hint="demo")
+        called_cmd = mock_run.call_args.args[0]
+        self.assertEqual(called_cmd,
+                         ["claude", "-p", f"/ingest {path} --headless --domain-hint=demo"])
+
+    def test_ingest_rejects_invalid_domain_hint_slug(self):
+        path = self._write_raw_note()
+        result = self.m.ingest(path, domain_hint="not a slug!")
+        self.assertIn("domain_hint invalide", result)
+
+    def test_ingest_rejects_path_traversal(self):
+        result = self.m.ingest("../../etc/passwd")
+        self.assertIn("path traversal détecté", result)
+
+    def test_ingest_rejects_path_outside_raw(self):
+        result = self.m.ingest("wiki/concepts/alpha.md")
+        self.assertIn("path traversal détecté", result)
+
+    def test_ingest_missing_file(self):
+        result = self.m.ingest("raw/notes/ghost.md")
+        self.assertIn("fichier introuvable", result)
+
+    def test_ingest_nonzero_exit_returns_stderr_detail(self):
+        path = self._write_raw_note()
+        fake = MagicMock(returncode=1, stdout="", stderr="boom")
+        with patch.object(self.m.subprocess, "run", return_value=fake):
+            result = self.m.ingest(path)
+        self.assertIn("échoué", result)
+        self.assertIn("boom", result)
+
+    def test_ingest_timeout_returns_error(self):
+        path = self._write_raw_note()
+        with patch.object(
+                self.m.subprocess, "run",
+                side_effect=self.m.subprocess.TimeoutExpired(cmd="claude", timeout=600)):
+            result = self.m.ingest(path)
+        self.assertIn("timeout", result)
 
 
 if __name__ == "__main__":

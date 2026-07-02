@@ -11,6 +11,8 @@ Usage:
   Launched automatically by Claude Code (registered via `claude mcp add`).
   Set WIKI_PATH env var to override the vault root path.
 """
+import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -20,6 +22,9 @@ import wiki_core  # noqa: E402
 from fastmcp import FastMCP  # noqa: E402
 
 mcp = FastMCP("boiling-brain-wiki")
+
+INGEST_TIMEOUT_S = 600
+_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
 
 def _md(md_fn, data_fn, *args, **kwargs):
@@ -190,6 +195,53 @@ def drop_to_raw(subfolder: str, filename: str, content: str) -> str:
         f.write(rel_path + "\n")
 
     return f"Fichier créé : {rel_path}\nSignal .pending-ingest mis à jour."
+
+
+@mcp.tool(
+    description=(
+        "Trigger ingestion of a file already present in raw/ (e.g. just written via "
+        "drop_to_raw) into the wiki, via a headless domain-expert agent run. Blocks "
+        "until the run completes (can take minutes for cross-domain sources). "
+        "path: relative path from vault root, e.g. 'raw/notes/2026-07-02-my-note.md'. "
+        "domain_hint: optional domain slug (see list_domains()) to skip expert-agent "
+        "disambiguation. If omitted and the source is ambiguous or low-confidence, the "
+        "file is left pending for a future interactive /ingest session instead of "
+        "being guessed at."
+    )
+)
+def ingest(path: str, domain_hint: str = "") -> str:
+    if domain_hint and not _SLUG_RE.match(domain_hint):
+        return (f"Erreur : domain_hint invalide : « {domain_hint} » — attendu un slug "
+                 f"(minuscules, chiffres, tirets). Voir list_domains() pour les valeurs valides.")
+
+    try:
+        target = (wiki_core.WIKI_PATH / path).resolve()
+        if not str(target).startswith(str(wiki_core.RAW_DIR.resolve())):
+            return "Erreur : chemin invalide (path traversal détecté)."
+    except Exception as e:
+        return f"Erreur de validation du chemin : {e}"
+
+    if not target.exists():
+        return f"Erreur : fichier introuvable : {path}."
+
+    prompt = f"/ingest {path} --headless"
+    if domain_hint:
+        prompt += f" --domain-hint={domain_hint}"
+
+    try:
+        result = subprocess.run(
+            ["claude", "-p", prompt], capture_output=True, text=True,
+            timeout=INGEST_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        return f"Erreur : ingestion de {path} interrompue après {INGEST_TIMEOUT_S}s (timeout)."
+    except FileNotFoundError:
+        return "Erreur : CLI `claude` introuvable dans l'environnement du serveur MCP."
+
+    if result.returncode != 0:
+        detail = result.stderr.strip() or "code de sortie non nul, sans détail sur stderr."
+        return f"Erreur : l'ingestion de {path} a échoué ({detail})"
+
+    return result.stdout
 
 
 if __name__ == "__main__":
