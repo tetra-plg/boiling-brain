@@ -79,7 +79,7 @@ def expand(paths):
 def _npx():
     exe = shutil.which("npx")
     if not exe:
-        raise RuntimeError("npx introuvable sur le PATH — installe Node.js (qui fournit npx).")
+        raise RuntimeError("npx not found on PATH — install Node.js (which provides npx).")
     return exe
 
 
