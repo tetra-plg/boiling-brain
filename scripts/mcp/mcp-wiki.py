@@ -229,7 +229,7 @@ def drop_to_raw(subfolder: str, filename: str, content: str) -> str:
         "blocked with no human present to approve them. To let ingestion "
         "complete unattended, the vault owner must explicitly opt in by "
         "setting the MCP_INGEST_PERMISSION_MODE env var (recommended: "
-        "'acceptEdits') when registering this MCP server — a deliberate, "
+        "'auto') when registering this MCP server — a deliberate, "
         "durable choice, not a silent default. A PreToolUse allowlist hook "
         "(scripts/mcp/ingest-headless-guard.sh) is always active for this "
         "session regardless, bounding Write/Bash to the ingest workflow's "
