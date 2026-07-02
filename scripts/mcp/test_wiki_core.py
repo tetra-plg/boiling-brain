@@ -464,6 +464,7 @@ class TestIngestTool(McpModuleTestBase):
                 m2.ingest(path)
             called_cmd = mock_run.call_args.args[0]
             self.assertEqual(called_cmd[-2:], ["--permission-mode", "acceptEdits"])
+            self.assertIn("--settings", called_cmd)
         finally:
             if prev is None:
                 os.environ.pop("MCP_INGEST_PERMISSION_MODE", None)

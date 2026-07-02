@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 scripts/wiki-maint/validate-wiki.py --root /Users/pleguern/Workspace/BoilingBrain)",
+      "Read(//tmp/**)",
+      "Bash(xargs -I{} sh -c 'echo \"Fichier: {}\"; head -6 \"{}\"')",
+      "Bash(rm -rf /tmp/wiki_test_vault)",
+      "Skill(code-review)",
+      "Skill(code-review:*)",
+      "Bash(/Users/pleguern/.local/pipx/venvs/fastmcp/bin/python -m unittest test_wiki_core -v)",
+      "Bash(WIKI_PATH=/Users/pleguern/Workspace/BoilingBrain /Users/pleguern/.local/pipx/venvs/fastmcp/bin/python /Users/pleguern/Workspace/llm-wiki-template/scripts/mcp/smoke_test.py ia)",
+      "Bash(/Users/pleguern/.local/pipx/venvs/fastmcp/bin/python -m unittest test_wiki_core)",
+      "Bash(chmod +x /Users/pleguern/Workspace/llm-wiki-template/scripts/mcp/wiki-cli.py)",
+      "Bash(python3 /Users/pleguern/Workspace/llm-wiki-template/scripts/mcp/wiki-cli.py read wiki/nope.md --wiki-path /var/folders/2y/trtkv5rd4799bpg00_m6y3yw0000gn/T/tmp.Jt9DbWec6z)",
+      "Bash(python3 /Users/pleguern/Workspace/llm-wiki-template/scripts/mcp/wiki-cli.py scan-sources demo --wiki-path /var/folders/2y/trtkv5rd4799bpg00_m6y3yw0000gn/T/tmp.Jt9DbWec6z)",
+      "Bash(WIKI_PATH=/Users/pleguern/Workspace/BoilingBrain /Users/pleguern/.local/pipx/venvs/fastmcp/bin/python smoke_test.py ia)",
+      "Bash(WIKI_PATH=/Users/pleguern/Workspace/BoilingBrain python3 wiki-cli.py scan-domain ia)",
+      "Bash(WIKI_PATH=/Users/pleguern/Workspace/BoilingBrain python3 wiki-cli.py read wiki/nope.md)",
+      "Bash(/Users/pleguern/.local/pipx/venvs/fastmcp/bin/python -)"
+    ],
+    "additionalDirectories": [
+      "/Users/pleguern/.config/superpowers/worktrees/llm-wiki-template/feat-bootstrap-q0-language",
+      "/private/tmp/wiki_test_vault"
+    ]
+  }
+}
