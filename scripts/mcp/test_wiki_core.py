@@ -434,9 +434,12 @@ class TestIngestTool(McpModuleTestBase):
             result = self.m.ingest(path)
         self.assertIn("## Pages", result)
         called_cmd = mock_run.call_args.args[0]
-        self.assertEqual(
-            called_cmd,
-            ["claude", "-p", f"/ingest {path} --headless", "--permission-mode", "auto"])
+        self.assertEqual(called_cmd[:3], ["claude", "-p", f"/ingest {path} --headless"])
+        self.assertEqual(called_cmd[3], "--settings")
+        settings = json.loads(called_cmd[4])
+        self.assertIn("ingest-headless-guard.sh", settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"])
+        self.assertEqual(len(called_cmd), 5)  # no --permission-mode: env var unset by default
+        self.assertEqual(mock_run.call_args.kwargs["cwd"], str(self.vault))
 
     def test_ingest_with_domain_hint_appends_flag(self):
         path = self._write_raw_note()
@@ -445,9 +448,36 @@ class TestIngestTool(McpModuleTestBase):
             self.m.ingest(path, domain_hint="demo")
         called_cmd = mock_run.call_args.args[0]
         self.assertEqual(
-            called_cmd,
-            ["claude", "-p", f"/ingest {path} --headless --domain-hint=demo",
-             "--permission-mode", "auto"])
+            called_cmd[:3],
+            ["claude", "-p", f"/ingest {path} --headless --domain-hint=demo"])
+        self.assertEqual(called_cmd[3], "--settings")
+
+    def test_ingest_permission_mode_opt_in_via_env_var(self):
+        path = self._write_raw_note()
+        fake = MagicMock(returncode=0, stdout="ok", stderr="")
+        prev = os.environ.get("MCP_INGEST_PERMISSION_MODE")
+        os.environ["MCP_INGEST_PERMISSION_MODE"] = "acceptEdits"
+        try:
+            m2 = _load_mcp_module_fresh()
+            m2.wiki_core.configure(self.vault)
+            with patch.object(m2.subprocess, "run", return_value=fake) as mock_run:
+                m2.ingest(path)
+            called_cmd = mock_run.call_args.args[0]
+            self.assertEqual(called_cmd[-2:], ["--permission-mode", "acceptEdits"])
+        finally:
+            if prev is None:
+                os.environ.pop("MCP_INGEST_PERMISSION_MODE", None)
+            else:
+                os.environ["MCP_INGEST_PERMISSION_MODE"] = prev
+
+    def test_ingest_settings_hook_always_present_even_without_opt_in(self):
+        path = self._write_raw_note()
+        fake = MagicMock(returncode=0, stdout="ok", stderr="")
+        with patch.object(self.m.subprocess, "run", return_value=fake) as mock_run:
+            self.m.ingest(path)
+        called_cmd = mock_run.call_args.args[0]
+        self.assertIn("--settings", called_cmd)
+        self.assertNotIn("--permission-mode", called_cmd)
 
     def test_ingest_rejects_invalid_domain_hint_slug(self):
         path = self._write_raw_note()

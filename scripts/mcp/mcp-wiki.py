@@ -11,6 +11,8 @@ Usage:
   Launched automatically by Claude Code (registered via `claude mcp add`).
   Set WIKI_PATH env var to override the vault root path.
 """
+import json
+import os
 import re
 import subprocess
 import sys
@@ -24,7 +26,21 @@ from fastmcp import FastMCP  # noqa: E402
 mcp = FastMCP("boiling-brain-wiki")
 
 INGEST_TIMEOUT_S = 600
+INGEST_PERMISSION_MODE = os.environ.get("MCP_INGEST_PERMISSION_MODE", "")
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+
+
+def _ingest_settings_json():
+    """Build a --settings JSON that scopes a PreToolUse allowlist hook to just
+    the claude -p session ingest() spawns below. Verified empirically to
+    merge with (not replace) the vault's own .claude/settings.json, and to
+    apply to subagent tool calls, not just the main context."""
+    guard = str(wiki_core.WIKI_PATH / "scripts" / "mcp" / "ingest-headless-guard.sh")
+    hook = {"type": "command", "command": guard, "timeout": 3000}
+    return json.dumps({"hooks": {"PreToolUse": [
+        {"matcher": "Write", "hooks": [hook]},
+        {"matcher": "Bash", "hooks": [hook]},
+    ]}})
 
 
 def _md(md_fn, data_fn, *args, **kwargs):
@@ -207,10 +223,17 @@ def drop_to_raw(subfolder: str, filename: str, content: str) -> str:
         "disambiguation. If omitted and the source is ambiguous or low-confidence, the "
         "file is left pending for a future interactive /ingest session instead of "
         "being guessed at. "
-        "This session runs unattended with --permission-mode auto (Write/Bash "
-        "auto-approved, no human review) so headless journaling writes can "
-        "complete. Treat callers as trusted until further hardening lands — "
-        "see tetra-plg/boiling-brain#62."
+        "By default this session runs with the caller's normal (unescalated) "
+        "permission mode, so headless journaling writes (wiki/log.md, "
+        "wiki/radar.md, wiki/index.md) and the final format step may be "
+        "blocked with no human present to approve them. To let ingestion "
+        "complete unattended, the vault owner must explicitly opt in by "
+        "setting the MCP_INGEST_PERMISSION_MODE env var (recommended: "
+        "'acceptEdits') when registering this MCP server — a deliberate, "
+        "durable choice, not a silent default. A PreToolUse allowlist hook "
+        "(scripts/mcp/ingest-headless-guard.sh) is always active for this "
+        "session regardless, bounding Write/Bash to the ingest workflow's "
+        "known operations. See tetra-plg/boiling-brain#62."
     )
 )
 def ingest(path: str, domain_hint: str = "") -> str:
@@ -236,10 +259,14 @@ def ingest(path: str, domain_hint: str = "") -> str:
     if domain_hint:
         prompt += f" --domain-hint={domain_hint}"
 
+    cmd = ["claude", "-p", prompt, "--settings", _ingest_settings_json()]
+    if INGEST_PERMISSION_MODE:
+        cmd += ["--permission-mode", INGEST_PERMISSION_MODE]
+
     try:
         result = subprocess.run(
-            ["claude", "-p", prompt, "--permission-mode", "auto"],
-            capture_output=True, text=True, timeout=INGEST_TIMEOUT_S)
+            cmd, capture_output=True, text=True, timeout=INGEST_TIMEOUT_S,
+            cwd=str(wiki_core.WIKI_PATH))
     except subprocess.TimeoutExpired:
         return f"Erreur : ingestion de {path} interrompue après {INGEST_TIMEOUT_S}s (timeout)."
     except FileNotFoundError:
