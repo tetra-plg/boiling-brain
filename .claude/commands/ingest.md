@@ -81,7 +81,7 @@ Cross-domain → multiple agents in parallel (same multi-tool call).
 
 When the agent(s) have returned their report, the **main context** writes (never the agent):
 
-1. **`wiki/log.md`** ← append summary line from `## Ingest summary` (`## [YYYY-MM-DD] ingest | <source title> (agent: <name>)` + 2-3 lines on pages created/updated/deliverables).
+1. **`wiki/log.md`** ← append summary line from `## Ingest summary` (`## [YYYY-MM-DD] ingest | <source title> (agent: <name>)` + 2-3 lines on pages created/updated/deliverables). **`--headless`** → append `, mode: headless, hint: <domain_hint|none>` inside the same parenthetical, e.g. `## [2026-07-02] ingest | My Source (agent: tech-expert, mode: headless, hint: tech)`. Files deferred to `needs-human-triage` (step 2, branch 4c) get **no** `wiki/log.md` entry — nothing was written for them.
 2. **`wiki/radar.md`** ← append entries from `## Radar items` under the relevant thematic section. If no section matches, append to a `## Triage` block at the top of the file and flag this in the final report.
 3. **`.claude/agents/<domain>-expert.suggestions.md`** ← append the `## Evolution suggestions` block (timestamped `### [YYYY-MM-DD HH:MM] source: <path>`). Skip if the block is "N/A".
 4. **`wiki/index.md`** ← update if the agent's pages aren't already linked.
@@ -91,6 +91,10 @@ Centralizing writes in the main context prevents drift and inconsistent formatti
 ### 4b. Frame extraction (if present)
 
 If the agent's report contains a `## Frame requests` block, handle **before** the final report:
+
+**`--headless`** → do not extract or ask anything. Annotate the block verbatim on the ingested source page (same placement as the "no video in cache" case below — a `> [!question] Frame requests pending — run /ingest --frames on this source` callout followed by the `## Frame requests` block), then include `Frame requests: N declared — deferred (headless mode)` in the final report. Stop here; do not run steps 1-4 below.
+
+**Not `--headless`**:
 
 1. Check if a source video is available in `cache/videos/` (look for a file whose name matches the slug of the ingested transcript).
 2. If video available:
@@ -132,6 +136,11 @@ Followed by:
 - Contradictions detected (between sources or against the existing wiki).
 - Open questions for the user.
 - Orphans (pages `wiki/sources/` whose raw has disappeared — no auto-deletion).
+
+**`--headless` mode additions** (cf. `docs/superpowers/specs/2026-07-02-mcp-headless-ingest-design.md` §4.2, §5.1):
+
+- If the file was deferred (step 2, branch 4c): add a `needs-human-triage` section listing the file's path, the candidate expert agents considered, and why none was auto-selected. No pages were written for this file.
+- Always end the report with a `## Pages` block, one line per page created or updated by this run, in the form `- <path> (<type>, new|updated)`. Empty (just the `## Pages` heading, no lines) if the file was deferred to `needs-human-triage`. This block is specific to `--headless` — the interactive report format above is unchanged.
 
 ## Notes
 
