@@ -328,8 +328,8 @@ def _load_mcp_module_fresh():
 
 
 @unittest.skipUnless(_HAS_FASTMCP, "fastmcp not installed")
-class TestMcpParity(WikiCoreTestBase):
-    """Byte-for-byte parity between wiki_core *_md(*_data(...)) and the MCP tools."""
+class McpModuleTestBase(WikiCoreTestBase):
+    """Base for tests that need the live MCP module (mcp-wiki.py) against a temp vault."""
 
     def setUp(self):
         super().setUp()                       # builds vault, configures wiki_core
@@ -352,6 +352,11 @@ class TestMcpParity(WikiCoreTestBase):
         else:
             os.environ["WIKI_PATH"] = self._prev_env
         super().tearDown()
+
+
+@unittest.skipUnless(_HAS_FASTMCP, "fastmcp not installed")
+class TestMcpParity(McpModuleTestBase):
+    """Byte-for-byte parity between wiki_core *_md(*_data(...)) and the MCP tools."""
 
     def test_scan_domain_parity(self):
         self.assertEqual(self.m.scan_domain("demo"),
