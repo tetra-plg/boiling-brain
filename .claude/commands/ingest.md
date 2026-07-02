@@ -110,13 +110,7 @@ If the agent's report contains a `## Frame requests` block, handle **before** th
 Remove from `cache/.pending-ingest` the paths processed in this run (NEW + MODIFIED) and the stale SKIP entries detected at step 1. The main context accumulates these throughout the run: `PROCESSED_PATHS` = all NEW + MODIFIED paths from step 1; `STALE_SKIP_PATHS` = SKIP entries that were already present in `.pending-ingest` at step 1.
 
 ```bash
-PENDING="cache/.pending-ingest"
-[ -f "$PENDING" ] || exit 0
-printf '%s\n' "${PROCESSED_PATHS[@]}" "${STALE_SKIP_PATHS[@]}" \
-  | sort -u \
-  | grep -vFxf - "$PENDING" > "$PENDING.tmp" || true
-mv "$PENDING.tmp" "$PENDING"
-[ -s "$PENDING" ] || rm -f "$PENDING"
+bash scripts/wiki-maint/purge-pending-ingest.sh "${PROCESSED_PATHS[@]}" "${STALE_SKIP_PATHS[@]}"
 ```
 
 `--headless` files deferred to `needs-human-triage` (step 2, branch 4c above) are excluded from `PROCESSED_PATHS` — they remain in `.pending-ingest` for a future interactive run.

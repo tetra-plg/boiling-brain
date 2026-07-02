@@ -38,7 +38,7 @@ def _ingest_settings_json():
     guard = str(wiki_core.WIKI_PATH / "scripts" / "mcp" / "ingest-headless-guard.sh")
     hook = {"type": "command", "command": guard, "timeout": 3000}
     return json.dumps({"hooks": {"PreToolUse": [
-        {"matcher": "Write", "hooks": [hook]},
+        {"matcher": "Write|Edit", "hooks": [hook]},
         {"matcher": "Bash", "hooks": [hook]},
     ]}})
 

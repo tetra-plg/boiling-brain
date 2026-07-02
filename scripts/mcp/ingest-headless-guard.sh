@@ -56,21 +56,43 @@ except Exception:
     ;;
   Bash)
     command=$(printf '%s' "$input" | python3 -c "import sys, json; print(json.load(sys.stdin).get('tool_input', {}).get('command', ''))")
+
+    has_shell_metachars() {
+      case "$1" in
+        *';'*|*'&'*|*'|'*|*'`'*|*'$('*|*$'\n'*) return 0 ;;
+        *) return 1 ;;
+      esac
+    }
+
     for prefix in \
       'bash scripts/wiki-maint/scan-raw.sh' \
       'shasum -a 256 raw/' \
-      'python3 scripts/wiki-maint/format-md.py --write' \
-      'PENDING="cache/.pending-ingest"' \
+      'bash scripts/wiki-maint/purge-pending-ingest.sh' \
       ; do
       case "$command" in
-        "$prefix"*) exit 0 ;;
+        "$prefix"*)
+          if has_shell_metachars "$command"; then
+            deny "commande Bash avec métacaractères suspects après un préfixe autorisé : $command"
+          fi
+          exit 0
+          ;;
       esac
     done
+
+    if [ "$command" = 'python3 scripts/wiki-maint/format-md.py --write "wiki/**/*.md"' ]; then
+      exit 0
+    fi
+
     if [ -f "$LOCAL_ALLOWLIST" ]; then
-      while IFS= read -r prefix; do
+      while IFS= read -r prefix || [ -n "$prefix" ]; do
         [ -z "$prefix" ] && continue
         case "$command" in
-          "$prefix"*) exit 0 ;;
+          "$prefix"*)
+            if has_shell_metachars "$command"; then
+              deny "commande Bash avec métacaractères suspects après un préfixe local autorisé : $command"
+            fi
+            exit 0
+            ;;
         esac
       done < "$LOCAL_ALLOWLIST"
     fi
