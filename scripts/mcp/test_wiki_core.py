@@ -452,6 +452,14 @@ class TestIngestTool(McpModuleTestBase):
         result = self.m.ingest(path, domain_hint="not a slug!")
         self.assertIn("domain_hint invalide", result)
 
+    def test_ingest_rejects_path_with_injected_flag(self):
+        result = self.m.ingest("raw/notes/x.md --domain-hint=evil")
+        self.assertIn("path invalide", result)
+
+    def test_ingest_rejects_path_with_whitespace(self):
+        result = self.m.ingest("raw/notes/has space.md")
+        self.assertIn("path invalide", result)
+
     def test_ingest_rejects_path_traversal(self):
         result = self.m.ingest("../../etc/passwd")
         self.assertIn("path traversal détecté", result)

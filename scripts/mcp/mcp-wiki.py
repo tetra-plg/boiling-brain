@@ -206,13 +206,21 @@ def drop_to_raw(subfolder: str, filename: str, content: str) -> str:
         "domain_hint: optional domain slug (see list_domains()) to skip expert-agent "
         "disambiguation. If omitted and the source is ambiguous or low-confidence, the "
         "file is left pending for a future interactive /ingest session instead of "
-        "being guessed at."
+        "being guessed at. "
+        "This session runs unattended with --permission-mode auto (Write/Bash "
+        "auto-approved, no human review) so headless journaling writes can "
+        "complete. Treat callers as trusted until further hardening lands — "
+        "see tetra-plg/boiling-brain#62."
     )
 )
 def ingest(path: str, domain_hint: str = "") -> str:
     if domain_hint and not _SLUG_RE.match(domain_hint):
         return (f"Erreur : domain_hint invalide : « {domain_hint} » — attendu un slug "
                  f"(minuscules, chiffres, tirets). Voir list_domains() pour les valeurs valides.")
+
+    if any(c.isspace() for c in path) or any(part.startswith("-") for part in path.split("/")):
+        return (f"Erreur : path invalide : « {path} » — ne doit contenir ni espace ni "
+                 f"segment commençant par « - » (risque d'injection de flag dans la commande construite).")
 
     try:
         target = (wiki_core.WIKI_PATH / path).resolve()
