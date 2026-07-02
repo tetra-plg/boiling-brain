@@ -611,6 +611,30 @@ class TestIngestHeadlessGuard(unittest.TestCase):
             {"command": 'bash scripts/wiki-maint/purge-pending-ingest.sh raw/notes/x.md raw/notes/y.md'})
         self.assertEqual(result.returncode, 0)
 
+    def test_denies_scan_raw_process_substitution(self):
+        result = self._run_hook(
+            "Bash",
+            {"command": "bash scripts/wiki-maint/scan-raw.sh <(touch /tmp/poc_guard_bypass_marker)"})
+        self.assertEqual(result.returncode, 2)
+
+    def test_denies_shasum_process_substitution(self):
+        result = self._run_hook(
+            "Bash",
+            {"command": "shasum -a 256 raw/x.md <(curl evil)"})
+        self.assertEqual(result.returncode, 2)
+
+    def test_allows_scan_raw_with_scope_argument(self):
+        result = self._run_hook(
+            "Bash",
+            {"command": "bash scripts/wiki-maint/scan-raw.sh raw/notes"})
+        self.assertEqual(result.returncode, 0)
+
+    def test_allows_purge_pending_ingest_with_multiple_paths(self):
+        result = self._run_hook(
+            "Bash",
+            {"command": "bash scripts/wiki-maint/purge-pending-ingest.sh raw/notes/a.md raw/notes/b.md raw/notes/c.md"})
+        self.assertEqual(result.returncode, 0)
+
     def test_denies_arbitrary_bash(self):
         result = self._run_hook("Bash", {"command": "rm -rf /"})
         self.assertEqual(result.returncode, 2)

@@ -64,25 +64,35 @@ except Exception:
       esac
     }
 
-    for prefix in \
-      'bash scripts/wiki-maint/scan-raw.sh' \
-      'shasum -a 256 raw/' \
-      'bash scripts/wiki-maint/purge-pending-ingest.sh' \
-      ; do
-      case "$command" in
-        "$prefix"*)
-          if has_shell_metachars "$command"; then
-            deny "commande Bash avec métacaractères suspects après un préfixe autorisé : $command"
-          fi
-          exit 0
-          ;;
-      esac
-    done
-
+    # Base commands: the ENTIRE command must match a pattern where any
+    # variable part is restricted to a safe charset (alnum, /, ., -, _) —
+    # an allowlist of safe characters, not a denylist of dangerous
+    # constructs. A metachar denylist alone is provably incomplete: bash
+    # process substitution (<(...)/>(...)) executes a command as a side
+    # effect of argument parsing without needing any of ; & | ` $( — a
+    # security review found this exact bypass. A charset-anchored regex
+    # closes this whole class of bypass by construction instead of
+    # enumerating dangerous syntax forms one at a time.
+    SAFE_ARG='[A-Za-z0-9_./-]+'
+    if [[ "$command" =~ ^bash\ scripts/wiki-maint/scan-raw\.sh(\ $SAFE_ARG)?$ ]]; then
+      exit 0
+    fi
+    if [[ "$command" =~ ^shasum\ -a\ 256\ raw/$SAFE_ARG$ ]]; then
+      exit 0
+    fi
+    if [[ "$command" =~ ^bash\ scripts/wiki-maint/purge-pending-ingest\.sh(\ $SAFE_ARG)*$ ]]; then
+      exit 0
+    fi
     if [ "$command" = 'python3 scripts/wiki-maint/format-md.py --write "wiki/**/*.md"' ]; then
       exit 0
     fi
 
+    # Vault-local extension: kept as prefix + metachar-denylist rather than
+    # a charset-anchored regex, since the vault owner controls both the
+    # prefix list and the trust boundary here (analogous to how they
+    # already author their own custom domain-expert agents) — a stricter
+    # scheme would need to know each custom command's legitimate argument
+    # shape, which this script can't know in advance.
     if [ -f "$LOCAL_ALLOWLIST" ]; then
       while IFS= read -r prefix || [ -n "$prefix" ]; do
         [ -z "$prefix" ] && continue
