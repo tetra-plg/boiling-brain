@@ -476,6 +476,18 @@ class TestIngestTool(McpModuleTestBase):
             result = self.m.ingest(path)
         self.assertIn("timeout", result)
 
+    def test_ingest_missing_claude_binary_returns_error(self):
+        path = self._write_raw_note()
+        with patch.object(self.m.subprocess, "run", side_effect=FileNotFoundError()):
+            result = self.m.ingest(path)
+        self.assertIn("CLI `claude` introuvable", result)
+
+    def test_ingest_unexpected_exception_returns_error_not_raise(self):
+        path = self._write_raw_note()
+        with patch.object(self.m.subprocess, "run", side_effect=PermissionError("not executable")):
+            result = self.m.ingest(path)
+        self.assertIn("interrompue de façon inattendue", result)
+
 
 if __name__ == "__main__":
     unittest.main()

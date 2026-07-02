@@ -236,6 +236,8 @@ def ingest(path: str, domain_hint: str = "") -> str:
         return f"Erreur : ingestion de {path} interrompue après {INGEST_TIMEOUT_S}s (timeout)."
     except FileNotFoundError:
         return "Erreur : CLI `claude` introuvable dans l'environnement du serveur MCP."
+    except Exception as e:
+        return f"Erreur : ingestion de {path} interrompue de façon inattendue ({e})."
 
     if result.returncode != 0:
         detail = result.stderr.strip() or "code de sortie non nul, sans détail sur stderr."
