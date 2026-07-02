@@ -5,12 +5,14 @@ Run: cd scripts/wiki-maint && python3 -m unittest test_format_md
 (Invokes Prettier via npx; first run may download it.)
 """
 import importlib.util
+import os
 import subprocess
 import sys
 import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 SCRIPT = HERE / "format-md.py"
@@ -20,11 +22,36 @@ fmt = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(fmt)
 
 
-def run(args, cwd):
+def run(args, cwd, env=None):
     return subprocess.run(
         [sys.executable, str(SCRIPT), *args],
-        capture_output=True, text=True, cwd=cwd,
+        capture_output=True, text=True, cwd=cwd, env=env,
     )
+
+
+class NpxResolutionTest(unittest.TestCase):
+    def test_npx_found_via_which(self):
+        with mock.patch.object(fmt.shutil, "which", return_value="/usr/bin/npx") as m:
+            self.assertEqual(fmt._npx(), "/usr/bin/npx")
+            m.assert_called_once_with("npx")
+
+    def test_npx_missing_raises_clear_error(self):
+        with mock.patch.object(fmt.shutil, "which", return_value=None):
+            with self.assertRaises(RuntimeError) as ctx:
+                fmt._npx()
+        self.assertIn("npx", str(ctx.exception).lower())
+        self.assertIn("PATH", str(ctx.exception))
+
+    def test_missing_npx_end_to_end_clear_error(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            f = tmp / "t.md"
+            f.write_text("# T\n", encoding="utf-8")
+            env = {"PATH": "/usr/bin:/bin"}  # strip node/npx dirs
+            r = run(["--write", "t.md"], cwd=str(tmp), env=env)
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("npx", r.stderr)
+            self.assertIn("PATH", r.stderr)
 
 
 class MaskUnmaskTest(unittest.TestCase):
@@ -112,6 +139,21 @@ class CheckTest(unittest.TestCase):
             (pkg / "README.md").write_text("#  Bad\n\n\n\nx\n", encoding="utf-8")
             r = run(["--check", "**/*.md"], cwd=str(tmp))
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)  # venv ignored → clean
+
+
+class Utf8OutputTest(unittest.TestCase):
+    def test_check_output_survives_ascii_console(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            (tmp / ".prettierrc").write_text('{"proseWrap":"preserve"}', encoding="utf-8")
+            f = tmp / "t.md"
+            f.write_text("| a | [[x|y]] | `p|q` |\n| --- | --- | --- |\n| 1 | 2 | 3 |\n",
+                         encoding="utf-8")
+            run(["--write", "t.md"], cwd=str(tmp))
+            env = {**os.environ, "PYTHONIOENCODING": "ascii"}
+            r = run(["--check", "t.md"], cwd=str(tmp), env=env)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertNotIn("UnicodeEncodeError", r.stderr)
 
 
 class ExpandTest(unittest.TestCase):
