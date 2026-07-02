@@ -230,8 +230,8 @@ def ingest(path: str, domain_hint: str = "") -> str:
 
     try:
         result = subprocess.run(
-            ["claude", "-p", prompt], capture_output=True, text=True,
-            timeout=INGEST_TIMEOUT_S)
+            ["claude", "-p", prompt, "--permission-mode", "auto"],
+            capture_output=True, text=True, timeout=INGEST_TIMEOUT_S)
     except subprocess.TimeoutExpired:
         return f"Erreur : ingestion de {path} interrompue après {INGEST_TIMEOUT_S}s (timeout)."
     except FileNotFoundError:

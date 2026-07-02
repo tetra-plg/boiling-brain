@@ -432,7 +432,9 @@ class TestIngestTool(McpModuleTestBase):
             result = self.m.ingest(path)
         self.assertIn("## Pages", result)
         called_cmd = mock_run.call_args.args[0]
-        self.assertEqual(called_cmd, ["claude", "-p", f"/ingest {path} --headless"])
+        self.assertEqual(
+            called_cmd,
+            ["claude", "-p", f"/ingest {path} --headless", "--permission-mode", "auto"])
 
     def test_ingest_with_domain_hint_appends_flag(self):
         path = self._write_raw_note()
@@ -440,8 +442,10 @@ class TestIngestTool(McpModuleTestBase):
         with patch.object(self.m.subprocess, "run", return_value=fake) as mock_run:
             self.m.ingest(path, domain_hint="demo")
         called_cmd = mock_run.call_args.args[0]
-        self.assertEqual(called_cmd,
-                         ["claude", "-p", f"/ingest {path} --headless --domain-hint=demo"])
+        self.assertEqual(
+            called_cmd,
+            ["claude", "-p", f"/ingest {path} --headless --domain-hint=demo",
+             "--permission-mode", "auto"])
 
     def test_ingest_rejects_invalid_domain_hint_slug(self):
         path = self._write_raw_note()
