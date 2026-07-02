@@ -601,6 +601,21 @@ class TestIngestHeadlessGuard(unittest.TestCase):
         result = self._run_hook("Read", {"file_path": str(self.vault / "wiki/anything.md")})
         self.assertEqual(result.returncode, 0)
 
+    def test_denies_malformed_json_input(self):
+        payload = "not json"
+        env = dict(os.environ, VAULT_PATH=str(self.vault))
+        result = subprocess.run(
+            [self.GUARD], input=payload, capture_output=True, text=True,
+            env=env, timeout=10)
+        self.assertEqual(result.returncode, 2)
+
+    def test_denies_empty_stdin(self):
+        env = dict(os.environ, VAULT_PATH=str(self.vault))
+        result = subprocess.run(
+            [self.GUARD], input="", capture_output=True, text=True,
+            env=env, timeout=10)
+        self.assertEqual(result.returncode, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

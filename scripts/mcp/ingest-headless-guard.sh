@@ -20,6 +20,7 @@
 # built-in base set — for a custom domain-expert agent whose Bash needs go
 # beyond `shasum`.
 set -euo pipefail
+trap 'echo "BLOQUÉ (ingest headless guard) : payload JSON invalide ou erreur interne du hook" >&2; exit 2' ERR
 
 VAULT_PATH="${VAULT_PATH:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 LOCAL_ALLOWLIST="$VAULT_PATH/.claude/ingest-bash-allowlist.local.txt"
