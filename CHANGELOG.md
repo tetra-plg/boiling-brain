@@ -20,6 +20,10 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 - **`scripts/mcp/mcp-wiki.py`**: refactored (550 → 153 lines) into a thin FastMCP wrapper that delegates to `wiki_core`. **No behaviour change** — the 12 tool descriptions and signatures are byte-identical (MCP schema unchanged) and every tool's markdown output is byte-identical to v1.1.0 (guaranteed by the parity tests and the `smoke_test.py` token gates). (#57)
 - **`.github/workflows/lint.yml`**: bumped the CI actions off the deprecated Node 20 runtime to Node 24 — `actions/checkout@v4 → @v6`, `actions/setup-python@v5 → @v6`, `DavidAnson/markdownlint-cli2-action@v16 → @v23` (bundles markdownlint-cli2 0.22.x; verified to introduce no new rule failures on this repo). Job logic unchanged. The workflow is template-tracked, so the fix reaches vaults via `/update-vault` file propagation — no migration needed. (#56)
 
+### Fixed
+
+- **`scripts/wiki-maint/scan-raw.sh`**: fixed silently degraded ingest-state detection on Windows, where the bare `python3` invocation in `_normalize_path()` could resolve to the non-functional Windows Store stub — and, since it's nested inside a command substitution, its failure was swallowed by `set -e`, producing false `covered-by` verdicts. The Python interpreter is now resolved once at startup (`PYTHON_BIN` env override, then `python3`, then `python`) and functionally self-tested; if none works, the script now fails loudly before scanning instead of degrading silently. (#61)
+
 ## [v1.1.0] — 2026-05-25
 
 ### Added
