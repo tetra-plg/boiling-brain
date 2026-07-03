@@ -23,6 +23,7 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 ### Fixed
 
 - **`scripts/wiki-maint/format-md.py`**: fixed a crash on Windows where `subprocess.run(["npx", ...], shell=False)` failed to resolve `npx.cmd`/`.ps1` via `PATHEXT` (`FileNotFoundError: [WinError 2]`), and a follow-up `UnicodeEncodeError` on the Windows console (cp1252) once npx was reachable. `npx` is now resolved via `shutil.which()` (raises a clear error if missing); `stdout`/`stderr` are forced to UTF-8 at startup. (#60)
+- **`scripts/wiki-maint/scan-raw.sh`**: fixed silently degraded ingest-state detection on Windows, where the bare `python3` invocation in `_normalize_path()` could resolve to the non-functional Windows Store stub — and, since it's nested inside a command substitution, its failure was swallowed by `set -e`, producing false `covered-by` verdicts. The Python interpreter is now resolved once at startup (`PYTHON_BIN` env override, then `python3`, then `python`) and functionally self-tested; if none works, the script now fails loudly before scanning instead of degrading silently. (#61)
 
 ## [v1.1.0] — 2026-05-25
 
