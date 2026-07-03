@@ -63,7 +63,7 @@ except Exception:
 
     has_shell_metachars() {
       case "$1" in
-        *';'*|*'&'*|*'|'*|*'`'*|*'$('*|*$'\n'*) return 0 ;;
+        *';'*|*'&'*|*'|'*|*'`'*|*'$('*|*$'\n'*|*'<'*|*'>'*) return 0 ;;
         *) return 1 ;;
       esac
     }

@@ -678,6 +678,26 @@ class TestIngestHeadlessGuard(unittest.TestCase):
             "Bash", {"command": "curl -s https://api.example.com/status"})
         self.assertEqual(result.returncode, 0)
 
+    def test_local_allowlist_blocks_process_substitution(self):
+        claude_dir = self.vault / ".claude"
+        claude_dir.mkdir(parents=True, exist_ok=True)
+        (claude_dir / "ingest-bash-allowlist.local.txt").write_text(
+            "curl -s https://api.example.com/\n", encoding="utf-8")
+        result = self._run_hook(
+            "Bash",
+            {"command": "curl -s https://api.example.com/ <(touch /tmp/pwned)"})
+        self.assertEqual(result.returncode, 2)
+
+    def test_local_allowlist_blocks_output_redirection(self):
+        claude_dir = self.vault / ".claude"
+        claude_dir.mkdir(parents=True, exist_ok=True)
+        (claude_dir / "ingest-bash-allowlist.local.txt").write_text(
+            "curl -s https://api.example.com/\n", encoding="utf-8")
+        result = self._run_hook(
+            "Bash",
+            {"command": "curl -s https://api.example.com/status > /tmp/evilwrite"})
+        self.assertEqual(result.returncode, 2)
+
     def test_denies_clean_looking_but_unexpected_bash(self):
         # No dangerous metacharacters, but still outside the workflow's known
         # operations — this is the exact case a denylist-of-metacharacters
