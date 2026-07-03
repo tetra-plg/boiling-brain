@@ -136,21 +136,23 @@ The hub page lookup uses `wiki/domains/<domain>.md` and reads its `summary_l1`. 
 
 ## CLI mode (no MCP client)
 
-`scripts/mcp/wiki-cli.py` exposes the 11 read tools over the same query layer
+`scripts/mcp/wiki-cli.py` exposes the 12 read tools over the same query layer
 (`wiki_core`), for headless / containerised consumers without an MCP client. It
 has no fastmcp dependency.
 
 ```bash
 python3 scripts/mcp/wiki-cli.py search "model context protocol" --json
+python3 scripts/mcp/wiki-cli.py list-domains
 python3 scripts/mcp/wiki-cli.py scan-domain ia
 python3 scripts/mcp/wiki-cli.py scan-concepts ia --query rag --top 10
 python3 scripts/mcp/wiki-cli.py preview wiki/concepts/foo.md
 python3 scripts/mcp/wiki-cli.py read wiki/sources/2026-01-15-x.md
 ```
 
-Subcommands mirror the MCP read tools: `scan-domain`, `scan-concepts`,
-`scan-entities`, `scan-decisions`, `scan-syntheses`, `scan-cheatsheets`,
-`scan-diagrams`, `scan-sources` (query required), `preview`, `read`, `search`.
+Subcommands mirror the MCP read tools: `list-domains`, `scan-domain`,
+`scan-concepts`, `scan-entities`, `scan-decisions`, `scan-syntheses`,
+`scan-cheatsheets`, `scan-diagrams`, `scan-sources` (query required),
+`preview`, `read`, `search`.
 
 - Markdown by default; `--json` emits a stable machine-readable shape. The `path`
   fields are vault-relative and reinjectable into `preview` / `read`.
