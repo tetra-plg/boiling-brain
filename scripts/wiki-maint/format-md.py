@@ -76,9 +76,16 @@ def expand(paths):
     return out
 
 
+def _npx():
+    exe = shutil.which("npx")
+    if not exe:
+        raise RuntimeError("npx not found on PATH — install Node.js (which provides npx).")
+    return exe
+
+
 def run_prettier(files, cwd=None):
     proc = subprocess.run(
-        ["npx", "-y", "prettier", "--write", *files],
+        [_npx(), "-y", "prettier", "--write", *files],
         capture_output=True, text=True, cwd=cwd,
     )
     if proc.returncode != 0:
@@ -163,6 +170,11 @@ def do_check(files):
 
 
 def main():
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass
     ap = argparse.ArgumentParser(description="Obsidian-safe markdown formatter (wraps Prettier).")
     mode = ap.add_mutually_exclusive_group(required=True)
     mode.add_argument("--write", action="store_true", help="format files in place")

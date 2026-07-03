@@ -128,6 +128,38 @@ The hub page lookup uses `wiki/domains/<domain>.md` and reads its `summary_l1`. 
 ## Related artefacts
 
 - `scripts/mcp/mcp-wiki.py` — server implementation (FastMCP stdio).
+- `scripts/mcp/wiki-cli.py` — headless CLI (argparse), no fastmcp dependency.
+- `scripts/mcp/wiki_core.py` — shared query layer used by both entry points.
 - `scripts/mcp/setup-mcp.sh` — installer + self-healing maintainer of `~/.claude/CLAUDE.md` block.
 - `scripts/mcp/smoke_test.py` — token-budget harness.
 - `scripts/migrations/v1.1.0.md` — migration that installs/refreshes the stack. Marked `force-rerun: true` to re-evaluate at every `/update-vault`.
+
+## CLI mode (no MCP client)
+
+`scripts/mcp/wiki-cli.py` exposes the 12 read tools over the same query layer
+(`wiki_core`), for headless / containerised consumers without an MCP client. It
+has no fastmcp dependency.
+
+```bash
+python3 scripts/mcp/wiki-cli.py search "model context protocol" --json
+python3 scripts/mcp/wiki-cli.py list-domains
+python3 scripts/mcp/wiki-cli.py scan-domain ia
+python3 scripts/mcp/wiki-cli.py scan-concepts ia --query rag --top 10
+python3 scripts/mcp/wiki-cli.py preview wiki/concepts/foo.md
+python3 scripts/mcp/wiki-cli.py read wiki/sources/2026-01-15-x.md
+```
+
+Subcommands mirror the MCP read tools: `list-domains`, `scan-domain`,
+`scan-concepts`, `scan-entities`, `scan-decisions`, `scan-syntheses`,
+`scan-cheatsheets`, `scan-diagrams`, `scan-sources` (query required),
+`preview`, `read`, `search`.
+
+- Markdown by default; `--json` emits a stable machine-readable shape. The `path`
+  fields are vault-relative and reinjectable into `preview` / `read`.
+- Exit code `0` on success or a legitimate empty result, `2` (message on stderr)
+  on a lookup error (page not found, empty domain, path traversal, `scan-sources`
+  without a query).
+- Point at a vault with the `WIKI_PATH` env var or the `--wiki-path` option.
+
+The MCP server (`mcp-wiki.py`) and the CLI share the same `wiki_core` functions,
+so a given query yields byte-identical markdown through either entry point.
