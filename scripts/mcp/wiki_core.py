@@ -31,6 +31,7 @@ WIKI_PATH = Path(os.environ.get("WIKI_PATH", str(Path(__file__).parent.parent.pa
 WIKI_DIR = WIKI_PATH / "wiki"
 RAW_DIR = WIKI_PATH / "raw"
 CACHE_DIR = WIKI_PATH / "cache"
+AGENTS_DIR = WIKI_PATH / ".claude" / "agents"
 
 FRONT_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 _WIKILINK_RE = re.compile(r"\[\[([^\]|]+?)(?:\|[^\]]+)?\]\]")
@@ -58,11 +59,12 @@ def configure(wiki_path):
     """Re-point the module at a different vault root and reset caches. Used by
     wiki-cli.py --wiki-path and by tests. The MCP server relies on the WIKI_PATH
     env var resolved at import time and does not call this."""
-    global WIKI_PATH, WIKI_DIR, RAW_DIR, CACHE_DIR, _BACKLINK_CACHE
+    global WIKI_PATH, WIKI_DIR, RAW_DIR, CACHE_DIR, AGENTS_DIR, _BACKLINK_CACHE
     WIKI_PATH = Path(wiki_path)
     WIKI_DIR = WIKI_PATH / "wiki"
     RAW_DIR = WIKI_PATH / "raw"
     CACHE_DIR = WIKI_PATH / "cache"
+    AGENTS_DIR = WIKI_PATH / ".claude" / "agents"
     _BACKLINK_CACHE = None
 
 
@@ -455,4 +457,41 @@ def scan_domain_md(data):
         rel_dir = str(p.parent.relative_to(WIKI_DIR))
         l0 = r["summary_l0"] or "—"
         lines.append(f"- {rel_dir}/{p.stem} ({r['type']}, {r['backlinks']} backlinks) — {l0}")
+    return "\n".join(lines)
+
+
+# ---- list_domains ---------------------------------------------------------
+def list_domains_data():
+    """One entry per wiki/domains/<slug>.md, in slug order.
+
+    has_expert reflects whether .claude/agents/<slug>-expert.md exists — only
+    those slugs are usable as ingest()'s domain_hint. Never raises: an empty
+    or domain-less vault just returns an empty list.
+    """
+    domains = []
+    domains_dir = WIKI_DIR / "domains"
+    if domains_dir.exists():
+        for p in sorted(domains_dir.glob("*.md")):
+            slug = p.stem
+            try:
+                fm, _ = _parse_front(p.read_text(encoding="utf-8"))
+            except Exception:
+                fm = {}
+            domains.append({
+                "slug": slug,
+                "summary_l0": fm.get("summary_l0") or "",
+                "has_expert": (AGENTS_DIR / f"{slug}-expert.md").exists(),
+            })
+    return {"domains": domains}
+
+
+def list_domains_md(data):
+    if not data["domains"]:
+        return "Aucun domaine déclaré dans ce vault."
+    lines = ["# Domaines déclarés", ""]
+    for d in data["domains"]:
+        flag = ("agent expert disponible" if d["has_expert"]
+                else "pas d'agent expert (domain_hint inutilisable)")
+        l0 = d["summary_l0"] or "—"
+        lines.append(f"- {d['slug']} ({flag}) — {l0}")
     return "\n".join(lines)

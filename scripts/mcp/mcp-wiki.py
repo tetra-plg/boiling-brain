@@ -11,6 +11,10 @@ Usage:
   Launched automatically by Claude Code (registered via `claude mcp add`).
   Set WIKI_PATH env var to override the vault root path.
 """
+import json
+import os
+import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -20,6 +24,27 @@ import wiki_core  # noqa: E402
 from fastmcp import FastMCP  # noqa: E402
 
 mcp = FastMCP("boiling-brain-wiki")
+
+INGEST_TIMEOUT_S = 600
+INGEST_PERMISSION_MODE = os.environ.get("MCP_INGEST_PERMISSION_MODE", "")
+_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+
+
+def _ingest_settings_json():
+    """Build a --settings JSON that scopes a PreToolUse allowlist hook to just
+    the claude -p session ingest() spawns below. Verified empirically to
+    merge with (not replace) the vault's own .claude/settings.json, and to
+    apply to subagent tool calls, not just the main context. The matcher
+    covers every tool (empty string, this codebase's established
+    "match all" convention — see setup-mcp.sh's Stop hook registration) so
+    the guard script's own per-tool dispatch — including its default-deny
+    for anything it doesn't explicitly recognize — actually runs for every
+    tool call, not just Write/Edit/Bash."""
+    guard = str(wiki_core.WIKI_PATH / "scripts" / "mcp" / "ingest-headless-guard.sh")
+    hook = {"type": "command", "command": guard, "timeout": 3000}
+    return json.dumps({"hooks": {"PreToolUse": [
+        {"matcher": "", "hooks": [hook]},
+    ]}})
 
 
 def _md(md_fn, data_fn, *args, **kwargs):
@@ -144,6 +169,18 @@ def search_wiki(query: str, limit: int = 10) -> str:
 
 @mcp.tool(
     description=(
+        "List valid domain slugs for this vault, with a short description and whether "
+        "a domain-expert agent exists for it. Call this BEFORE ingest(domain_hint=...) "
+        "to know which hints are valid — domains are added/renamed dynamically via "
+        "/domain, so hardcoding slugs in a third-party app will drift."
+    )
+)
+def list_domains() -> str:
+    return _md(wiki_core.list_domains_md, wiki_core.list_domains_data)
+
+
+@mcp.tool(
+    description=(
         "Drop a file into raw/ and signal it for ingestion next Claude Code session. "
         "Use to add notes, articles, or clips to the wiki from any Claude Code instance. "
         "subfolder: subpath under raw/ (e.g. 'notes', 'articles', 'clippings'). "
@@ -178,6 +215,74 @@ def drop_to_raw(subfolder: str, filename: str, content: str) -> str:
         f.write(rel_path + "\n")
 
     return f"Fichier créé : {rel_path}\nSignal .pending-ingest mis à jour."
+
+
+@mcp.tool(
+    description=(
+        "Trigger ingestion of a file already present in raw/ (e.g. just written via "
+        "drop_to_raw) into the wiki, via a headless domain-expert agent run. Blocks "
+        "until the run completes (can take minutes for cross-domain sources). "
+        "path: relative path from vault root, e.g. 'raw/notes/2026-07-02-my-note.md'. "
+        "domain_hint: optional domain slug (see list_domains()) to skip expert-agent "
+        "disambiguation. If omitted and the source is ambiguous or low-confidence, the "
+        "file is left pending for a future interactive /ingest session instead of "
+        "being guessed at. "
+        "By default this session runs with the caller's normal (unescalated) "
+        "permission mode, so headless journaling writes (wiki/log.md, "
+        "wiki/radar.md, wiki/index.md) and the final format step may be "
+        "blocked with no human present to approve them. To let ingestion "
+        "complete unattended, the vault owner must explicitly opt in by "
+        "setting the MCP_INGEST_PERMISSION_MODE env var (recommended: "
+        "'auto') when registering this MCP server — a deliberate, "
+        "durable choice, not a silent default. A PreToolUse allowlist hook "
+        "(scripts/mcp/ingest-headless-guard.sh) is always active for this "
+        "session regardless, bounding Write/Bash to the ingest workflow's "
+        "known operations. See tetra-plg/boiling-brain#62."
+    )
+)
+def ingest(path: str, domain_hint: str = "") -> str:
+    if domain_hint and not _SLUG_RE.match(domain_hint):
+        return (f"Erreur : domain_hint invalide : « {domain_hint} » — attendu un slug "
+                 f"(minuscules, chiffres, tirets). Voir list_domains() pour les valeurs valides.")
+
+    if any(c.isspace() for c in path) or any(part.startswith("-") for part in path.split("/")):
+        return (f"Erreur : path invalide : « {path} » — ne doit contenir ni espace ni "
+                 f"segment commençant par « - » (risque d'injection de flag dans la commande construite).")
+
+    try:
+        target = (wiki_core.WIKI_PATH / path).resolve()
+        if not str(target).startswith(str(wiki_core.RAW_DIR.resolve())):
+            return "Erreur : chemin invalide (path traversal détecté)."
+    except Exception as e:
+        return f"Erreur de validation du chemin : {e}"
+
+    if not target.exists():
+        return f"Erreur : fichier introuvable : {path}."
+
+    prompt = f"/ingest {path} --headless"
+    if domain_hint:
+        prompt += f" --domain-hint={domain_hint}"
+
+    cmd = ["claude", "-p", prompt, "--settings", _ingest_settings_json()]
+    if INGEST_PERMISSION_MODE:
+        cmd += ["--permission-mode", INGEST_PERMISSION_MODE]
+
+    try:
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=INGEST_TIMEOUT_S,
+            cwd=str(wiki_core.WIKI_PATH))
+    except subprocess.TimeoutExpired:
+        return f"Erreur : ingestion de {path} interrompue après {INGEST_TIMEOUT_S}s (timeout)."
+    except FileNotFoundError:
+        return "Erreur : CLI `claude` introuvable dans l'environnement du serveur MCP."
+    except Exception as e:
+        return f"Erreur : ingestion de {path} interrompue de façon inattendue ({e})."
+
+    if result.returncode != 0:
+        detail = result.stderr.strip() or "code de sortie non nul, sans détail sur stderr."
+        return f"Erreur : l'ingestion de {path} a échoué ({detail})"
+
+    return result.stdout
 
 
 if __name__ == "__main__":
