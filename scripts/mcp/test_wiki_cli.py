@@ -81,6 +81,17 @@ class TestWikiCli(unittest.TestCase):
         self.assertEqual(r.returncode, 0)
         self.assertEqual(json.loads(r.stdout)["domain"], "demo")
 
+    def test_list_domains_markdown_and_json(self):
+        r = run(self.vault, "list-domains")
+        self.assertEqual(r.returncode, 0)
+        self.assertIn("Domaines déclarés", r.stdout)
+        self.assertIn("- demo", r.stdout)
+        rj = run(self.vault, "list-domains", "--json")
+        self.assertEqual(rj.returncode, 0)
+        payload = json.loads(rj.stdout)
+        self.assertEqual(payload["domains"][0]["slug"], "demo")
+        self.assertIs(payload["domains"][0]["has_expert"], False)
+
     def test_scan_concepts_markdown_and_json(self):
         r = run(self.vault, "scan-concepts", "demo")
         self.assertEqual(r.returncode, 0)
@@ -123,6 +134,11 @@ class TestCliMcpMdParity(unittest.TestCase):
     def test_scan_domain_md_matches_core(self):
         r = run(self.vault, "scan-domain", "demo")
         expected = self.wiki_core.scan_domain_md(self.wiki_core.scan_domain_data("demo"))
+        self.assertEqual(r.stdout.rstrip("\n"), expected)
+
+    def test_list_domains_md_matches_core(self):
+        r = run(self.vault, "list-domains")
+        expected = self.wiki_core.list_domains_md(self.wiki_core.list_domains_data())
         self.assertEqual(r.stdout.rstrip("\n"), expected)
 
 
