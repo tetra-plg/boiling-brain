@@ -78,7 +78,7 @@ except Exception:
     # closes this whole class of bypass by construction instead of
     # enumerating dangerous syntax forms one at a time.
     SAFE_ARG='[A-Za-z0-9_./-]+'
-    if [[ "$command" =~ ^bash\ scripts/wiki-maint/scan-raw\.sh(\ $SAFE_ARG)?$ ]]; then
+    if [[ "$command" =~ ^bash\ scripts/wiki-maint/scan-raw\.sh(\ raw(/$SAFE_ARG)?)?$ ]]; then
       exit 0
     fi
     if [[ "$command" =~ ^shasum\ -a\ 256\ raw/$SAFE_ARG$ ]]; then
@@ -112,7 +112,10 @@ except Exception:
     fi
     deny "commande Bash hors allowlist : $command"
     ;;
-  *)
+  Read|Glob|Grep|Task|TodoWrite)
     exit 0
+    ;;
+  *)
+    deny "outil non explicitement autorisé pendant un run headless : $tool_name"
     ;;
 esac

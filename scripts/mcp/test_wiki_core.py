@@ -441,16 +441,16 @@ class TestIngestTool(McpModuleTestBase):
         self.assertEqual(len(called_cmd), 5)  # no --permission-mode: env var unset by default
         self.assertEqual(mock_run.call_args.kwargs["cwd"], str(self.vault))
 
-    def test_ingest_settings_covers_write_and_edit_and_bash(self):
+    def test_ingest_settings_covers_all_tools(self):
         path = self._write_raw_note()
         fake = MagicMock(returncode=0, stdout="ok", stderr="")
         with patch.object(self.m.subprocess, "run", return_value=fake) as mock_run:
             self.m.ingest(path)
         called_cmd = mock_run.call_args.args[0]
         settings = json.loads(called_cmd[4])
-        matchers = {h["matcher"] for h in settings["hooks"]["PreToolUse"]}
-        self.assertIn("Write|Edit", matchers)
-        self.assertIn("Bash", matchers)
+        pretool = settings["hooks"]["PreToolUse"]
+        self.assertEqual(len(pretool), 1)
+        self.assertEqual(pretool[0]["matcher"], "")
 
     def test_ingest_with_domain_hint_appends_flag(self):
         path = self._write_raw_note()
@@ -704,6 +704,34 @@ class TestIngestHeadlessGuard(unittest.TestCase):
 
     def test_other_tools_unrestricted(self):
         result = self._run_hook("Read", {"file_path": str(self.vault / "wiki/anything.md")})
+        self.assertEqual(result.returncode, 0)
+
+    def test_denies_scan_raw_absolute_path(self):
+        result = self._run_hook(
+            "Bash",
+            {"command": "bash scripts/wiki-maint/scan-raw.sh /Users/pleguern/.ssh"})
+        self.assertEqual(result.returncode, 2)
+
+    def test_allows_scan_raw_with_raw_prefixed_scope(self):
+        result = self._run_hook(
+            "Bash",
+            {"command": "bash scripts/wiki-maint/scan-raw.sh raw/notes"})
+        self.assertEqual(result.returncode, 0)
+
+    def test_denies_notebook_edit_tool(self):
+        result = self._run_hook("NotebookEdit", {"file_path": str(self.vault / "evil.ipynb")})
+        self.assertEqual(result.returncode, 2)
+
+    def test_denies_webfetch_tool(self):
+        result = self._run_hook("WebFetch", {"url": "https://evil.example.com"})
+        self.assertEqual(result.returncode, 2)
+
+    def test_allows_read_tool(self):
+        result = self._run_hook("Read", {"file_path": str(self.vault / "wiki/anything.md")})
+        self.assertEqual(result.returncode, 0)
+
+    def test_allows_task_tool(self):
+        result = self._run_hook("Task", {"description": "spawn expert agent"})
         self.assertEqual(result.returncode, 0)
 
     def test_denies_malformed_json_input(self):
