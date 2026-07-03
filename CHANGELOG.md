@@ -20,6 +20,10 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 - **`scripts/mcp/mcp-wiki.py`**: refactored (550 → 153 lines) into a thin FastMCP wrapper that delegates to `wiki_core`. **No behaviour change** — the 12 tool descriptions and signatures are byte-identical (MCP schema unchanged) and every tool's markdown output is byte-identical to v1.1.0 (guaranteed by the parity tests and the `smoke_test.py` token gates). (#57)
 - **`.github/workflows/lint.yml`**: bumped the CI actions off the deprecated Node 20 runtime to Node 24 — `actions/checkout@v4 → @v6`, `actions/setup-python@v5 → @v6`, `DavidAnson/markdownlint-cli2-action@v16 → @v23` (bundles markdownlint-cli2 0.22.x; verified to introduce no new rule failures on this repo). Job logic unchanged. The workflow is template-tracked, so the fix reaches vaults via `/update-vault` file propagation — no migration needed. (#56)
 
+### Fixed
+
+- **`scripts/wiki-maint/format-md.py`**: fixed a crash on Windows where `subprocess.run(["npx", ...], shell=False)` failed to resolve `npx.cmd`/`.ps1` via `PATHEXT` (`FileNotFoundError: [WinError 2]`), and a follow-up `UnicodeEncodeError` on the Windows console (cp1252) once npx was reachable. `npx` is now resolved via `shutil.which()` (raises a clear error if missing); `stdout`/`stderr` are forced to UTF-8 at startup. (#60)
+
 ## [v1.1.0] — 2026-05-25
 
 ### Added
