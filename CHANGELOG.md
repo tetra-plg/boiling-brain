@@ -6,7 +6,17 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 
 ---
 
-## [v1.1.1] — unreleased
+## [v1.1.2] — unreleased
+
+### Added
+
+- **`scripts/wiki-maint/scan-raw.py`**: new flags on the detection engine — `--format=json` (machine contract: `files`/`orphans`/`warnings`/`pending`/`counts`, versioned), `--force` (deterministic SKIP→MODIFIED, `reason: forced`), `--orphans` (list source pages whose raw vanished), `--pending` (read-only oracle over `cache/.pending-ingest`, surfaces `purgeable`/`stale` buckets for the purge step). Index lint on stderr (`duplicate-claim`, `missing-sha`) plus a `N new · M modified · K skipped` summary. Canonical `source_sha256_composite` formula (documented in `.claude/rules/frontmatter.md`) with `composite-mismatch` detection (WARN only this pass — no MODIFIED verdict). `/ingest` step 1 now consumes the JSON contract, delegates `--force` to the script, drives phase-4c purge from `--pending`, and fills the phase-5 orphans list from `--orphans`; the headless guard allowlists the new flags. (#70)
+
+### Fixed
+
+- **`scripts/wiki-maint/scan-raw.sh` → `scan-raw.py`**: rewrote the state-detection engine in Python (single process) — the old bash spawned one `python3` per indexed path plus a `grep|sed` pipeline per frontmatter line, so on a mature vault (several hundred source pages, several thousand raw files) even a single-file scan blew past the 120s timeout and `/ingest` step 1 was unusable. `scan-raw.sh` is now a thin wrapper that keeps the portable `PYTHON_BIN` resolution (#61) and execs `scan-raw.py`. Default stdout is byte-for-byte identical (golden-tested against the pre-rewrite bash); stderr messages moved to English (template EN policy). One deliberate default-verdict change: `source_path`/`covered_paths` motifs are now recognised only inside the leading `---` frontmatter block, killing phantom `SKIP`s from body text. Existing vaults upgrade via `scripts/migrations/v1.1.2-scan-raw-python.md`. (#70)
+
+## [v1.1.1] — 2026-07-03
 
 ### Added
 
@@ -18,7 +28,6 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 - **`scripts/mcp/ingest-headless-guard.sh`**: `PreToolUse` hook, scoped via `--settings` to the `claude -p` session spawned by `ingest()` (confirmed to apply to the main context and any spawned subagent, and to merge with — not replace — the vault's own persistent hooks). Allowlists exactly the Write/Bash operations the headless `/ingest` workflow performs and default-denies everything else, including tools uncovered by the base ruleset (`NotebookEdit`/`WebFetch`/`WebSearch`). Bash allowlisting anchors each allowed command to a safe charset rather than denylisting metacharacters — closing, across 6 rounds of adversarial review, command chaining, process substitution (`<(...)`/`>(...)`), path traversal via `..`, redirection, and an unanchored `scan-raw.sh` invocation. An optional vault-local `.claude/ingest-bash-allowlist.local.txt` extends the Bash allowlist with custom prefixes. (#62)
 - **`scripts/wiki-maint/purge-pending-ingest.sh`**: extracted from `/ingest` step 4c's inline snippet into its own script, so it can be allowlisted by the guard above via a single fixed command prefix instead of an unsafe-to-match inline heredoc. (#62)
 - **`scripts/mcp/test_wiki_core.py`**: extended with coverage for `list_domains()`, `ingest()` (happy path, deferral, path/domain_hint validation, subprocess failure modes), and 33 dedicated tests for `ingest-headless-guard.sh` covering every bypass found in adversarial review. (#62)
-- **`scripts/wiki-maint/scan-raw.py`**: new flags on the detection engine — `--format=json` (machine contract: `files`/`orphans`/`warnings`/`pending`/`counts`, versioned), `--force` (deterministic SKIP→MODIFIED, `reason: forced`), `--orphans` (list source pages whose raw vanished), `--pending` (read-only oracle over `cache/.pending-ingest`, surfaces `purgeable`/`stale` buckets for the purge step). Index lint on stderr (`duplicate-claim`, `missing-sha`) plus a `N new · M modified · K skipped` summary. Canonical `source_sha256_composite` formula (documented in `.claude/rules/frontmatter.md`) with `composite-mismatch` detection (WARN only this pass — no MODIFIED verdict). `/ingest` step 1 now consumes the JSON contract, delegates `--force` to the script, drives phase-4c purge from `--pending`, and fills the phase-5 orphans list from `--orphans`; the headless guard allowlists the new flags. (#70)
 
 ### Changed
 
@@ -30,7 +39,6 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 
 - **`scripts/wiki-maint/format-md.py`**: fixed a crash on Windows where `subprocess.run(["npx", ...], shell=False)` failed to resolve `npx.cmd`/`.ps1` via `PATHEXT` (`FileNotFoundError: [WinError 2]`), and a follow-up `UnicodeEncodeError` on the Windows console (cp1252) once npx was reachable. `npx` is now resolved via `shutil.which()` (raises a clear error if missing); `stdout`/`stderr` are forced to UTF-8 at startup. (#60)
 - **`scripts/wiki-maint/scan-raw.sh`**: fixed silently degraded ingest-state detection on Windows, where the bare `python3` invocation in `_normalize_path()` could resolve to the non-functional Windows Store stub — and, since it's nested inside a command substitution, its failure was swallowed by `set -e`, producing false `covered-by` verdicts. The Python interpreter is now resolved once at startup (`PYTHON_BIN` env override, then `python3`, then `python`) and functionally self-tested; if none works, the script now fails loudly before scanning instead of degrading silently. (#61)
-- **`scripts/wiki-maint/scan-raw.sh` → `scan-raw.py`**: rewrote the state-detection engine in Python (single process) — the old bash spawned one `python3` per indexed path plus a `grep|sed` pipeline per frontmatter line, so on a mature vault (several hundred source pages, several thousand raw files) even a single-file scan blew past the 120s timeout and `/ingest` step 1 was unusable. `scan-raw.sh` is now a thin wrapper that keeps the portable `PYTHON_BIN` resolution (#61) and execs `scan-raw.py`. Default stdout is byte-for-byte identical (golden-tested against the pre-rewrite bash); stderr messages moved to English (template EN policy). One deliberate default-verdict change: `source_path`/`covered_paths` motifs are now recognised only inside the leading `---` frontmatter block, killing phantom `SKIP`s from body text. (#70)
 
 ## [v1.1.0] — 2026-05-25
 
