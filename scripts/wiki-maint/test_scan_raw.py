@@ -412,6 +412,42 @@ class OrphansTest(unittest.TestCase):
             self.assertIn("ORPHAN   raw/gone.md  (covered-by: gone)", r.stdout)
 
 
+class JsonFormatTest(unittest.TestCase):
+    def _run_json(self, tmp, args):
+        r = subprocess.run(["python3", str(HERE / "scan-raw.py"), "--format=json", *args],
+                           capture_output=True, text=True,
+                           env=dict(os.environ, VAULT_ROOT=str(tmp)))
+        return r, json.loads(r.stdout)
+
+    def test_json_shape_and_counts(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            for rel in ["raw/notes/skip.md", "raw/notes/new.md"]:
+                p = tmp / rel; p.parent.mkdir(parents=True, exist_ok=True); p.write_text("x\n")
+            sha = hashlib.sha256(b"x\n").hexdigest()
+            d = tmp / "wiki" / "sources"; d.mkdir(parents=True)
+            (d / "s.md").write_text(f"---\nsource_path: raw/notes/skip.md\nsource_sha256: {sha}\n---\n")
+            r, doc = self._run_json(tmp, [])
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(doc["version"], 1)
+            self.assertFalse(doc["force"])
+            by = {f["path"]: f for f in doc["files"]}
+            self.assertEqual(by["raw/notes/skip.md"]["status"], "SKIP")
+            self.assertEqual(by["raw/notes/skip.md"]["reason"], "exact")
+            self.assertEqual(by["raw/notes/new.md"]["status"], "NEW")
+            self.assertEqual(doc["counts"], {"new": 1, "modified": 0, "skipped": 1, "orphans": 0})
+            self.assertNotIn("orphans", doc)  # flag absent
+
+    def test_json_includes_orphans_when_flagged(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            d = tmp / "wiki" / "sources"; d.mkdir(parents=True)
+            (d / "gone.md").write_text("---\nsource_path: raw/gone.md\n---\n")
+            r, doc = self._run_json(tmp, ["--orphans"])
+            self.assertEqual(doc["orphans"], [{"path": "raw/gone.md", "covered_by": "gone"}])
+            self.assertEqual(doc["counts"]["orphans"], 1)
+
+
 def _stage(tmp):
     """Build the parity fixture and copy BOTH scripts into it so the wrapper
     resolves VAULT_ROOT to the fixture and can exec the engine."""

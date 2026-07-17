@@ -342,11 +342,47 @@ def run(vault_root: str, ns, idx=None):
     return files, results, idx
 
 
+def compute_warnings(idx, vault_root):
+    return []  # populated in Task 9 (lint) + Task 11 (composite)
+
+
+def build_json(files, results, idx, ns, vault_root, warnings):
+    file_entries = []
+    counts = {"new": 0, "modified": 0, "skipped": 0, "orphans": 0}
+    for rel, v in results:
+        file_entries.append({
+            "path": rel, "status": v.status, "covered_by": v.covered_by,
+            "reason": v.reason, "sha_stored": v.sha_stored, "sha_current": v.sha_current,
+        })
+        counts["new"] += v.status == "NEW"
+        counts["modified"] += v.status == "MODIFIED"
+        counts["skipped"] += v.status == "SKIP"
+    doc = {
+        "version": 1,
+        "force": bool(ns.force),
+        "files": file_entries,
+        "warnings": warnings,
+        "counts": counts,
+    }
+    if ns.orphans:
+        orphans = [{"path": p, "covered_by": s} for p, s in find_orphans(vault_root, idx)]
+        doc["orphans"] = orphans
+        counts["orphans"] = len(orphans)
+    return doc
+
+
 def main(argv):
     _force_utf8()
     ns = parse_args(argv)
     vault_root = os.environ.get("VAULT_ROOT") or str(Path(__file__).resolve().parents[2])
     files, results, idx = run(vault_root, ns)
+    warnings = compute_warnings(idx, vault_root)
+
+    if ns.format == "json":
+        doc = build_json(files, results, idx, ns, vault_root, warnings)
+        print(json.dumps(doc, ensure_ascii=False, indent=2))
+        return 0
+
     if not files:
         print("No files to analyze.", file=sys.stderr)
         return 0
