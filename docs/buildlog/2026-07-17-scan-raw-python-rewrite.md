@@ -4,7 +4,7 @@
 - **Spec** : `docs/superpowers/specs/2026-07-17-scan-raw-python-rewrite-design.md`
 - **Plan** : `docs/superpowers/plans/2026-07-17-scan-raw-python-rewrite.md`
 - **Objectif** : corriger le timeout de `scan-raw.sh` sur vault mature (#70) en réécrivant le moteur en Python mono-processus, + améliorations additives (JSON, `--force`/`--orphans`/`--pending`, lint d'index, détection composite), parité stdout par défaut octet-pour-octet.
-- **Statut** : 🚧 en cours — Task 11/16 livrée. **#70 corrigé** (Task 6), **toutes les features moteur livrées** (Tasks 1-11). Reste : docs (frontmatter, ingest, CHANGELOG), guard headless, validation réelle, PR.
+- **Statut** : 🚧 en cours — Tasks 1-13/16 livrées. **#70 corrigé** (Task 6), features moteur (1-11). Tasks 12 & 13 exécutées **en parallèle** (2 worktrees, 1 subagent chacune). Reste : ingest.md + CHANGELOG (14), validation réelle sur le vault (15), PR (16).
 
 > Journal vivant : une ligne `## Livré` par tâche squash-mergée dans `fix/70-scan-raw-perf`. La section `## Validation RÉELLE` finale (chiffres sur le vault BoilingBrain réel) est remplie à la Task 15. Aucun chiffre inventé.
 
@@ -27,6 +27,8 @@ Norme projet (cf. mémoire `feedback_superpowers_plan_worktree_flow`) : worktree
 | 9 | Lint d'index + synthèse stderr | `scripts/wiki-maint/scan-raw.py`, `scripts/wiki-maint/test_scan_raw.py` | `compute_warnings` (`duplicate-claim` sur chemin revendiqué par ≥2 pages, `missing-sha` sur page sans sha/composite), `emit_stderr_warnings`, `emit_summary` (`N new · M modified · K skipped` [+ orphans]). Tout sur **stderr** → stdout par défaut intact. `LintTest` 4/4, suite 32. |
 | 10 | `--pending` (lecture seule) | `scripts/wiki-maint/scan-raw.py`, `scripts/wiki-maint/test_scan_raw.py` | `read_pending` + `run_pending` : scope = `cache/.pending-ingest`, verdicts normaux + `STALE <path> (not-on-disk)`, buckets `pending.purgeable`/`pending.stale` en JSON. **Aucune écriture du manifeste** (test dédié). `--pending` + chemin positionnel = erreur usage (exit 2). `PendingTest` 5/5, suite 37. |
 | 11 | Détection `composite-mismatch` | `scripts/wiki-maint/scan-raw.py`, `scripts/wiki-maint/test_scan_raw.py` | `compute_composite` (formule canonique : sha256 du flux `<hex>  <p>\n` trié) + `composite_warnings` (WARN si écart, jamais de verdict `MODIFIED`). **Cross-check confirmé** : formule Python == pipeline `shasum -a 256` réel (hash identique). `CompositeTest` 4/4, suite 41. |
+| 12 | Formule composite canonique (doc) | `.claude/rules/frontmatter.md` | Section canonique `source_sha256_composite` (formule reproductible en shell, sémantique WARN-seulement) alignée sur `compute_composite`. Exécutée **en parallèle** (subagent, worktree dédié). |
+| 13 | Guard headless + tests | `scripts/mcp/ingest-headless-guard.sh`, `scripts/mcp/test_wiki_core.py` | Regex allowlist étendue (`SCAN_FLAG` = `--force`/`--orphans`/`--pending`/`--format=json`, répétables, avant le scope optionnel). 6 tests (3 formes autorisées, 3 refusées). **41 tests guard verts** — aucune régression des refus adversariaux (process-sub, chaining, traversal, absolu). Exécutée **en parallèle** (subagent, worktree dédié). |
 
 ## Validation RÉELLE
 
