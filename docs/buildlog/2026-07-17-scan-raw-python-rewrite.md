@@ -4,7 +4,7 @@
 - **Spec** : `docs/superpowers/specs/2026-07-17-scan-raw-python-rewrite-design.md`
 - **Plan** : `docs/superpowers/plans/2026-07-17-scan-raw-python-rewrite.md`
 - **Objectif** : corriger le timeout de `scan-raw.sh` sur vault mature (#70) en réécrivant le moteur en Python mono-processus, + améliorations additives (JSON, `--force`/`--orphans`/`--pending`, lint d'index, détection composite), parité stdout par défaut octet-pour-octet.
-- **Statut** : 🚧 en cours — Task 2/16 livrée.
+- **Statut** : 🚧 en cours — Task 3/16 livrée.
 
 > Journal vivant : une ligne `## Livré` par tâche squash-mergée dans `fix/70-scan-raw-perf`. La section `## Validation RÉELLE` finale (chiffres sur le vault BoilingBrain réel) est remplie à la Task 15. Aucun chiffre inventé.
 
@@ -18,6 +18,7 @@ Norme projet (cf. mémoire `feedback_superpowers_plan_worktree_flow`) : worktree
 | --- | --- | --- | --- |
 | 1 | Baseline de parité golden | `scripts/wiki-maint/scan_raw_fixture.py`, `scripts/wiki-maint/fixtures/scan-raw/default.golden`, `scripts/wiki-maint/test_scan_raw.py` | Fixture déterministe (chemins ASCII, tri stable) ; golden figé depuis le **bash actuel** avant toute réécriture ; `GoldenParityTest` branché sur le wrapper. Squash-merge `dc80977`. |
 | 2 | Squelette du moteur | `scripts/wiki-maint/scan-raw.py`, `scripts/wiki-maint/test_scan_raw.py` | Collecte (filtres `.sync-meta.json`/binaires, tri UTF-8 stable), `parse_args` (`--force`/`--orphans`/`--pending`/`--format`), UTF-8 forcé, `--help`. Chargement in-process du moteur (importlib). `CollectFilesTest` 4/4. |
+| 3 | Normalisation + index primaire | `scripts/wiki-maint/scan-raw.py`, `scripts/wiki-maint/test_scan_raw.py` | `normalize_path` (NFC + U+2019), parsing frontmatter **strict** (bloc `---` uniquement), `Index` + `build_index` (source_path scalaire/liste, covered_paths, `sources:` legacy, sha 1er source_path, dossiers implicites ≥4 slashes, map videos-meta→transcript, matériel lint/composite/orphans). `NormalizeTest`+`FrontmatterTest`+`BuildIndexTest` 7/7. |
 
 ## Validation RÉELLE
 

@@ -62,6 +62,167 @@ def collect_files(vault_root: str, arg_paths):
     return files, warnings
 
 
+def normalize_path(p: str) -> str:
+    return unicodedata.normalize("NFC", p).replace("’", "'")
+
+
+def frontmatter_lines(text: str):
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return []
+    out = []
+    for line in lines[1:]:
+        if line.strip() == "---":
+            return out
+        out.append(line)
+    return []  # unterminated block -> treat as none
+
+
+def _strip_item(line: str) -> str:
+    s = line.lstrip()
+    if s.startswith("- "):
+        s = s[2:]
+    elif s == "-":
+        s = ""
+    else:
+        s = s[1:] if s.startswith("-") else s
+    s = s.strip().strip('"')
+    return s.strip()
+
+
+def _ends_block(line: str) -> bool:
+    # a line starting with a non-space, non-dash char closes a YAML list block
+    return bool(line) and line[0] not in (" ", "\t", "-")
+
+
+def parse_source_page(text: str) -> dict:
+    fm = frontmatter_lines(text)
+    indexed, covered, legacy = [], [], []
+    first_sp = None
+    sha = None
+    composite = None
+
+    # pass 1: source_path (scalar/list) + covered_paths
+    mode = None  # None | "sp" | "covered"
+    for line in fm:
+        if line.startswith("source_path:"):
+            val = line[len("source_path:"):].strip().strip('"')
+            if val:
+                indexed.append(val)
+                if first_sp is None:
+                    first_sp = val
+                mode = None
+            else:
+                mode = "sp"
+            continue
+        if line.startswith("covered_paths:"):
+            mode = "covered"
+            continue
+        if line.startswith("source_sha256_composite:"):
+            composite = line[len("source_sha256_composite:"):].strip().strip('"')
+            mode = None
+            continue
+        if line.startswith("source_sha256:"):
+            v = line[len("source_sha256:"):].strip().strip('"')
+            if v and not v.startswith("-"):
+                sha = v
+            mode = None
+            continue
+        if mode in ("sp", "covered"):
+            if _ends_block(line):
+                mode = None
+                continue
+            item = _strip_item(line)
+            if item:
+                indexed.append(item)
+                if mode == "covered":
+                    covered.append(item)
+                if mode == "sp" and first_sp is None:
+                    first_sp = item
+
+    # pass 2: legacy `sources:`
+    in_sources = False
+    for line in fm:
+        if line.startswith("sources:"):
+            in_sources = True
+            continue
+        if in_sources:
+            if _ends_block(line):
+                in_sources = False
+                continue
+            item = _strip_item(line)
+            if item:
+                indexed.append(item)
+                legacy.append(item)
+
+    return {
+        "indexed_paths": indexed,
+        "first_source_path": first_sp,
+        "source_sha256": sha,
+        "source_sha256_composite": composite,
+        "covered_paths": covered,
+    }
+
+
+class Index:
+    def __init__(self):
+        self.path_to_slug = {}     # normalized path -> slug (last wins, as bash)
+        self.path_to_sha = {}      # normalized first_source_path -> stored sha
+        self.dir_to_slug = {}      # normalized "raw/a/b/c/" -> slug (first wins)
+        self.meta_to_slug = {}     # normalized videos-meta path -> slug (first wins)
+        self.claims = {}           # normalized path -> [slugs] (lint: duplicate-claim)
+        self.missing_sha = []      # slugs with source_path but no sha/composite
+        self.composites = []       # (slug, covered_paths, stored_composite)
+        self.all_indexed = []      # (normalized path, slug) for orphan detection
+
+
+def build_index(sources_dir: str) -> Index:
+    idx = Index()
+    for source_file in sorted(Path(sources_dir).glob("*.md"), key=lambda p: str(p).encode()):
+        slug = source_file.stem
+        try:
+            text = source_file.read_text(encoding="utf-8", errors="replace")
+        except OSError as e:
+            print(f"WARN: cannot read {source_file}: {e}", file=sys.stderr)
+            continue
+        meta = parse_source_page(text)
+
+        for raw_path in meta["indexed_paths"]:
+            key = normalize_path(raw_path)
+            idx.path_to_slug[key] = slug
+            idx.claims.setdefault(key, [])
+            if slug not in idx.claims[key]:
+                idx.claims[key].append(slug)
+            idx.all_indexed.append((key, slug))
+
+            # implicit-dir index (parent dir, depth >= 4 slashes)
+            idir = raw_path.rsplit("/", 1)[0] + "/" if "/" in raw_path else ""
+            if idir:
+                idir_key = normalize_path(idir)
+                if idir.count("/") >= 4 and idir_key not in idx.dir_to_slug:
+                    idx.dir_to_slug[idir_key] = slug
+
+            # videos-meta -> transcript map
+            if raw_path.startswith("raw/transcripts/"):
+                stem = raw_path.rsplit("/", 1)[-1]
+                if stem.endswith(".md"):
+                    stem = stem[:-3]
+                meta_key = normalize_path(f"raw/videos-meta/{stem}.meta.md")
+                idx.meta_to_slug.setdefault(meta_key, slug)
+
+        fsp = meta["first_source_path"]
+        if fsp and meta["source_sha256"]:
+            idx.path_to_sha[normalize_path(fsp)] = meta["source_sha256"]
+
+        # lint material
+        if fsp and not meta["source_sha256"] and not meta["source_sha256_composite"]:
+            idx.missing_sha.append(slug)
+        if meta["source_sha256_composite"] and meta["covered_paths"]:
+            idx.composites.append((slug, meta["covered_paths"], meta["source_sha256_composite"]))
+
+    return idx
+
+
 def parse_args(argv):
     parser = argparse.ArgumentParser(
         prog="scan-raw.sh",

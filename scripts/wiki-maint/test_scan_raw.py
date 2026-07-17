@@ -209,6 +209,89 @@ class CollectFilesTest(unittest.TestCase):
         self.assertEqual(ns.paths, [])
 
 
+class NormalizeTest(unittest.TestCase):
+    def test_nfc_and_apostrophe_fold(self):
+        # U+2019 -> U+0027
+        self.assertEqual(scan_raw.normalize_path("l’ete.md"), "l'ete.md")
+        # NFC: decomposed e + combining acute -> precomposed
+        self.assertEqual(scan_raw.normalize_path("é.md"),
+                         unicodedata.normalize("NFC", "é.md"))
+
+
+class FrontmatterTest(unittest.TestCase):
+    def test_fields_only_inside_block(self):
+        text = ("---\n"
+                "type: source\n"
+                "source_path: raw/notes/real.md\n"
+                "---\n"
+                "body mentions source_path: raw/notes/ghost.md\n")
+        meta = scan_raw.parse_source_page(text)
+        self.assertEqual(meta["indexed_paths"], ["raw/notes/real.md"])
+        self.assertNotIn("raw/notes/ghost.md", meta["indexed_paths"])
+
+    def test_source_path_list_and_covered_and_legacy(self):
+        text = ("---\n"
+                "source_path:\n"
+                "  - raw/a.md\n"
+                "  - raw/b.md\n"
+                "covered_paths:\n"
+                "  - raw/c.md\n"
+                "sources:\n"
+                "  - raw/legacy.md\n"
+                "source_sha256: abc123\n"
+                "---\n")
+        meta = scan_raw.parse_source_page(text)
+        self.assertEqual(meta["indexed_paths"],
+                         ["raw/a.md", "raw/b.md", "raw/c.md", "raw/legacy.md"])
+        self.assertEqual(meta["first_source_path"], "raw/a.md")
+        self.assertEqual(meta["source_sha256"], "abc123")
+        self.assertEqual(meta["covered_paths"], ["raw/c.md"])
+
+    def test_no_frontmatter_yields_nothing(self):
+        meta = scan_raw.parse_source_page("no fm here\nsource_path: raw/x.md\n")
+        self.assertEqual(meta["indexed_paths"], [])
+
+
+class BuildIndexTest(unittest.TestCase):
+    def _sources(self, tmp, pages):
+        d = tmp / "wiki" / "sources"
+        d.mkdir(parents=True, exist_ok=True)
+        for slug, body in pages.items():
+            (d / f"{slug}.md").write_text(body, encoding="utf-8")
+        return str(d)
+
+    def test_exact_and_sha_indexed(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            sd = self._sources(tmp, {
+                "s": "---\nsource_path: raw/notes/a.md\nsource_sha256: deadbeef\n---\n",
+            })
+            idx = scan_raw.build_index(sd)
+            self.assertEqual(idx.path_to_slug[scan_raw.normalize_path("raw/notes/a.md")], "s")
+            self.assertEqual(idx.path_to_sha[scan_raw.normalize_path("raw/notes/a.md")], "deadbeef")
+
+    def test_implicit_dir_depth_gate(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            sd = self._sources(tmp, {
+                "deep": "---\nsource_path: raw/deep/a/b/c/anchor.md\n---\n",
+                "shallow": "---\nsource_path: raw/shallow/b/anchor.md\n---\n",
+            })
+            idx = scan_raw.build_index(sd)
+            self.assertIn(scan_raw.normalize_path("raw/deep/a/b/c/"), idx.dir_to_slug)
+            self.assertNotIn(scan_raw.normalize_path("raw/shallow/b/"), idx.dir_to_slug)
+
+    def test_videos_meta_map(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            sd = self._sources(tmp, {
+                "t": "---\nsource_path: raw/transcripts/vid.md\n---\n",
+            })
+            idx = scan_raw.build_index(sd)
+            self.assertEqual(
+                idx.meta_to_slug[scan_raw.normalize_path("raw/videos-meta/vid.meta.md")], "t")
+
+
 def _stage(tmp):
     """Build the parity fixture and copy BOTH scripts into it so the wrapper
     resolves VAULT_ROOT to the fixture and can exec the engine."""
