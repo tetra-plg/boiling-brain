@@ -78,7 +78,8 @@ except Exception:
     # closes this whole class of bypass by construction instead of
     # enumerating dangerous syntax forms one at a time.
     SAFE_ARG='[A-Za-z0-9_./-]+'
-    if [[ "$command" =~ ^bash\ scripts/wiki-maint/scan-raw\.sh(\ raw(/$SAFE_ARG)?)?$ ]]; then
+    SCAN_FLAG='(--force|--orphans|--pending|--format=json)'
+    if [[ "$command" =~ ^bash\ scripts/wiki-maint/scan-raw\.sh(\ $SCAN_FLAG)*(\ raw(/$SAFE_ARG)?)?$ ]]; then
       exit 0
     fi
     if [[ "$command" =~ ^shasum\ -a\ 256\ raw/$SAFE_ARG$ ]]; then
