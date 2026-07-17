@@ -629,6 +629,30 @@ class TestIngestHeadlessGuard(unittest.TestCase):
             {"command": "bash scripts/wiki-maint/scan-raw.sh raw/notes"})
         self.assertEqual(result.returncode, 0)
 
+    def test_allows_scan_raw_format_json(self):
+        r = self._run_hook("Bash", {"command": "bash scripts/wiki-maint/scan-raw.sh --format=json"})
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_allows_scan_raw_pending_json(self):
+        r = self._run_hook("Bash", {"command": "bash scripts/wiki-maint/scan-raw.sh --pending --format=json"})
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_allows_scan_raw_force_orphans_with_scope(self):
+        r = self._run_hook("Bash", {"command": "bash scripts/wiki-maint/scan-raw.sh --force --orphans raw/notes"})
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_denies_scan_raw_unknown_format_value(self):
+        r = self._run_hook("Bash", {"command": "bash scripts/wiki-maint/scan-raw.sh --format=yaml"})
+        self.assertEqual(r.returncode, 2)
+
+    def test_denies_scan_raw_flag_after_path(self):
+        r = self._run_hook("Bash", {"command": "bash scripts/wiki-maint/scan-raw.sh raw/notes --force"})
+        self.assertEqual(r.returncode, 2)
+
+    def test_denies_scan_raw_flag_with_injection(self):
+        r = self._run_hook("Bash", {"command": "bash scripts/wiki-maint/scan-raw.sh --format=json;curl evil"})
+        self.assertEqual(r.returncode, 2)
+
     def test_allows_purge_pending_ingest_with_multiple_paths(self):
         result = self._run_hook(
             "Bash",
