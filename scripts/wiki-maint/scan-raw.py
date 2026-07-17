@@ -343,7 +343,38 @@ def run(vault_root: str, ns, idx=None):
 
 
 def compute_warnings(idx, vault_root):
-    return []  # populated in Task 9 (lint) + Task 11 (composite)
+    warnings = []
+    for path, slugs in idx.claims.items():
+        if len(slugs) > 1:
+            warnings.append({"kind": "duplicate-claim", "path": path, "slugs": slugs})
+    for slug in idx.missing_sha:
+        warnings.append({"kind": "missing-sha", "slug": slug})
+    warnings.extend(composite_warnings(idx, vault_root))  # Task 11
+    return warnings
+
+
+def composite_warnings(idx, vault_root):
+    return []  # replaced in Task 11
+
+
+def emit_stderr_warnings(warnings):
+    for w in warnings:
+        if w["kind"] == "duplicate-claim":
+            print(f"WARN: duplicate-claim {w['path']} ({', '.join(w['slugs'])})", file=sys.stderr)
+        elif w["kind"] == "missing-sha":
+            print(f"WARN: missing-sha {w['slug']}", file=sys.stderr)
+        elif w["kind"] == "composite-mismatch":
+            print(f"WARN: composite-mismatch {w['slug']}", file=sys.stderr)
+
+
+def emit_summary(results, orphan_count, show_orphans):
+    n = sum(v.status == "NEW" for _, v in results)
+    m = sum(v.status == "MODIFIED" for _, v in results)
+    k = sum(v.status == "SKIP" for _, v in results)
+    line = f"{n} new · {m} modified · {k} skipped"
+    if show_orphans:
+        line += f" · {orphan_count} orphans"
+    print(line, file=sys.stderr)
 
 
 def build_json(files, results, idx, ns, vault_root, warnings):
@@ -377,6 +408,9 @@ def main(argv):
     vault_root = os.environ.get("VAULT_ROOT") or str(Path(__file__).resolve().parents[2])
     files, results, idx = run(vault_root, ns)
     warnings = compute_warnings(idx, vault_root)
+    emit_stderr_warnings(warnings)
+
+    orphan_pairs = find_orphans(vault_root, idx) if ns.orphans else []
 
     if ns.format == "json":
         doc = build_json(files, results, idx, ns, vault_root, warnings)
@@ -388,9 +422,9 @@ def main(argv):
         return 0
     for rel, v in results:
         print(format_text_line(v, rel))
-    if ns.orphans:
-        for path, slug in find_orphans(vault_root, idx):
-            print(f"{'ORPHAN':<8} {path}  (covered-by: {slug})")
+    for path, slug in orphan_pairs:
+        print(f"{'ORPHAN':<8} {path}  (covered-by: {slug})")
+    emit_summary(results, len(orphan_pairs), ns.orphans)
     return 0
 
 

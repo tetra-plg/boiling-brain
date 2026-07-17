@@ -448,6 +448,52 @@ class JsonFormatTest(unittest.TestCase):
             self.assertEqual(doc["counts"]["orphans"], 1)
 
 
+class LintTest(unittest.TestCase):
+    def test_duplicate_claim_warns_on_stderr(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            d = tmp / "wiki" / "sources"; d.mkdir(parents=True)
+            (d / "a.md").write_text("---\nsource_path: raw/dup.md\n---\n")
+            (d / "b.md").write_text("---\nsource_path: raw/dup.md\n---\n")
+            r = subprocess.run(["python3", str(HERE / "scan-raw.py")],
+                               capture_output=True, text=True,
+                               env=dict(os.environ, VAULT_ROOT=str(tmp)))
+            self.assertIn("WARN: duplicate-claim raw/dup.md", r.stderr)
+
+    def test_missing_sha_warns(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            d = tmp / "wiki" / "sources"; d.mkdir(parents=True)
+            (d / "nosha.md").write_text("---\nsource_path: raw/x.md\n---\n")
+            r = subprocess.run(["python3", str(HERE / "scan-raw.py")],
+                               capture_output=True, text=True,
+                               env=dict(os.environ, VAULT_ROOT=str(tmp)))
+            self.assertIn("WARN: missing-sha nosha", r.stderr)
+
+    def test_summary_line_on_stderr(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            p = tmp / "raw" / "new.md"; p.parent.mkdir(parents=True); p.write_text("x\n")
+            (tmp / "wiki" / "sources").mkdir(parents=True)
+            r = subprocess.run(["python3", str(HERE / "scan-raw.py")],
+                               capture_output=True, text=True,
+                               env=dict(os.environ, VAULT_ROOT=str(tmp)))
+            self.assertIn("1 new · 0 modified · 0 skipped", r.stderr)
+
+    def test_lint_warnings_in_json(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            d = tmp / "wiki" / "sources"; d.mkdir(parents=True)
+            (d / "a.md").write_text("---\nsource_path: raw/dup.md\n---\n")
+            (d / "b.md").write_text("---\nsource_path: raw/dup.md\n---\n")
+            r = subprocess.run(["python3", str(HERE / "scan-raw.py"), "--format=json"],
+                               capture_output=True, text=True,
+                               env=dict(os.environ, VAULT_ROOT=str(tmp)))
+            doc = json.loads(r.stdout)
+            kinds = {w["kind"] for w in doc["warnings"]}
+            self.assertIn("duplicate-claim", kinds)
+
+
 def _stage(tmp):
     """Build the parity fixture and copy BOTH scripts into it so the wrapper
     resolves VAULT_ROOT to the fixture and can exec the engine."""
