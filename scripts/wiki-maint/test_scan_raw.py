@@ -381,6 +381,37 @@ class StrictFrontmatterDivergenceTest(unittest.TestCase):
             self.assertEqual(v.status, "NEW")
 
 
+class OrphansTest(unittest.TestCase):
+    def test_orphan_listed_when_raw_missing(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            d = tmp / "wiki" / "sources"; d.mkdir(parents=True)
+            (d / "gone.md").write_text("---\nsource_path: raw/gone.md\n---\n", encoding="utf-8")
+            idx = scan_raw.build_index(str(d))
+            self.assertEqual(scan_raw.find_orphans(str(tmp), idx), [("raw/gone.md", "gone")])
+
+    def test_no_orphan_when_present(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            raw = tmp / "raw" / "here.md"; raw.parent.mkdir(parents=True); raw.write_text("x\n")
+            d = tmp / "wiki" / "sources"; d.mkdir(parents=True)
+            (d / "here.md").write_text("---\nsource_path: raw/here.md\n---\n", encoding="utf-8")
+            idx = scan_raw.build_index(str(d))
+            self.assertEqual(scan_raw.find_orphans(str(tmp), idx), [])
+
+    def test_orphans_flag_appends_lines(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            raw = tmp / "raw" / "here.md"; raw.parent.mkdir(parents=True); raw.write_text("x\n")
+            d = tmp / "wiki" / "sources"; d.mkdir(parents=True)
+            (d / "here.md").write_text("---\nsource_path: raw/here.md\n---\n", encoding="utf-8")
+            (d / "gone.md").write_text("---\nsource_path: raw/gone.md\n---\n", encoding="utf-8")
+            r = subprocess.run(["python3", str(HERE / "scan-raw.py"), "--orphans"],
+                               capture_output=True, text=True,
+                               env=dict(os.environ, VAULT_ROOT=str(tmp)))
+            self.assertIn("ORPHAN   raw/gone.md  (covered-by: gone)", r.stdout)
+
+
 def _stage(tmp):
     """Build the parity fixture and copy BOTH scripts into it so the wrapper
     resolves VAULT_ROOT to the fixture and can exec the engine."""

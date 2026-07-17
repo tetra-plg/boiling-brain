@@ -317,6 +317,18 @@ def format_text_line(v: Verdict, rel: str) -> str:
     return line
 
 
+def find_orphans(vault_root: str, idx: Index):
+    seen = {}
+    for key, slug in idx.all_indexed:
+        # key is normalized; test on-disk existence of the normalized rel path
+        if key.endswith("/"):
+            continue  # explicit dir cover, not a file
+        abs_p = os.path.join(vault_root, key)
+        if not os.path.exists(abs_p) and key not in seen:
+            seen[key] = slug
+    return sorted(seen.items(), key=lambda kv: kv[0].encode("utf-8"))
+
+
 def run(vault_root: str, ns, idx=None):
     files, warnings = collect_files(vault_root, ns.paths)
     for w in warnings:
@@ -340,6 +352,9 @@ def main(argv):
         return 0
     for rel, v in results:
         print(format_text_line(v, rel))
+    if ns.orphans:
+        for path, slug in find_orphans(vault_root, idx):
+            print(f"{'ORPHAN':<8} {path}  (covered-by: {slug})")
     return 0
 
 
