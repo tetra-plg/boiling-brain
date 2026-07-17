@@ -7,6 +7,7 @@ result, 2 on lookup error (message on stderr).
 
 Examples:
   python3 wiki-cli.py search "model context protocol" --limit 5
+  python3 wiki-cli.py list-domains --json
   python3 wiki-cli.py scan-domain ia --json
   python3 wiki-cli.py scan-concepts ia --query rag --top 10
   python3 wiki-cli.py preview wiki/concepts/foo.md
@@ -44,6 +45,8 @@ def _build_parser():
         description="Query a BoilingBrain vault without an MCP client.")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
+    sub.add_parser("list-domains", parents=[common])
+
     sp = sub.add_parser("scan-domain", parents=[common])
     sp.add_argument("domain")
 
@@ -76,7 +79,10 @@ def main(argv=None):
     if args.wiki_path:
         wiki_core.configure(args.wiki_path)
     try:
-        if args.cmd == "scan-domain":
+        if args.cmd == "list-domains":
+            _emit(wiki_core.list_domains_data(),
+                  wiki_core.list_domains_md, args.json)
+        elif args.cmd == "scan-domain":
             _emit(wiki_core.scan_domain_data(args.domain),
                   wiki_core.scan_domain_md, args.json)
         elif args.cmd in _SCAN_TYPES:
