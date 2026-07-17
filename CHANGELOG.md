@@ -6,6 +6,19 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 
 ---
 
+## [v1.1.2] — 2026-07-17
+
+### Added
+
+- **`scripts/mcp/wiki-cli.sh`**: portable wrapper over `wiki-cli.py` (resolves `python3`/`python` like `scan-raw.sh`, Windows-safe against the Microsoft Store `python3` stub). The single invocation string `bash scripts/mcp/wiki-cli.sh <cmd>` is shared by the agent template, `/ingest`, the allowlist, and the headless guard.
+- **`.claude/agents/domain-expert.md.tpl`**: new **Domain orientation** section — each expert self-orients in its domain via the tiered-loading CLI (`scan-domain → drill-down → preview/read`) instead of depending on a main-injected page-title list, with a `Glob`/`Grep` fallback. Idempotence step 0, cross-refs, and `[[wikilink]]` checks now resolve through the CLI rather than guessing.
+- **`scripts/migrations/v1.1.2-domain-orientation.md`**: interactive, idempotent `/update-vault` migration that inserts the Domain orientation section into existing `<domain>-expert.md` agents and adds the `wiki-cli.sh` allowlist rule to the vault's `.claude/settings.json`.
+
+### Changed
+
+- **`.claude/commands/ingest.md`**: the spawn prompt injects a fresh `scan-domain` snapshot (counts + centrality + summaries) per spawn instead of a flat page-title list; the main context no longer builds that list.
+- **`scripts/mcp/ingest-headless-guard.sh`**: allowlists the charset-safe `wiki-cli.sh` subset (`scan-domain`, `scan-<type>` without `--query`, `list-domains`, `preview`, `read`) so headless ingest also gets the snapshot; `--query`/`search` stay denied (fall back to `Glob`/`Grep`). Guard tests extended (+10 allow/deny cases).
+
 ## [v1.1.1] — 2026-07-03
 
 ### Added
