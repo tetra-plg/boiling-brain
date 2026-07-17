@@ -4,7 +4,7 @@
 - **Spec** : `docs/superpowers/specs/2026-07-17-scan-raw-python-rewrite-design.md`
 - **Plan** : `docs/superpowers/plans/2026-07-17-scan-raw-python-rewrite.md`
 - **Objectif** : corriger le timeout de `scan-raw.sh` sur vault mature (#70) en réécrivant le moteur en Python mono-processus, + améliorations additives (JSON, `--force`/`--orphans`/`--pending`, lint d'index, détection composite), parité stdout par défaut octet-pour-octet.
-- **Statut** : 🚧 en cours — Task 9/16 livrée. **#70 corrigé** (Task 6). En cours : améliorations additives (flags, lint, composite) + docs + validation réelle.
+- **Statut** : 🚧 en cours — Task 10/16 livrée. **#70 corrigé** (Task 6). En cours : détection composite + docs + validation réelle.
 
 > Journal vivant : une ligne `## Livré` par tâche squash-mergée dans `fix/70-scan-raw-perf`. La section `## Validation RÉELLE` finale (chiffres sur le vault BoilingBrain réel) est remplie à la Task 15. Aucun chiffre inventé.
 
@@ -25,6 +25,7 @@ Norme projet (cf. mémoire `feedback_superpowers_plan_worktree_flow`) : worktree
 | 7 | `--orphans` | `scripts/wiki-maint/scan-raw.py`, `scripts/wiki-maint/test_scan_raw.py` | `find_orphans` (chemins indexés absents du disque, dédup, tri UTF-8) ; lignes `ORPHAN   <path>  (covered-by: <slug>)` après les verdicts, calcul global indépendant du scope. Golden intact (aucune ligne sans le flag). `OrphansTest` 3/3, suite 26. |
 | 8 | `--format=json` | `scripts/wiki-maint/scan-raw.py`, `scripts/wiki-maint/test_scan_raw.py` | `build_json` (contrat machine : `version`, `force`, `files[]`, `warnings`, `counts`, `orphans` si flag). Signature finale (`warnings` en param) posée dès maintenant pour éviter une réécriture en Task 9. `JsonFormatTest` 2/2, suite 28. |
 | 9 | Lint d'index + synthèse stderr | `scripts/wiki-maint/scan-raw.py`, `scripts/wiki-maint/test_scan_raw.py` | `compute_warnings` (`duplicate-claim` sur chemin revendiqué par ≥2 pages, `missing-sha` sur page sans sha/composite), `emit_stderr_warnings`, `emit_summary` (`N new · M modified · K skipped` [+ orphans]). Tout sur **stderr** → stdout par défaut intact. `LintTest` 4/4, suite 32. |
+| 10 | `--pending` (lecture seule) | `scripts/wiki-maint/scan-raw.py`, `scripts/wiki-maint/test_scan_raw.py` | `read_pending` + `run_pending` : scope = `cache/.pending-ingest`, verdicts normaux + `STALE <path> (not-on-disk)`, buckets `pending.purgeable`/`pending.stale` en JSON. **Aucune écriture du manifeste** (test dédié). `--pending` + chemin positionnel = erreur usage (exit 2). `PendingTest` 5/5, suite 37. |
 
 ## Validation RÉELLE
 

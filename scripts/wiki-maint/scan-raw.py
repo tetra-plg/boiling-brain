@@ -402,21 +402,65 @@ def build_json(files, results, idx, ns, vault_root, warnings):
     return doc
 
 
+def read_pending(vault_root: str):
+    pending = os.path.join(vault_root, "cache", ".pending-ingest")
+    if not os.path.isfile(pending):
+        return []
+    with open(pending, encoding="utf-8", errors="replace") as f:
+        return [ln.strip() for ln in f if ln.strip()]
+
+
+def run_pending(vault_root: str, idx: Index, force: bool):
+    """Classify manifest entries. Returns (results, stale) where results is a
+    list of (rel, Verdict) for on-disk entries and stale is a list of rels
+    absent from disk. Read-only: never writes the manifest."""
+    results, stale = [], []
+    for rel in read_pending(vault_root):
+        abs_p = os.path.join(vault_root, rel)
+        if os.path.isfile(abs_p):
+            results.append((rel, classify(rel, abs_p, idx, force)))
+        else:
+            stale.append(rel)
+    return results, stale
+
+
 def main(argv):
     _force_utf8()
     ns = parse_args(argv)
+    if ns.pending and ns.paths:
+        print("usage: --pending takes no positional path", file=sys.stderr)
+        return 2
     vault_root = os.environ.get("VAULT_ROOT") or str(Path(__file__).resolve().parents[2])
-    files, results, idx = run(vault_root, ns)
+    idx = build_index(os.path.join(vault_root, "wiki", "sources"))
     warnings = compute_warnings(idx, vault_root)
     emit_stderr_warnings(warnings)
 
-    orphan_pairs = find_orphans(vault_root, idx) if ns.orphans else []
+    if ns.pending:
+        results, stale = run_pending(vault_root, idx, ns.force)
+        purgeable = [rel for rel, v in results if v.status == "SKIP"]
+        if ns.format == "json":
+            files = [str(os.path.join(vault_root, rel)) for rel, _ in results]
+            doc = build_json(files, results, idx, ns, vault_root, warnings)
+            doc["pending"] = {"purgeable": purgeable, "stale": stale}
+            print(json.dumps(doc, ensure_ascii=False, indent=2))
+            return 0
+        if not results and not stale:
+            print("Nothing pending.", file=sys.stderr)
+            return 0
+        for rel, v in results:
+            print(format_text_line(v, rel))
+        for rel in stale:
+            print(f"{'STALE':<8} {rel}  (not-on-disk)")
+        emit_summary(results, 0, False)
+        return 0
 
+    # non-pending: reuse the index already built at the top of main()
+    files, results, _ = run(vault_root, ns, idx)
+    orphan_pairs = find_orphans(vault_root, idx) if ns.orphans else []
     if ns.format == "json":
         doc = build_json(files, results, idx, ns, vault_root, warnings)
         print(json.dumps(doc, ensure_ascii=False, indent=2))
         return 0
-
     if not files:
         print("No files to analyze.", file=sys.stderr)
         return 0

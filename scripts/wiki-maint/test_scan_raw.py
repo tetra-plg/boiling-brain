@@ -494,6 +494,64 @@ class LintTest(unittest.TestCase):
             self.assertIn("duplicate-claim", kinds)
 
 
+class PendingTest(unittest.TestCase):
+    def _vault(self, tmp):
+        # skip.md is covered (SKIP -> purgeable), gone.md not on disk (STALE)
+        p = tmp / "raw" / "skip.md"; p.parent.mkdir(parents=True); p.write_text("x\n")
+        sha = hashlib.sha256(b"x\n").hexdigest()
+        d = tmp / "wiki" / "sources"; d.mkdir(parents=True)
+        (d / "s.md").write_text(f"---\nsource_path: raw/skip.md\nsource_sha256: {sha}\n---\n")
+        cache = tmp / "cache"; cache.mkdir()
+        (cache / ".pending-ingest").write_text("raw/skip.md\nraw/gone.md\n", encoding="utf-8")
+        return tmp
+
+    def test_pending_text_stale_line(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = self._vault(Path(dd))
+            r = subprocess.run(["python3", str(HERE / "scan-raw.py"), "--pending"],
+                               capture_output=True, text=True,
+                               env=dict(os.environ, VAULT_ROOT=str(tmp)))
+            self.assertIn("SKIP     raw/skip.md  (covered-by: s)", r.stdout)
+            self.assertIn("STALE    raw/gone.md  (not-on-disk)", r.stdout)
+
+    def test_pending_json_buckets(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = self._vault(Path(dd))
+            r = subprocess.run(["python3", str(HERE / "scan-raw.py"), "--pending", "--format=json"],
+                               capture_output=True, text=True,
+                               env=dict(os.environ, VAULT_ROOT=str(tmp)))
+            doc = json.loads(r.stdout)
+            self.assertEqual(doc["pending"]["purgeable"], ["raw/skip.md"])
+            self.assertEqual(doc["pending"]["stale"], ["raw/gone.md"])
+
+    def test_pending_readonly_manifest_untouched(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = self._vault(Path(dd))
+            before = (tmp / "cache" / ".pending-ingest").read_text()
+            subprocess.run(["python3", str(HERE / "scan-raw.py"), "--pending"],
+                           capture_output=True, text=True,
+                           env=dict(os.environ, VAULT_ROOT=str(tmp)))
+            self.assertEqual((tmp / "cache" / ".pending-ingest").read_text(), before)
+
+    def test_pending_empty_says_nothing_pending(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd); (tmp / "wiki" / "sources").mkdir(parents=True)
+            r = subprocess.run(["python3", str(HERE / "scan-raw.py"), "--pending"],
+                               capture_output=True, text=True,
+                               env=dict(os.environ, VAULT_ROOT=str(tmp)))
+            self.assertEqual(r.returncode, 0)
+            self.assertIn("Nothing pending.", r.stderr)
+
+    def test_pending_with_path_is_usage_error(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            r = subprocess.run(["python3", str(HERE / "scan-raw.py"), "--pending", "raw/x.md"],
+                               capture_output=True, text=True,
+                               env=dict(os.environ, VAULT_ROOT=str(tmp)))
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("--pending", r.stderr)
+
+
 def _stage(tmp):
     """Build the parity fixture and copy BOTH scripts into it so the wrapper
     resolves VAULT_ROOT to the fixture and can exec the engine."""
