@@ -91,6 +91,23 @@ except Exception:
       exit 0
     fi
 
+    # wiki-cli.sh — read-only tiered-loading queries for domain orientation.
+    # Only the charset-safe subcommands are allowlisted: scan-domain / scan-<type>
+    # take a domain slug, preview / read take a wiki page path (all within
+    # SAFE_ARG), list-domains takes nothing. --query and search carry arbitrary
+    # quoted text that can't be charset-anchored, so they are intentionally NOT
+    # allowlisted — the agent falls back to Glob/Grep for those in headless mode.
+    WIKI_CLI_SCAN='scan-domain|scan-concepts|scan-entities|scan-decisions|scan-syntheses|scan-cheatsheets|scan-diagrams|scan-sources'
+    if [[ "$command" =~ ^bash\ scripts/mcp/wiki-cli\.sh\ ($WIKI_CLI_SCAN)\ $SAFE_ARG$ ]]; then
+      exit 0
+    fi
+    if [[ "$command" =~ ^bash\ scripts/mcp/wiki-cli\.sh\ list-domains$ ]]; then
+      exit 0
+    fi
+    if [[ "$command" =~ ^bash\ scripts/mcp/wiki-cli\.sh\ (preview|read)\ $SAFE_ARG$ ]]; then
+      exit 0
+    fi
+
     # Vault-local extension: kept as prefix + metachar-denylist rather than
     # a charset-anchored regex, since the vault owner controls both the
     # prefix list and the trust boundary here (analogous to how they
