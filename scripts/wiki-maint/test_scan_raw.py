@@ -69,6 +69,11 @@ def _make_vault(tmp, raw_files, sources):
     dest_script.write_text(SCRIPT.read_text(encoding="utf-8"), encoding="utf-8")
     dest_script.chmod(0o755)
 
+    # engine must ride along with the thin wrapper
+    engine = dest_script_dir / "scan-raw.py"
+    engine.write_text((HERE / "scan-raw.py").read_text(encoding="utf-8"), encoding="utf-8")
+    engine.chmod(0o755)
+
     for rel, content in raw_files.items():
         p = tmp / "raw" / rel
         p.parent.mkdir(parents=True, exist_ok=True)

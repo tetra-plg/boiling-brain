@@ -4,7 +4,7 @@
 - **Spec** : `docs/superpowers/specs/2026-07-17-scan-raw-python-rewrite-design.md`
 - **Plan** : `docs/superpowers/plans/2026-07-17-scan-raw-python-rewrite.md`
 - **Objectif** : corriger le timeout de `scan-raw.sh` sur vault mature (#70) en réécrivant le moteur en Python mono-processus, + améliorations additives (JSON, `--force`/`--orphans`/`--pending`, lint d'index, détection composite), parité stdout par défaut octet-pour-octet.
-- **Statut** : 🚧 en cours — Task 4/16 livrée (moteur produit le stdout complet, parité fonctionnelle prouvée).
+- **Statut** : 🚧 en cours — Task 6/16 livrée. **#70 corrigé** : `scan-raw.sh` est un wrapper mince vers `scan-raw.py`, parité golden via wrapper prouvée. Reste : améliorations additives (flags, lint, composite) + docs + validation réelle.
 
 > Journal vivant : une ligne `## Livré` par tâche squash-mergée dans `fix/70-scan-raw-perf`. La section `## Validation RÉELLE` finale (chiffres sur le vault BoilingBrain réel) est remplie à la Task 15. Aucun chiffre inventé.
 
@@ -20,6 +20,8 @@ Norme projet (cf. mémoire `feedback_superpowers_plan_worktree_flow`) : worktree
 | 2 | Squelette du moteur | `scripts/wiki-maint/scan-raw.py`, `scripts/wiki-maint/test_scan_raw.py` | Collecte (filtres `.sync-meta.json`/binaires, tri UTF-8 stable), `parse_args` (`--force`/`--orphans`/`--pending`/`--format`), UTF-8 forcé, `--help`. Chargement in-process du moteur (importlib). `CollectFilesTest` 4/4. |
 | 3 | Normalisation + index primaire | `scripts/wiki-maint/scan-raw.py`, `scripts/wiki-maint/test_scan_raw.py` | `normalize_path` (NFC + U+2019), parsing frontmatter **strict** (bloc `---` uniquement), `Index` + `build_index` (source_path scalaire/liste, covered_paths, `sources:` legacy, sha 1er source_path, dossiers implicites ≥4 slashes, map videos-meta→transcript, matériel lint/composite/orphans). `NormalizeTest`+`FrontmatterTest`+`BuildIndexTest` 7/7. |
 | 4 | Arbitrage + sortie texte + `--force` | `scripts/wiki-maint/scan-raw.py`, `scripts/wiki-maint/test_scan_raw.py` | `Verdict`, `classify` (cascade exact→dir→dir-implicite→transcript→NEW), `format_text_line` (formats octet-exacts), `run` (signature `idx=None` posée dès maintenant pour la Task 10). Moteur produit le stdout complet ; **parité fonctionnelle prouvée** : moteur direct == golden octet-pour-octet. `ClassifyTest`+`StrictFrontmatterDivergenceTest` 6/6, suite 23. |
+| 5 | Checkpoint (sans artefact) | — | Suite moteur complète verte avant le flip du wrapper. Pas de commit (checkpoint plan). |
+| 6 | **Flip du wrapper → #70 corrigé** | `scripts/wiki-maint/scan-raw.sh`, `scripts/wiki-maint/test_scan_raw.py` | `scan-raw.sh` 276→50 lignes : bloc `PYTHON_BIN` (#64) préservé verbatim + `export VAULT_ROOT` + `exec …/scan-raw.py "$@"`. `_make_vault` copie aussi le moteur. `GoldenParityTest` **via le wrapper** ✅. Suite 23 en ~1,0 s (vs ~3,4 s quand les hermétiques lançaient le bash complet) — moteur nettement plus rapide. |
 
 ## Validation RÉELLE
 
