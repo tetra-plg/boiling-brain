@@ -70,10 +70,12 @@ For each validated agent, launch an `Agent` call with:
 - `subagent_type`: the chosen agent.
 - **Prompt** containing:
   - Path of the raw file to ingest.
-  - List of titles of existing pages in the domain (`wiki/entities/`, `wiki/concepts/`, `wiki/cheatsheets/`, etc. depending on the agent's deliverables).
+  - A fresh domain snapshot: run `bash scripts/mcp/wiki-cli.sh scan-domain <d>` and paste its output verbatim under a `## Domain snapshot` heading. Regenerate it for every spawn (never once per batch) so intra-batch pages created by earlier sources are visible. If the command fails (or is denied in `--headless` mode), omit the snapshot — the agent produces its own via its Domain orientation reflex.
   - Path of `wiki/domains/<d>.md`.
   - The full content of `.claude/agent-output-contract.md`.
   - Instruction: execute the ingest end-to-end, then return the three blocks (`## Ingest summary`, `## Radar items`, `## Evolution suggestions`) per the contract. The agent **does not write** to `wiki/log.md`, `wiki/radar.md`, or `.claude/agents/*.suggestions.md` — the main context handles propagation.
+
+The main context no longer builds a flat page-title list — the snapshot (counts + centrality + summaries) is both cheaper and richer, and the agent drills down on demand with the same CLI.
 
 Cross-domain → multiple agents in parallel (same multi-tool call).
 

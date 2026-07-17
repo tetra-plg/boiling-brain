@@ -781,6 +781,59 @@ class TestIngestHeadlessGuard(unittest.TestCase):
             {"command": "bash scripts/wiki-maint/scan-raw.sh ../../etc"})
         self.assertEqual(result.returncode, 2)
 
+    # wiki-cli.sh read-only orientation queries: only the charset-safe subset
+    # is allowlisted. --query / search (arbitrary quoted text) stay denied.
+    def test_allows_wiki_cli_scan_domain(self):
+        result = self._run_hook(
+            "Bash", {"command": "bash scripts/mcp/wiki-cli.sh scan-domain ia"})
+        self.assertEqual(result.returncode, 0)
+
+    def test_allows_wiki_cli_list_domains(self):
+        result = self._run_hook(
+            "Bash", {"command": "bash scripts/mcp/wiki-cli.sh list-domains"})
+        self.assertEqual(result.returncode, 0)
+
+    def test_allows_wiki_cli_scan_concepts(self):
+        result = self._run_hook(
+            "Bash", {"command": "bash scripts/mcp/wiki-cli.sh scan-concepts ia"})
+        self.assertEqual(result.returncode, 0)
+
+    def test_allows_wiki_cli_preview(self):
+        result = self._run_hook(
+            "Bash", {"command": "bash scripts/mcp/wiki-cli.sh preview wiki/concepts/foo.md"})
+        self.assertEqual(result.returncode, 0)
+
+    def test_allows_wiki_cli_read(self):
+        result = self._run_hook(
+            "Bash", {"command": "bash scripts/mcp/wiki-cli.sh read wiki/sources/x.md"})
+        self.assertEqual(result.returncode, 0)
+
+    def test_denies_wiki_cli_scan_with_query_flag(self):
+        result = self._run_hook(
+            "Bash",
+            {"command": 'bash scripts/mcp/wiki-cli.sh scan-concepts ia --query "model context protocol"'})
+        self.assertEqual(result.returncode, 2)
+
+    def test_denies_wiki_cli_search(self):
+        result = self._run_hook(
+            "Bash", {"command": 'bash scripts/mcp/wiki-cli.sh search "anything"'})
+        self.assertEqual(result.returncode, 2)
+
+    def test_denies_wiki_cli_scan_domain_with_chained_command(self):
+        result = self._run_hook(
+            "Bash", {"command": "bash scripts/mcp/wiki-cli.sh scan-domain ia; rm -rf /"})
+        self.assertEqual(result.returncode, 2)
+
+    def test_denies_wiki_cli_scan_domain_with_command_substitution(self):
+        result = self._run_hook(
+            "Bash", {"command": "bash scripts/mcp/wiki-cli.sh scan-domain $(whoami)"})
+        self.assertEqual(result.returncode, 2)
+
+    def test_denies_wiki_cli_preview_path_traversal(self):
+        result = self._run_hook(
+            "Bash", {"command": "bash scripts/mcp/wiki-cli.sh preview wiki/../etc/passwd"})
+        self.assertEqual(result.returncode, 2)
+
 
 if __name__ == "__main__":
     unittest.main()
