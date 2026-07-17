@@ -7,10 +7,15 @@ needs) so each scenario (missing python3, python-only, broken interpreter)
 is deterministic regardless of what's installed on the host running the
 suite.
 """
+import hashlib
+import importlib.util
+import json
+import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import unicodedata
 import unittest
 from pathlib import Path
 
@@ -21,6 +26,10 @@ SCRIPT = HERE / "scan-raw.sh"
 BASH = shutil.which("bash")
 REAL_PYTHON = sys.executable
 FIXTURE_GOLDEN = HERE / "fixtures" / "scan-raw"
+
+_engine_spec = importlib.util.spec_from_file_location("scan_raw", HERE / "scan-raw.py")
+scan_raw = importlib.util.module_from_spec(_engine_spec)
+_engine_spec.loader.exec_module(scan_raw)
 
 REQUIRED_TOOLS = ["find", "grep", "sed", "sort", "sha256sum", "dirname", "basename", "wc", "tr", "cut"]
 
@@ -159,6 +168,45 @@ class PythonResolutionTest(unittest.TestCase):
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             self.assertIn("SKIP     raw/foo.md  (covered-by: foo)", r.stdout)
             self.assertTrue(marker_file.exists(), "PYTHON_BIN override was not invoked")
+
+
+class CollectFilesTest(unittest.TestCase):
+    def _vault(self, tmp):
+        for rel in ["raw/notes/a.md", "raw/notes/b.md", "raw/notes/pic.png",
+                    "raw/notes/x.sync-meta.json", "raw/other/c.md"]:
+            p = tmp / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("x\n", encoding="utf-8")
+        return tmp
+
+    def test_no_arg_scans_all_raw_filtered_sorted(self):
+        with tempfile.TemporaryDirectory() as d:
+            v = self._vault(Path(d))
+            files, warns = scan_raw.collect_files(str(v), [])
+            rels = [f[len(str(v)) + 1:] for f in files]
+            self.assertEqual(rels, ["raw/notes/a.md", "raw/notes/b.md", "raw/other/c.md"])
+            self.assertEqual(warns, [])
+
+    def test_single_file_arg(self):
+        with tempfile.TemporaryDirectory() as d:
+            v = self._vault(Path(d))
+            files, warns = scan_raw.collect_files(str(v), ["raw/notes/a.md"])
+            self.assertEqual([f[len(str(v)) + 1:] for f in files], ["raw/notes/a.md"])
+
+    def test_missing_path_warns_and_continues(self):
+        with tempfile.TemporaryDirectory() as d:
+            v = self._vault(Path(d))
+            files, warns = scan_raw.collect_files(str(v), ["raw/nope.md"])
+            self.assertEqual(files, [])
+            self.assertEqual(warns, ["path not found: raw/nope.md"])
+
+    def test_parse_args_defaults(self):
+        ns = scan_raw.parse_args([])
+        self.assertFalse(ns.force)
+        self.assertFalse(ns.orphans)
+        self.assertFalse(ns.pending)
+        self.assertEqual(ns.format, "text")
+        self.assertEqual(ns.paths, [])
 
 
 def _stage(tmp):
