@@ -292,6 +292,90 @@ class BuildIndexTest(unittest.TestCase):
                 idx.meta_to_slug[scan_raw.normalize_path("raw/videos-meta/vid.meta.md")], "t")
 
 
+class ClassifyTest(unittest.TestCase):
+    def _idx(self, tmp, pages):
+        d = tmp / "wiki" / "sources"
+        d.mkdir(parents=True, exist_ok=True)
+        for slug, body in pages.items():
+            (d / f"{slug}.md").write_text(body, encoding="utf-8")
+        return scan_raw.build_index(str(d))
+
+    def test_exact_skip_when_sha_matches(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            raw = tmp / "raw" / "notes" / "a.md"
+            raw.parent.mkdir(parents=True, exist_ok=True)
+            raw.write_text("x\n", encoding="utf-8")
+            sha = hashlib.sha256(b"x\n").hexdigest()
+            idx = self._idx(tmp, {"s": f"---\nsource_path: raw/notes/a.md\nsource_sha256: {sha}\n---\n"})
+            v = scan_raw.classify("raw/notes/a.md", str(raw), idx, force=False)
+            self.assertEqual((v.status, v.covered_by, v.reason), ("SKIP", "s", "exact"))
+
+    def test_exact_modified_when_sha_diverges(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            raw = tmp / "raw" / "notes" / "a.md"
+            raw.parent.mkdir(parents=True, exist_ok=True)
+            raw.write_text("new\n", encoding="utf-8")
+            idx = self._idx(tmp, {"s": "---\nsource_path: raw/notes/a.md\nsource_sha256: oldsha\n---\n"})
+            v = scan_raw.classify("raw/notes/a.md", str(raw), idx, force=False)
+            self.assertEqual((v.status, v.reason), ("MODIFIED", "sha-changed"))
+
+    def test_force_turns_skip_into_modified_forced(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            raw = tmp / "raw" / "notes" / "a.md"
+            raw.parent.mkdir(parents=True, exist_ok=True)
+            raw.write_text("x\n", encoding="utf-8")
+            sha = hashlib.sha256(b"x\n").hexdigest()
+            idx = self._idx(tmp, {"s": f"---\nsource_path: raw/notes/a.md\nsource_sha256: {sha}\n---\n"})
+            v = scan_raw.classify("raw/notes/a.md", str(raw), idx, force=True)
+            self.assertEqual((v.status, v.reason, v.covered_by), ("MODIFIED", "forced", "s"))
+
+    def test_new_when_unmatched(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            idx = self._idx(tmp, {})
+            v = scan_raw.classify("raw/notes/z.md", "/nope", idx, force=False)
+            self.assertEqual(v.status, "NEW")
+
+    def test_format_lines_byte_exact(self):
+        V = scan_raw.Verdict
+        self.assertEqual(scan_raw.format_text_line(V("NEW"), "raw/z.md"), "NEW      raw/z.md")
+        self.assertEqual(scan_raw.format_text_line(V("SKIP", "s", "exact"), "raw/a.md"),
+                         "SKIP     raw/a.md  (covered-by: s)")
+        self.assertEqual(scan_raw.format_text_line(V("MODIFIED", "s", "sha-changed"), "raw/a.md"),
+                         "MODIFIED raw/a.md  (covered-by: s, sha-changed)")
+        self.assertEqual(scan_raw.format_text_line(V("SKIP", "d", "dir"), "raw/a.md"),
+                         "SKIP     raw/a.md  (covered-by-dir: d)")
+        self.assertEqual(scan_raw.format_text_line(V("SKIP", "d", "dir-implicit"), "raw/a.md"),
+                         "SKIP     raw/a.md  (covered-by-dir-implicit: d)")
+        self.assertEqual(scan_raw.format_text_line(V("SKIP", "t", "transcript"), "raw/a.md"),
+                         "SKIP     raw/a.md  (covered-by-transcript: t)")
+        self.assertEqual(scan_raw.format_text_line(V("MODIFIED", "s", "forced"), "raw/a.md"),
+                         "MODIFIED raw/a.md  (covered-by: s, forced)")
+
+
+class StrictFrontmatterDivergenceTest(unittest.TestCase):
+    """The one intentional default-verdict divergence (spec §5.2): a source_path
+    that appears in the BODY (not the frontmatter) is NOT indexed, so its raw
+    file is NEW under Python (it was a phantom SKIP under the old bash)."""
+    def test_body_motif_not_indexed(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            raw = tmp / "raw" / "notes" / "ghost.md"
+            raw.parent.mkdir(parents=True, exist_ok=True)
+            raw.write_text("x\n", encoding="utf-8")
+            d = tmp / "wiki" / "sources"
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "s.md").write_text(
+                "---\ntype: source\nsource_path: raw/notes/real.md\n---\n"
+                "prose that mentions\nsource_path: raw/notes/ghost.md\n", encoding="utf-8")
+            idx = scan_raw.build_index(str(d))
+            v = scan_raw.classify("raw/notes/ghost.md", str(raw), idx, force=False)
+            self.assertEqual(v.status, "NEW")
+
+
 def _stage(tmp):
     """Build the parity fixture and copy BOTH scripts into it so the wrapper
     resolves VAULT_ROOT to the fixture and can exec the engine."""

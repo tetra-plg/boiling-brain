@@ -240,17 +240,106 @@ def parse_args(argv):
     return parser.parse_args(argv)
 
 
+def sha256_file(abs_path: str) -> str:
+    h = hashlib.sha256()
+    with open(abs_path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+class Verdict:
+    def __init__(self, status, covered_by=None, reason=None, sha_stored=None, sha_current=None):
+        self.status = status
+        self.covered_by = covered_by
+        self.reason = reason
+        self.sha_stored = sha_stored
+        self.sha_current = sha_current
+
+
+def classify(rel: str, abs_path: str, idx: Index, force: bool) -> Verdict:
+    key = normalize_path(rel)
+
+    # 1. exact match on source_path / covered_paths
+    if key in idx.path_to_slug:
+        slug = idx.path_to_slug[key]
+        stored = idx.path_to_sha.get(key)
+        if stored:
+            current = sha256_file(abs_path)
+            if current != stored:
+                return Verdict("MODIFIED", slug, "sha-changed", stored, current)
+            if force:
+                return Verdict("MODIFIED", slug, "forced", stored, current)
+            return Verdict("SKIP", slug, "exact", stored, current)
+        if force:
+            return Verdict("MODIFIED", slug, "forced")
+        return Verdict("SKIP", slug, "exact")
+
+    # 2. parent-dir match (explicit trailing-slash cover)
+    parent = rel
+    while True:
+        parent = os.path.dirname(parent)
+        if parent in (".", "raw", ""):
+            break
+        pkey = normalize_path(parent + "/")
+        if pkey in idx.path_to_slug:
+            slug = idx.path_to_slug[pkey]
+            return Verdict("MODIFIED" if force else "SKIP", slug, "forced" if force else "dir")
+
+    # 3. implicit-dir match (sibling of an indexed file, depth >= 4)
+    rel_dir = normalize_path(os.path.dirname(rel) + "/")
+    if rel_dir in idx.dir_to_slug:
+        slug = idx.dir_to_slug[rel_dir]
+        return Verdict("MODIFIED" if force else "SKIP", slug, "forced" if force else "dir-implicit")
+
+    # 4. videos-meta -> transcript
+    if key in idx.meta_to_slug:
+        slug = idx.meta_to_slug[key]
+        return Verdict("MODIFIED" if force else "SKIP", slug, "forced" if force else "transcript")
+
+    return Verdict("NEW")
+
+
+_DETAIL = {
+    "exact": "covered-by: {slug}",
+    "sha-changed": "covered-by: {slug}, sha-changed",
+    "dir": "covered-by-dir: {slug}",
+    "dir-implicit": "covered-by-dir-implicit: {slug}",
+    "transcript": "covered-by-transcript: {slug}",
+    "forced": "covered-by: {slug}, forced",
+}
+
+
+def format_text_line(v: Verdict, rel: str) -> str:
+    line = f"{v.status:<8} {rel}"
+    if v.reason in _DETAIL:
+        line += "  (" + _DETAIL[v.reason].format(slug=v.covered_by) + ")"
+    return line
+
+
+def run(vault_root: str, ns, idx=None):
+    files, warnings = collect_files(vault_root, ns.paths)
+    for w in warnings:
+        print(f"WARN: {w}", file=sys.stderr)
+    if idx is None:
+        idx = build_index(os.path.join(vault_root, "wiki", "sources"))
+    results = []
+    for abs_path in files:
+        rel = os.path.relpath(abs_path, vault_root).replace(os.sep, "/")
+        results.append((rel, classify(rel, abs_path, idx, ns.force)))
+    return files, results, idx
+
+
 def main(argv):
     _force_utf8()
     ns = parse_args(argv)
     vault_root = os.environ.get("VAULT_ROOT") or str(Path(__file__).resolve().parents[2])
-    files, warnings = collect_files(vault_root, ns.paths)
-    for w in warnings:
-        print(f"WARN: {w}", file=sys.stderr)
+    files, results, idx = run(vault_root, ns)
     if not files:
         print("No files to analyze.", file=sys.stderr)
         return 0
-    # classification wired in Task 4
+    for rel, v in results:
+        print(format_text_line(v, rel))
     return 0
 
 
