@@ -552,6 +552,61 @@ class PendingTest(unittest.TestCase):
             self.assertIn("--pending", r.stderr)
 
 
+class CompositeTest(unittest.TestCase):
+    def _sh(self, b): return hashlib.sha256(b).hexdigest()
+
+    def test_canonical_formula_matches_shasum_pipeline(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            for rel, content in [("raw/b.md", b"beta\n"), ("raw/a.md", b"alpha\n")]:
+                p = tmp / rel; p.parent.mkdir(parents=True, exist_ok=True); p.write_bytes(content)
+            # expected: sorted lexicographically -> a.md then b.md
+            expected_stream = (f"{self._sh(b'alpha\n')}  raw/a.md\n"
+                               f"{self._sh(b'beta\n')}  raw/b.md\n").encode()
+            expected = hashlib.sha256(expected_stream).hexdigest()
+            got = scan_raw.compute_composite(["raw/b.md", "raw/a.md"], str(tmp))
+            self.assertEqual(got, expected)
+
+    def test_missing_covered_file_returns_none(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            self.assertIsNone(scan_raw.compute_composite(["raw/nope.md"], str(tmp)))
+
+    def test_composite_mismatch_warns(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            for rel, c in [("raw/1.md", "one\n"), ("raw/2.md", "two\n")]:
+                p = tmp / rel; p.parent.mkdir(parents=True, exist_ok=True); p.write_text(c)
+            d = tmp / "wiki" / "sources"; d.mkdir(parents=True)
+            (d / "m.md").write_text(
+                "---\nsource_path: raw/1.md\nsource_sha256_composite: deadbeef\n"
+                "covered_paths:\n  - raw/2.md\n---\n")
+            r = subprocess.run(["python3", str(HERE / "scan-raw.py"), "--format=json"],
+                               capture_output=True, text=True,
+                               env=dict(os.environ, VAULT_ROOT=str(tmp)))
+            doc = json.loads(r.stdout)
+            cm = [w for w in doc["warnings"] if w["kind"] == "composite-mismatch"]
+            self.assertEqual(len(cm), 1)
+            self.assertEqual(cm[0]["slug"], "m")
+            self.assertEqual(cm[0]["stored"], "deadbeef")
+
+    def test_composite_intact_no_warn(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            for rel, c in [("raw/1.md", "one\n"), ("raw/2.md", "two\n")]:
+                p = tmp / rel; p.parent.mkdir(parents=True, exist_ok=True); p.write_text(c)
+            good = scan_raw.compute_composite(["raw/1.md", "raw/2.md"], str(tmp))
+            d = tmp / "wiki" / "sources"; d.mkdir(parents=True)
+            (d / "m.md").write_text(
+                f"---\nsource_path: raw/1.md\nsource_sha256_composite: {good}\n"
+                "covered_paths:\n  - raw/1.md\n  - raw/2.md\n---\n")
+            r = subprocess.run(["python3", str(HERE / "scan-raw.py"), "--format=json"],
+                               capture_output=True, text=True,
+                               env=dict(os.environ, VAULT_ROOT=str(tmp)))
+            doc = json.loads(r.stdout)
+            self.assertEqual([w for w in doc["warnings"] if w["kind"] == "composite-mismatch"], [])
+
+
 def _stage(tmp):
     """Build the parity fixture and copy BOTH scripts into it so the wrapper
     resolves VAULT_ROOT to the fixture and can exec the engine."""

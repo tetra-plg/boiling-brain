@@ -353,8 +353,28 @@ def compute_warnings(idx, vault_root):
     return warnings
 
 
+def compute_composite(covered_paths, vault_root):
+    """Canonical composite: sha256 over, for each covered path sorted
+    lexicographically, the exact bytes `shasum -a 256` emits: '<hex>  <p>\\n'.
+    Returns None if any covered file is missing (that case is an orphan/lint
+    concern, not a mismatch)."""
+    stream = b""
+    for p in sorted(covered_paths):
+        abs_p = os.path.join(vault_root, p)
+        if not os.path.isfile(abs_p):
+            return None
+        stream += f"{sha256_file(abs_p)}  {p}\n".encode("utf-8")
+    return hashlib.sha256(stream).hexdigest()
+
+
 def composite_warnings(idx, vault_root):
-    return []  # replaced in Task 11
+    out = []
+    for slug, covered_paths, stored in idx.composites:
+        computed = compute_composite(covered_paths, vault_root)
+        if computed is not None and computed != stored:
+            out.append({"kind": "composite-mismatch", "slug": slug,
+                        "stored": stored, "computed": computed})
+    return out
 
 
 def emit_stderr_warnings(warnings):
