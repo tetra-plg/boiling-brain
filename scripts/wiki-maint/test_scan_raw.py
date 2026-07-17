@@ -14,10 +14,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import scan_raw_fixture  # local module, same dir
+
 HERE = Path(__file__).resolve().parent
 SCRIPT = HERE / "scan-raw.sh"
 BASH = shutil.which("bash")
 REAL_PYTHON = sys.executable
+FIXTURE_GOLDEN = HERE / "fixtures" / "scan-raw"
 
 REQUIRED_TOOLS = ["find", "grep", "sed", "sort", "sha256sum", "dirname", "basename", "wc", "tr", "cut"]
 
@@ -156,6 +159,30 @@ class PythonResolutionTest(unittest.TestCase):
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             self.assertIn("SKIP     raw/foo.md  (covered-by: foo)", r.stdout)
             self.assertTrue(marker_file.exists(), "PYTHON_BIN override was not invoked")
+
+
+def _stage(tmp):
+    """Build the parity fixture and copy BOTH scripts into it so the wrapper
+    resolves VAULT_ROOT to the fixture and can exec the engine."""
+    vault = scan_raw_fixture.build(tmp)
+    dst = vault / "scripts" / "wiki-maint"
+    dst.mkdir(parents=True, exist_ok=True)
+    shutil.copy(SCRIPT, dst / "scan-raw.sh")
+    engine = HERE / "scan-raw.py"
+    if engine.exists():
+        shutil.copy(engine, dst / "scan-raw.py")
+    return vault, dst / "scan-raw.sh"
+
+
+class GoldenParityTest(unittest.TestCase):
+    def test_default_output_matches_frozen_golden(self):
+        expected = (FIXTURE_GOLDEN / "default.golden").read_text(encoding="utf-8")
+        with tempfile.TemporaryDirectory() as d:
+            vault, script = _stage(Path(d))
+            r = subprocess.run([BASH, str(script)], capture_output=True,
+                               text=True, cwd=str(vault))
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(r.stdout, expected)
 
 
 if __name__ == "__main__":
