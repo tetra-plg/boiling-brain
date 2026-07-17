@@ -4,7 +4,7 @@
 - **Spec** : `docs/superpowers/specs/2026-07-17-scan-raw-python-rewrite-design.md`
 - **Plan** : `docs/superpowers/plans/2026-07-17-scan-raw-python-rewrite.md`
 - **Objectif** : corriger le timeout de `scan-raw.sh` sur vault mature (#70) en réécrivant le moteur en Python mono-processus, + améliorations additives (JSON, `--force`/`--orphans`/`--pending`, lint d'index, détection composite), parité stdout par défaut octet-pour-octet.
-- **Statut** : 🚧 en cours — Tasks 1-13/16 livrées. **#70 corrigé** (Task 6), features moteur (1-11). Tasks 12 & 13 exécutées **en parallèle** (2 worktrees, 1 subagent chacune). Reste : ingest.md + CHANGELOG (14), validation réelle sur le vault (15), PR (16).
+- **Statut** : 🚧 en cours — Tasks 1-14/16 livrées. **#70 corrigé** (Task 6), features moteur (1-11), doc + guard (12-13), appelants + CHANGELOG (14). Reste : validation réelle sur le vault (15), PR (16).
 
 > Journal vivant : une ligne `## Livré` par tâche squash-mergée dans `fix/70-scan-raw-perf`. La section `## Validation RÉELLE` finale (chiffres sur le vault BoilingBrain réel) est remplie à la Task 15. Aucun chiffre inventé.
 
@@ -29,6 +29,7 @@ Norme projet (cf. mémoire `feedback_superpowers_plan_worktree_flow`) : worktree
 | 11 | Détection `composite-mismatch` | `scripts/wiki-maint/scan-raw.py`, `scripts/wiki-maint/test_scan_raw.py` | `compute_composite` (formule canonique : sha256 du flux `<hex>  <p>\n` trié) + `composite_warnings` (WARN si écart, jamais de verdict `MODIFIED`). **Cross-check confirmé** : formule Python == pipeline `shasum -a 256` réel (hash identique). `CompositeTest` 4/4, suite 41. |
 | 12 | Formule composite canonique (doc) | `.claude/rules/frontmatter.md` | Section canonique `source_sha256_composite` (formule reproductible en shell, sémantique WARN-seulement) alignée sur `compute_composite`. Exécutée **en parallèle** (subagent, worktree dédié). |
 | 13 | Guard headless + tests | `scripts/mcp/ingest-headless-guard.sh`, `scripts/mcp/test_wiki_core.py` | Regex allowlist étendue (`SCAN_FLAG` = `--force`/`--orphans`/`--pending`/`--format=json`, répétables, avant le scope optionnel). 6 tests (3 formes autorisées, 3 refusées). **41 tests guard verts** — aucune régression des refus adversariaux (process-sub, chaining, traversal, absolu). Exécutée **en parallèle** (subagent, worktree dédié). |
+| 14 | Appelants + CHANGELOG | `.claude/commands/ingest.md`, `CHANGELOG.md` | `/ingest` étape 1 consomme `--format=json` + délègue `--force` ; phase 5c purge via `--pending` (`purgeable`/`stale`) ; phase 6 orphelins via `--orphans`. CHANGELOG : entrées Fixed (réécriture) + Added (flags, JSON, lint, composite). EN. |
 
 ## Validation RÉELLE
 
