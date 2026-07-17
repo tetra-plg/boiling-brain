@@ -4,7 +4,7 @@
 - **Spec** : `docs/superpowers/specs/2026-07-17-scan-raw-python-rewrite-design.md`
 - **Plan** : `docs/superpowers/plans/2026-07-17-scan-raw-python-rewrite.md`
 - **Objectif** : corriger le timeout de `scan-raw.sh` sur vault mature (#70) en réécrivant le moteur en Python mono-processus, + améliorations additives (JSON, `--force`/`--orphans`/`--pending`, lint d'index, détection composite), parité stdout par défaut octet-pour-octet.
-- **Statut** : 🚧 en cours — Tasks 1-14/16 livrées. **#70 corrigé** (Task 6), features moteur (1-11), doc + guard (12-13), appelants + CHANGELOG (14). Reste : validation réelle sur le vault (15), PR (16).
+- **Statut** : 🚧 en cours — Tasks 1-15/16 livrées. **#70 corrigé et validé sur le vault réel** (full scan 0,22 s vs > 6 min 40 sans aboutir ; zéro écart de verdict). Reste : suite verte finale + PR (16).
 
 > Journal vivant : une ligne `## Livré` par tâche squash-mergée dans `fix/70-scan-raw-perf`. La section `## Validation RÉELLE` finale (chiffres sur le vault BoilingBrain réel) est remplie à la Task 15. Aucun chiffre inventé.
 
@@ -30,15 +30,38 @@ Norme projet (cf. mémoire `feedback_superpowers_plan_worktree_flow`) : worktree
 | 12 | Formule composite canonique (doc) | `.claude/rules/frontmatter.md` | Section canonique `source_sha256_composite` (formule reproductible en shell, sémantique WARN-seulement) alignée sur `compute_composite`. Exécutée **en parallèle** (subagent, worktree dédié). |
 | 13 | Guard headless + tests | `scripts/mcp/ingest-headless-guard.sh`, `scripts/mcp/test_wiki_core.py` | Regex allowlist étendue (`SCAN_FLAG` = `--force`/`--orphans`/`--pending`/`--format=json`, répétables, avant le scope optionnel). 6 tests (3 formes autorisées, 3 refusées). **41 tests guard verts** — aucune régression des refus adversariaux (process-sub, chaining, traversal, absolu). Exécutée **en parallèle** (subagent, worktree dédié). |
 | 14 | Appelants + CHANGELOG | `.claude/commands/ingest.md`, `CHANGELOG.md` | `/ingest` étape 1 consomme `--format=json` + délègue `--force` ; phase 5c purge via `--pending` (`purgeable`/`stale`) ; phase 6 orphelins via `--orphans`. CHANGELOG : entrées Fixed (réécriture) + Added (flags, JSON, lint, composite). EN. |
+| 15 | Validation réelle vault | `docs/buildlog/…` | Vault BoilingBrain (378 pages, 1849 raw) : full scan **0,22 s** (vs > 6 min 40 sans aboutir), **zéro écart de verdict** (parité prouvée par analyse statique §5.2 : 1 seule page à motif hors-frontmatter, chemins parasites sans fichier raw réel). Diagnostics : 281 orphelins, 51 duplicate-claim, 11 missing-sha, 6 composite-mismatch. Chiffres réels, aucun inventé. |
 
 ## Validation RÉELLE
 
-Tests réellement exécutés (worktree, Python 3.14.4) :
+### Suites automatisées (Python 3.14.4)
 
-- `GoldenParityTest.test_default_output_matches_frozen_golden` ✅ (le wrapper full-bash reproduit son propre golden — harnais prouvé correct, 1 test, ~2,3 s).
-- `PythonResolutionTest` (suite hermétique existante) ✅ 5/5 — inchangée.
+- `test_scan_raw` (moteur + golden + hermétiques) : **41/41 ✅**.
+- `test_wiki_core.TestIngestHeadlessGuard` (guard) : **41/41 ✅**.
+- `GoldenParityTest` prouve la parité stdout **octet-pour-octet** contre le bash pré-réécriture ; `PythonResolutionTest` (résolution interpréteur, #64) inchangée 5/5.
 
-_(Validation perf réelle + run différentiel bash-vs-Python sur le vault BoilingBrain : Task 15.)_
+### Vault BoilingBrain réel (Task 15)
+
+**378 pages sources, 1 849 fichiers raw** — l'échelle exacte de #70. Moteur exécuté via `VAULT_ROOT` (lecture seule, aucune modification du vault).
+
+**Perf (#70) — chiffres réels mesurés :**
+
+- Mono-fichier : **0,20 s** (cible < 5 s) ✅
+- Sous-arbre `raw/transcripts` (32 fichiers) : **< 0,1 s** ✅
+- Full scan (1 849 fichiers) : **0,22 s**, exit 0, synthèse `13 new · 0 modified · 1836 skipped` ✅
+- Ancien bash : > 6 min 40 s sans aboutir, même sur un seul fichier (artefact #70). Gain : de « ne termine jamais » à ~0,2 s.
+
+**Parité des verdicts sur le vault réel — zéro écart :**
+
+- Run OLD-bash-vs-NEW en direct **non faisable** : macOS n'a pas `timeout`, et l'ancien bash ne termine pas (c'est le symptôme #70 lui-même). Parité établie autrement, rigoureusement.
+- Sur 378 pages, **une seule** porte un motif `source_path/covered_paths/sources` **hors** frontmatter (`2026-06-08-bb-lab-journal-snapshot-fcd6511.md` — un exemple de frontmatter dans un bloc de code). L'ancien bash y indexait des chemins **parasites** (`BOI-967`, `date: …`, `--`) ; **aucun ne correspond à un fichier raw réel** → **zéro écart de verdict** OLD↔NEW. La divergence §5.2 est purement une amélioration (fin de la pollution d'index), sans effet sur la classification. Conforme au « zéro écart attendu » du plan.
+
+**Diagnostics nouveaux (invisibles à l'ancien bash) — chiffres réels :**
+
+- **281 orphelins** (pages dont le raw a disparu — la phase 6 « L orphans » n'avait jamais de source).
+- **51 `duplicate-claim`** (chemins raw revendiqués par ≥2 pages ; dernier gagnant silencieux avant).
+- **11 `missing-sha`** (pages `source_path` sans sha → check MODIFIED silencieusement sauté).
+- **6 `composite-mismatch`** (composites legacy à formule non-canonique ; WARN sans re-ingest, cf. Task 11).
 
 ## Gotchas de la passe
 
