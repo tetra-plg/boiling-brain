@@ -4,7 +4,7 @@
 - **Spec** : `docs/superpowers/specs/2026-07-17-scan-raw-python-rewrite-design.md`
 - **Plan** : `docs/superpowers/plans/2026-07-17-scan-raw-python-rewrite.md`
 - **Objectif** : corriger le timeout de `scan-raw.sh` sur vault mature (#70) en réécrivant le moteur en Python mono-processus, + améliorations additives (JSON, `--force`/`--orphans`/`--pending`, lint d'index, détection composite), parité stdout par défaut octet-pour-octet.
-- **Statut** : ✅ livré — 16/16 tâches + migration vaults (v1.1.2). **#70 corrigé et validé sur le vault réel** (full scan 0,22 s vs > 6 min 40 sans aboutir ; zéro écart de verdict). PR [#73](https://github.com/tetra-plg/boiling-brain/pull/73) vers `develop` (fermer #70 manuellement au merge — squash).
+- **Statut** : ✅ livré + mergé — 16/16 tâches + migration vaults + reconciliation develop. **#70 corrigé et validé sur le vault réel** (full scan 0,22 s vs > 6 min 40 sans aboutir ; zéro écart de verdict). PR [#73](https://github.com/tetra-plg/boiling-brain/pull/73) squash-mergée dans `develop` sous **v1.1.2** (avec #72) ; #70 fermée manuellement.
 
 > Journal vivant : une ligne `## Livré` par tâche squash-mergée dans `fix/70-scan-raw-perf`. La section `## Validation RÉELLE` finale (chiffres sur le vault BoilingBrain réel) est remplie à la Task 15. Aucun chiffre inventé.
 
@@ -75,4 +75,4 @@ Norme projet (cf. mémoire `feedback_superpowers_plan_worktree_flow`) : worktree
 
 - Mémoïsation / cache d'index : **différé** (pas écarté) — seuil de déclenchement = full scan réel > ~5 s malgré le moteur Python ; design de secours (cache de hashes fail-open) documenté dans la spec §hors-périmètre.
 - Promotion `composite-mismatch` → verdict `MODIFIED` : différée post-convergence du vault.
-- Reste à livrer : Tasks 2-16 (moteur, wrapper, flags, guard, docs, validation réelle).
+- **Reconciliation avec develop (avant merge)** : develop a livré **v1.1.2 en parallèle** (#72 domain-orientation, daté puis #74 build log). Merge de `origin/develop` dans la branche — seul conflit : `CHANGELOG.md` (résolu : `[v1.1.2]` rouverte, #70 replié à côté de #72, `template-version` reste 1.1.2, les deux migrations `v1.1.2-domain-orientation` + `v1.1.2-scan-raw-python` coexistent via suivi par slug). `ingest.md`/guard/`test_wiki_core` auto-mergés (validé par suites vertes). 3 checks CI requis verts sur le head `d129e74`. **v1.1.2 embarque donc #72 + #70.**
