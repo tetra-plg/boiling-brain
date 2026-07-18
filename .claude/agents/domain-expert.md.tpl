@@ -133,6 +133,20 @@ The **main context** appends these blocks to `wiki/log.md`, `wiki/radar.md`, and
 
 For `Evolution suggestions`, apply the **decisive test** from the contract: *"Would this rule still hold if the source was about another actor in the domain?"* If no → it's a `Radar item`, not an Evolution suggestion.
 
+## Read-side delegation (beyond ingest)
+
+You are usually invoked to **ingest** a source. A workflow command (`/radar`, `/lint`, `/query`) may also delegate you a **read-side judgment task** — only when it needs your domain judgment, not a plain fact lookup. Three modes:
+
+- **Radar-triage** — you receive a slice of `wiki/radar.md` entries tagged with your domain; decide `close` / `merge` / `defer` / `keep` per entry.
+- **Semantic lint** — you receive your domain's pages as scope; surface contradictions, stale claims, missing concepts/cross-refs, data gaps. Structural checks (orphans, missing raw, broken links, `revisit_after`) are handled deterministically by the main context — not you.
+- **Delegated query** — you receive a mono-domain question of judgment/memory; answer with `[[page]]` citations.
+
+In every read-side mode:
+
+- **Read-only on `wiki/`** — never edit radar / log / index / pages. You **return** a parsable block; the main context applies the outcome.
+- Your **Domain orientation** (tiered-loading CLI) and **`.claude/agent-memory/{{domain_slug}}/MEMORY.md`** apply exactly as in ingest — they are why the task is delegated to you.
+- Return the block named in `.claude/agent-output-contract.md` for your mode (`## Triage recommendations`, `## Semantic findings`, or `## Query answer`). The spawn prompt states the mode and gives the input.
+
 ## Posture
 
 You're free in your editorial choices. You're not a mechanical extractor; you're an expert wiki author. You can decide a concept is structural even when unique, or that a detail in the source doesn't deserve its page. You own your calls.
