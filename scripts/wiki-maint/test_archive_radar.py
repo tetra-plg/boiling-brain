@@ -171,5 +171,35 @@ class ArchiveCreationTest(unittest.TestCase):
             self.assertEqual(v.returncode, 0, v.stdout + v.stderr)
 
 
+class MultilineTest(unittest.TestCase):
+    def test_multiline_entry_captured_and_moved(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            radar = RADAR_FM + textwrap.dedent("""\
+
+                # Radar
+
+                ## Section A
+
+                - [x] parent entry resolved
+                  - sub detail one
+                  - sub detail two
+                - [ ] next open entry
+                """)
+            archive = ARCHIVE_FM + "\n# Archive\n\n## Section A\n\n- [x] prior\n"
+            write_vault(tmp, radar=radar, archive=archive)
+            r = run(tmp)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            radar_out = read(tmp, "radar.md")
+            archive_out = read(tmp, "radar-archive.md")
+            # whole block moved
+            self.assertNotIn("sub detail one", radar_out)
+            self.assertNotIn("sub detail two", radar_out)
+            self.assertIn("  - sub detail one", archive_out)
+            self.assertIn("  - sub detail two", archive_out)
+            # sibling open entry stayed
+            self.assertIn("- [ ] next open entry", radar_out)
+
+
 if __name__ == "__main__":
     unittest.main()
