@@ -6,18 +6,23 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 
 ---
 
-## [v1.1.2] — 2026-07-17
+## [v1.1.2] — unreleased
 
 ### Added
 
 - **`scripts/mcp/wiki-cli.sh`**: portable wrapper over `wiki-cli.py` (resolves `python3`/`python` like `scan-raw.sh`, Windows-safe against the Microsoft Store `python3` stub). The single invocation string `bash scripts/mcp/wiki-cli.sh <cmd>` is shared by the agent template, `/ingest`, the allowlist, and the headless guard.
 - **`.claude/agents/domain-expert.md.tpl`**: new **Domain orientation** section — each expert self-orients in its domain via the tiered-loading CLI (`scan-domain → drill-down → preview/read`) instead of depending on a main-injected page-title list, with a `Glob`/`Grep` fallback. Idempotence step 0, cross-refs, and `[[wikilink]]` checks now resolve through the CLI rather than guessing.
 - **`scripts/migrations/v1.1.2-domain-orientation.md`**: interactive, idempotent `/update-vault` migration that inserts the Domain orientation section into existing `<domain>-expert.md` agents and adds the `wiki-cli.sh` allowlist rule to the vault's `.claude/settings.json`.
+- **`scripts/wiki-maint/scan-raw.py`**: new flags on the detection engine — `--format=json` (machine contract: `files`/`orphans`/`warnings`/`pending`/`counts`, versioned), `--force` (deterministic SKIP→MODIFIED, `reason: forced`), `--orphans` (list source pages whose raw vanished), `--pending` (read-only oracle over `cache/.pending-ingest`, surfaces `purgeable`/`stale` buckets for the purge step). Index lint on stderr (`duplicate-claim`, `missing-sha`) plus a `N new · M modified · K skipped` summary. Canonical `source_sha256_composite` formula (documented in `.claude/rules/frontmatter.md`) with `composite-mismatch` detection (WARN only this pass — no MODIFIED verdict). `/ingest` step 1 now consumes the JSON contract, delegates `--force` to the script, drives phase-4c purge from `--pending`, and fills the phase-5 orphans list from `--orphans`; the headless guard allowlists the new flags. (#70)
 
 ### Changed
 
 - **`.claude/commands/ingest.md`**: the spawn prompt injects a fresh `scan-domain` snapshot (counts + centrality + summaries) per spawn instead of a flat page-title list; the main context no longer builds that list.
 - **`scripts/mcp/ingest-headless-guard.sh`**: allowlists the charset-safe `wiki-cli.sh` subset (`scan-domain`, `scan-<type>` without `--query`, `list-domains`, `preview`, `read`) so headless ingest also gets the snapshot; `--query`/`search` stay denied (fall back to `Glob`/`Grep`). Guard tests extended (+10 allow/deny cases).
+
+### Fixed
+
+- **`scripts/wiki-maint/scan-raw.sh` → `scan-raw.py`**: rewrote the state-detection engine in Python (single process) — the old bash spawned one `python3` per indexed path plus a `grep|sed` pipeline per frontmatter line, so on a mature vault (several hundred source pages, several thousand raw files) even a single-file scan blew past the 120s timeout and `/ingest` step 1 was unusable. `scan-raw.sh` is now a thin wrapper that keeps the portable `PYTHON_BIN` resolution (#61) and execs `scan-raw.py`. Default stdout is byte-for-byte identical (golden-tested against the pre-rewrite bash); stderr messages moved to English (template EN policy). One deliberate default-verdict change: `source_path`/`covered_paths` motifs are now recognised only inside the leading `---` frontmatter block, killing phantom `SKIP`s from body text. Existing vaults upgrade via `scripts/migrations/v1.1.2-scan-raw-python.md`. (#70)
 
 ## [v1.1.1] — 2026-07-03
 
