@@ -120,5 +120,34 @@ class MoveHappyPathTest(unittest.TestCase):
             self.assertIn("archived=2", r.stdout)
 
 
+class SectionRoutingTest(unittest.TestCase):
+    def test_creates_matching_section_when_absent(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            radar = RADAR_FM + "\n# Radar\n\n## New Topic\n\n- [x] resolved thing\n"
+            archive = ARCHIVE_FM + "\n# Archive\n\n## Other\n\n- [x] prior\n"
+            write_vault(tmp, radar=radar, archive=archive)
+            r = run(tmp)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            archive_out = read(tmp, "radar-archive.md")
+            self.assertIn("## New Topic", archive_out)
+            self.assertIn("- [x] resolved thing", archive_out)
+            self.assertIn("## Other", archive_out)  # existing kept
+
+    def test_headerless_entry_goes_to_generic_fallback(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            # [x] appears before any level-2 header
+            radar = RADAR_FM + "\n# Radar\n\n- [x] loose entry\n\n## Section A\n\n- [ ] open\n"
+            archive = ARCHIVE_FM + "\n# Archive\n"
+            write_vault(tmp, radar=radar, archive=archive)
+            r = run(tmp)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            archive_out = read(tmp, "radar-archive.md")
+            self.assertIn("## Handled", archive_out)
+            self.assertIn("- [x] loose entry", archive_out)
+            self.assertIn("section:Handled=1", r.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
