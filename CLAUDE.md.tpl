@@ -75,6 +75,8 @@ Operational memory lives in `.claude/agent-memory/<domain>/` (`MEMORY.md` + `pat
 
 The agent dispatch in `/ingest` proposes an agent with a confidence level + justification, then the user validates via `AskUserQuestion`. See `.claude/commands/ingest.md` for details.
 
+Beyond ingest, experts can be **selectively** delegated read-side judgment tasks — per-domain radar triage (`/radar`), the semantic pass of `/lint`, and a mono-domain judgment `/query`. Delegation is never the default: fact retrieval and cross-domain questions stay in the main context (tiered loading). See `.claude/agent-output-contract.md` (Read-side delegation contract) and the `/radar`, `/lint`, `/query` commands.
+
 ## Workflows
 
 Detailed workflows live in `.claude/commands/`. Summary table:
