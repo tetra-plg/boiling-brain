@@ -40,3 +40,25 @@ Practical heuristic:
 4. If the remainder is 0 → effective orphan.
 
 Example: a framework concept created during the ingestion of a single doc, never cross-referenced from its domain hub nor from a neighboring concept, is an orphan — even though it has 1 inbound from its parent source.
+
+## Final step — archive handled radar entries
+
+After reporting, keep the active radar lean by archiving its resolved entries.
+
+Run `python3 scripts/wiki-maint/archive-radar.py`. It moves every `- [x]` entry
+from `wiki/radar.md` into `wiki/radar-archive.md` — under the entry's original
+`## ` section (created in the archive if absent; generic `## Handled` fallback for
+entries under no section), preserving each entry's resolution text verbatim. It
+creates `wiki/radar-archive.md` on first use with a valid frontmatter and bumps
+the `updated:` date on both files. It is idempotent: with no `[x]` entry it writes
+nothing.
+
+Parse its stdout:
+
+- `archived=<N>` — if `N > 0`, add to the lint report: **"Archived N handled radar
+  entries to `wiki/radar-archive.md`."** If `N == 0`, say nothing about archiving.
+- `active=<M>` and `total_archived=<K>` — if `wiki/radar.md` / `wiki/radar-archive.md`
+  carry an entry count in their `summary_l0`, reconcile it with these numbers
+  (`M` active entries, `K` archived).
+
+This runs on every `/lint`, whole-radar, regardless of the `$ARGUMENTS` domain scope.

@@ -10,7 +10,9 @@ updated: {{bootstrap_date}}
 > Every entry carries: date, domain, type, and suggested action. Format:
 > `- [ ] **[Domain · YYYY-MM-DD]** Description. → [[link]]`
 >
-> Tick `[x]` or remove an entry once it's handled.
+> Tick `[x]` or remove an entry once it's handled. The `/lint` final step moves
+> ticked `[x]` entries to `wiki/radar-archive.md` (created on first use), grouped
+> by their original section.
 >
 > When you ask **"show me the radar"** or **"what's on the agenda today"**, Claude also reads the agent evolution suggestions accumulated in `.claude/agents/*.suggestions.md` and summarizes them at the end — recurring signals, emerging patterns, agents ready for an `/evolve-agent`.
 
