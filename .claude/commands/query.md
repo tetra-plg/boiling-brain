@@ -5,6 +5,16 @@ argument-hint: <question>
 
 Run the QUERY workflow from CLAUDE.md on: $ARGUMENTS
 
+## Delegation — when to hand off to a domain expert (selective)
+
+Before the tiered-loading steps below, classify the question:
+
+- **Delegate to the domain expert** if ALL of: (a) **mono-domain**, (b) it's a **judgment / memory** question (interpretation, recommendation, a past decision, a domain pattern) — not a plain fact lookup, and (c) a `.claude/agents/<domain>-expert.md` exists for that domain.
+  Spawn the expert in **delegated-query mode** with the question, a `bash scripts/mcp/wiki-cli.sh scan-domain <domain>` snapshot, and `.claude/agent-output-contract.md`. It returns a `## Query answer` block (with `[[page]]` citations); relay it and offer `/save` if substantial.
+- **Keep it in the main context** (tiered loading below) if: it's a **fact retrieval**, OR it's **cross-domain**, OR the domain has no expert agent.
+
+Delegation is **never the default** — most quick queries stay in the main context for interactivity. It is overridable ("answer directly, don't delegate"). Interactive multi-turn delegation is out of scope for now.
+
 ## Tiered loading — reading strategy
 
 Read as little as possible to answer accurately. Descend levels in order:
