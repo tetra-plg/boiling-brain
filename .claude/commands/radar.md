@@ -18,7 +18,7 @@ With no argument (or a light radar), just display, as the conversational "show m
 Delegation is **opt-in**, never the default. Trigger it when either:
 
 - `$ARGUMENTS` names a domain (or `--triage`) → force delegation for the targeted domain(s), **or**
-- a domain has **≥ 3 open entries** *and* a matching `.claude/agents/<domain>-expert.md` exists → propose delegating that domain's triage.
+- a domain has **≥ 3 open entries** _and_ a matching `.claude/agents/<domain>-expert.md` exists → propose delegating that domain's triage.
 
 Below the threshold, or for a domain without an expert agent, triage stays in the main context.
 

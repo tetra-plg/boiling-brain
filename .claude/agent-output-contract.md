@@ -55,10 +55,11 @@ One line per radar entry handed to the agent, prefixed with a verb:
 
 ```markdown
 ## Triage recommendations
+
 - [close] **[Domain · YYYY-MM-DD]** <entry> — <why resolved>. → [[page]]
 - [merge] **[Domain · YYYY-MM-DD]** <entry> — duplicate of <other>. → [[other]]
 - [defer] **[Domain · YYYY-MM-DD]** <entry> — still open, revisit after <trigger>.
-- [keep]  **[Domain · YYYY-MM-DD]** <entry> — valid, no action.
+- [keep] **[Domain · YYYY-MM-DD]** <entry> — valid, no action.
 ```
 
 Verb set: `close` (resolved), `merge` (fold into another entry/page), `defer` (keep + note the trigger), `keep` (valid, unchanged). The agent never edits `wiki/radar.md`.
@@ -67,6 +68,7 @@ Verb set: `close` (resolved), `merge` (fold into another entry/page), `defer` (k
 
 ```markdown
 ## Semantic findings
+
 - [contradiction] [[page-a]] vs [[page-b]] — <what conflicts>.
 - [stale-claim] [[page]] — <claim> looks outdated vs <source/date>.
 - [missing-concept] "<concept>" mentioned in [[page]] with no page (threshold met? note it).
@@ -80,6 +82,7 @@ Structural checks (orphans, missing raw sources, broken wikilinks, `revisit_afte
 
 ```markdown
 ## Query answer
+
 <answer grounded in the domain, with [[page]] citations. State explicitly if partial due to missing sources.>
 ```
 
