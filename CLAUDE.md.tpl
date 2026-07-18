@@ -86,6 +86,7 @@ Detailed workflows live in `.claude/commands/`. Summary table:
 | `/sync-repos [names]` | Immutable snapshot of tracked GitHub repos (if `tracked-repos.config.json` is present) |
 | `/query <question>` | Search the wiki with citations, optional archive |
 | `/save <slug>` | Archive the latest synthesis into `wiki/syntheses/` |
+| `/radar [domain]` | Show the radar; selectively delegate per-domain triage to domain experts |
 | `/lint` | Detect contradictions, orphans, gaps |
 | `/evolve-agent <domain>` | Curated evolution of an agent's prompt from its accumulated suggestions |
 | `/domain <add\|rename\|remove> <slug>` | Manage a domain's lifecycle post-bootstrap (instantiate / rename / strip across all canonical declarations + frontmatters + wikilinks, with bucketed validation) |
