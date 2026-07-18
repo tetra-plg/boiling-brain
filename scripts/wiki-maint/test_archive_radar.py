@@ -201,5 +201,56 @@ class MultilineTest(unittest.TestCase):
             self.assertIn("- [ ] next open entry", radar_out)
 
 
+class IdempotenceTest(unittest.TestCase):
+    def test_noop_when_no_checked_entries_is_byte_identical(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            radar = RADAR_FM + "\n# Radar\n\n## Section A\n\n- [ ] still open\n"
+            archive = ARCHIVE_FM + "\n# Archive\n\n## Section A\n\n- [x] prior\n"
+            write_vault(tmp, radar=radar, archive=archive)
+            before_radar = read(tmp, "radar.md")
+            before_archive = read(tmp, "radar-archive.md")
+            r = run(tmp)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("archived=0", r.stdout)
+            self.assertEqual(read(tmp, "radar.md"), before_radar)
+            self.assertEqual(read(tmp, "radar-archive.md"), before_archive)
+
+    def test_second_run_moves_nothing(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            radar = RADAR_FM + "\n# Radar\n\n## Section A\n\n- [x] done\n- [ ] open\n"
+            archive = ARCHIVE_FM + "\n# Archive\n\n## Section A\n\n- [x] prior\n"
+            write_vault(tmp, radar=radar, archive=archive)
+            r1 = run(tmp)
+            self.assertIn("archived=1", r1.stdout)
+            after_first = read(tmp, "radar-archive.md")
+            r2 = run(tmp)
+            self.assertIn("archived=0", r2.stdout)
+            self.assertEqual(read(tmp, "radar-archive.md"), after_first)
+
+    def test_updated_bumped_on_move(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            radar = RADAR_FM + "\n# Radar\n\n## Section A\n\n- [x] done\n"
+            archive = ARCHIVE_FM + "\n# Archive\n\n## Section A\n\n- [x] prior\n"
+            write_vault(tmp, radar=radar, archive=archive)
+            r = run(tmp, date="2026-08-15")
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("updated: 2026-08-15", read(tmp, "radar.md"))
+            self.assertIn("updated: 2026-08-15", read(tmp, "radar-archive.md"))
+
+    def test_reports_active_and_total(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            radar = RADAR_FM + "\n# Radar\n\n## Section A\n\n- [x] a\n- [ ] b\n- [ ] c\n"
+            archive = ARCHIVE_FM + "\n# Archive\n\n## Section A\n\n- [x] prior\n"
+            write_vault(tmp, radar=radar, archive=archive)
+            r = run(tmp)
+            self.assertIn("archived=1", r.stdout)
+            self.assertIn("active=2", r.stdout)       # b, c remain open
+            self.assertIn("total_archived=2", r.stdout)  # prior + a
+
+
 if __name__ == "__main__":
     unittest.main()

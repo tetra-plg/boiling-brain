@@ -181,6 +181,34 @@ def new_archive_body():
     ]
 
 
+def bump_updated(fm_lines, date):
+    """Return fm_lines with `updated:` set to date; insert before the closing
+    fence if absent. No-op on empty frontmatter."""
+    if not fm_lines:
+        return fm_lines
+    out = []
+    found = False
+    for line in fm_lines:
+        if re.match(r"^updated:\s", line):
+            out.append(f"updated: {date}")
+            found = True
+        else:
+            out.append(line)
+    if not found and out and out[-1].strip() == "---":
+        out = out[:-1] + [f"updated: {date}", out[-1]]
+    return out
+
+
+def count_marks(body_lines, mark):
+    """Count entry markers whose checkbox equals `mark` (' ' open, 'x' handled)."""
+    total = 0
+    for line in body_lines:
+        m = ENTRY_RE.match(line)
+        if m and m.group("mark").lower() == mark.lower():
+            total += 1
+    return total
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Archive handled radar entries.")
     ap.add_argument("--root",
@@ -201,6 +229,18 @@ def main(argv=None):
     radar_fm, radar_body = split_frontmatter(radar_text)
     new_radar_body, moved = strip_checked(radar_body)
 
+    # No-op: nothing checked -> do not touch any file (idempotent).
+    if not moved:
+        total_archived = 0
+        if archive_path.exists():
+            _, abody = split_frontmatter(
+                archive_path.read_text(encoding="utf-8"))
+            total_archived = count_marks(abody, "x")
+        print("archived=0")
+        print(f"active={count_marks(radar_body, ' ')}")
+        print(f"total_archived={total_archived}")
+        return 0
+
     if archive_path.exists():
         arch_fm, arch_body = split_frontmatter(
             archive_path.read_text(encoding="utf-8"))
@@ -209,6 +249,8 @@ def main(argv=None):
         arch_body = new_archive_body()
 
     new_arch_body = append_to_archive(arch_body, moved)
+    radar_fm = bump_updated(radar_fm, date)
+    arch_fm = bump_updated(arch_fm, date)
 
     radar_path.write_text(render(radar_fm, new_radar_body), encoding="utf-8")
     archive_path.write_text(render(arch_fm, new_arch_body), encoding="utf-8")
@@ -218,6 +260,8 @@ def main(argv=None):
         key = title if title is not None else FALLBACK_SECTION
         per_section[key] = per_section.get(key, 0) + 1
     print(f"archived={len(moved)}")
+    print(f"active={count_marks(new_radar_body, ' ')}")
+    print(f"total_archived={count_marks(new_arch_body, 'x')}")
     for key, count in per_section.items():
         print(f"section:{key}={count}")
     return 0
