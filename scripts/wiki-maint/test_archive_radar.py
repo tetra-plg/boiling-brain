@@ -149,5 +149,27 @@ class SectionRoutingTest(unittest.TestCase):
             self.assertIn("section:Handled=1", r.stdout)
 
 
+class ArchiveCreationTest(unittest.TestCase):
+    def test_creates_archive_on_demand_valid_frontmatter(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            # entries with NO wikilinks so validate-wiki stays clean
+            radar = RADAR_FM + "\n# Radar\n\n## Section A\n\n- [x] resolved with no links\n"
+            write_vault(tmp, radar=radar)  # no archive file
+            r = run(tmp)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertTrue((tmp / "wiki" / "radar-archive.md").exists())
+            archive_out = read(tmp, "radar-archive.md")
+            for field in ("type: reference", "domains: [meta]", "created:",
+                          "updated: 2026-07-18", "summary_l0:", "summary_l1:"):
+                self.assertIn(field, archive_out)
+            self.assertIn("- [x] resolved with no links", archive_out)
+            # the created archive passes the vault integrity checker
+            v = subprocess.run(
+                [sys.executable, str(VALIDATE), "--root", str(tmp)],
+                capture_output=True, text=True)
+            self.assertEqual(v.returncode, 0, v.stdout + v.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

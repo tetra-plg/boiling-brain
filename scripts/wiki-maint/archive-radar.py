@@ -151,6 +151,36 @@ def render(fm_lines, body_lines):
     return "\n".join(out) + "\n"
 
 
+def new_archive_frontmatter(date):
+    return [
+        "---",
+        "type: reference",
+        "domains: [meta]",
+        f"created: {date}",
+        f"updated: {date}",
+        'summary_l0: "Archived (handled) radar entries — moved out of the '
+        'active radar."',
+        "summary_l1: |",
+        "  Radar entries ticked [x] (handled) are moved here from "
+        "wiki/radar.md by",
+        "  the /lint archive step, grouped under their original thematic "
+        "section. Kept",
+        "  as a historical trace so the active radar shows only open items.",
+        "---",
+    ]
+
+
+def new_archive_body():
+    return [
+        "",
+        "# Radar — archive of handled entries",
+        "",
+        "> Populated by the `/lint` final step: entries ticked `[x]` in "
+        "`wiki/radar.md`",
+        "> are moved here under their original section.",
+    ]
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Archive handled radar entries.")
     ap.add_argument("--root",
@@ -175,7 +205,8 @@ def main(argv=None):
         arch_fm, arch_body = split_frontmatter(
             archive_path.read_text(encoding="utf-8"))
     else:
-        arch_fm, arch_body = [], []
+        arch_fm = new_archive_frontmatter(date)
+        arch_body = new_archive_body()
 
     new_arch_body = append_to_archive(arch_body, moved)
 
