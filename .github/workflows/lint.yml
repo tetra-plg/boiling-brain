@@ -53,6 +53,9 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.x"
+      # PyYAML lets validate-wiki.py run its frontmatter YAML-syntax check
+      # (aligns with the MCP/index consumers); without it the check is skipped.
+      - run: python3 -m pip install --quiet pyyaml
       - run: python3 scripts/wiki-maint/validate-wiki.py
 
   link-check-report:

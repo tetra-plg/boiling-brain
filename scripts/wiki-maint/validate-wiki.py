@@ -3,15 +3,20 @@
 validate-wiki.py — Deterministic integrity checker for a vault's wiki/ tree.
 
 Runs in CI (where raw/ is absent) and locally. For every wiki/**/*.md it checks:
-  - [[wikilinks]] resolve to an existing wiki page (full path or bare slug)
+  - [[wikilinks]] resolve to an existing wiki page (full path or bare slug);
+    a [[raw/…]] wikilink is always flagged — the wiki must never link into raw/
   - internal relative markdown links / anchors resolve (non-raw, non-external)
   - frontmatter conforms to the per-type schema (see SCHEMA below)
+  - frontmatter is valid YAML (yaml.safe_load), matching the MCP/index consumers
+    — skipped with a stderr note if PyYAML is not installed
 Plus a repo-wide scan for leftover git conflict markers in any markdown
 (`<<<<<<<` / `>>>>>>>`) — e.g. from an unresolved /update-vault 3-way merge.
 
-References under raw/ are SKIPPED: raw/ is gitignored and never present on the
-remote — its existence is the job of the local /lint command. External links
-(http/https/mailto) are ignored: the weekly link-check-report job covers them.
+Relative markdown links under raw/ are SKIPPED: raw/ is gitignored and never
+present on the remote — its existence is the job of the local /lint command.
+(A [[raw/…]] wikilink, by contrast, is a convention defect, flagged above.)
+External links (http/https/mailto) are ignored: the weekly link-check-report
+job covers them.
 
 Exit code: 0 if clean, 1 if any defect. Defects are printed as
 `relpath:line — message`, grouped, with a final count.
@@ -22,6 +27,11 @@ import argparse
 import re
 import sys
 from pathlib import Path
+
+try:
+    import yaml
+except ImportError:  # PyYAML is optional: the frontmatter YAML-syntax check
+    yaml = None      # degrades gracefully (like the MCP/index consumers) if absent.
 
 WIKILINK_RE = re.compile(r"\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]")
 MDLINK_RE = re.compile(r"(?<!!)\[[^\]]*\]\(([^)]+)\)")
@@ -104,6 +114,47 @@ def check_frontmatter(relpath, text, defects):
             defects.append(f"{relpath}:1 — frontmatter 'summary_l1' is empty")
 
 
+def frontmatter_block(text):
+    """Return the raw text between the leading `---` fences, or None if absent
+    or unterminated. Used to feed yaml.safe_load the exact frontmatter block."""
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return None
+    block = []
+    for line in lines[1:]:
+        if line.strip() == "---":
+            return "\n".join(block)
+        block.append(line)
+    return None  # unterminated frontmatter — structure handled by check_frontmatter
+
+
+def check_frontmatter_yaml(relpath, text, defects):
+    """Flag frontmatter the hand-rolled parser accepts but real YAML rejects.
+
+    The consumers (MCP `wiki_core`, indexing) load frontmatter with
+    `yaml.safe_load`; a page whose frontmatter is not valid YAML is silently
+    dropped there (its `type` and summaries vanish → invisible to tiered
+    loading), with no error. This check aligns the validator with them.
+
+    Requires PyYAML; when it is absent the check is skipped (announced once on
+    stderr from main(), so the degradation is not silent).
+    """
+    if yaml is None:
+        return
+    block = frontmatter_block(text)
+    if block is None:
+        return  # missing/unterminated frontmatter is handled by check_frontmatter
+    try:
+        yaml.safe_load(block)
+    except yaml.YAMLError as e:
+        mark = getattr(e, "problem_mark", None)
+        # +1 for the opening `---` line, +1 to convert the 0-indexed mark to a
+        # 1-indexed file line; fall back to the frontmatter start if unavailable.
+        line = mark.line + 2 if mark is not None else 1
+        problem = getattr(e, "problem", None) or str(e).splitlines()[0]
+        defects.append(f"{relpath}:{line} — frontmatter is not valid YAML: {problem}")
+
+
 def build_page_index(wiki_root):
     """Return (relpaths set, bare-slug set) for every wiki/**/*.md."""
     relpaths, bare = set(), set()
@@ -120,6 +171,12 @@ def check_wikilinks(relpath, text, relpaths, bare, defects):
             target = m.group(1).strip()
             target = target.rstrip("\\")  # handle Obsidian table alias escape [[t\|alias]]
             if target.startswith("raw/"):
+                # A wiki→raw/ wikilink is a convention violation, independent of
+                # whether raw/ is present on disk: the wiki must never link into
+                # raw/. Flag it (do not try to resolve the path).
+                defects.append(
+                    f"{relpath}:{n} — wikilink into raw/ [[{target}]] "
+                    "(the wiki must never link into raw/)")
                 continue
             norm = target[len("wiki/"):] if target.startswith("wiki/") else target
             norm = norm[:-3] if norm.endswith(".md") else norm
@@ -181,12 +238,17 @@ def main():
         print(f"error: no wiki/ under {repo_root}", file=sys.stderr)
         return 2
 
+    if yaml is None:
+        print("note: PyYAML not available — skipping the frontmatter "
+              "YAML-syntax check", file=sys.stderr)
+
     relpaths, bare = build_page_index(wiki_root)
     defects = []
     for p in sorted(wiki_root.rglob("*.md")):
         rel = str(p.relative_to(repo_root)).replace("\\", "/")
         text = p.read_text(encoding="utf-8", errors="replace")
         check_frontmatter(rel, text, defects)
+        check_frontmatter_yaml(rel, text, defects)
         check_wikilinks(rel, text, relpaths, bare, defects)
         check_relative_links(rel, p, text, wiki_root, repo_root, defects)
 
