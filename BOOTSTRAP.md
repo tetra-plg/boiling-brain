@@ -491,7 +491,7 @@ cp .claude/agents/domain-expert.md.tpl .claude/agents/{{domain_slug}}-expert.md
 
 Then substitute in the copy the **17 per-domain placeholders**: `{{domain_slug}}`, `{{domain_label}}`, `{{is_hub_pivot}}`, `{{hub_pivot_marker}}`, `{{summary_l0}}`, `{{summary_l1}}`, `{{domain_intro_paragraph}}`, `{{taxonomy_section}}`, `{{related_domains_section}}`, `{{deliverables}}`, `{{deliverables_signature_block}}`, `{{trigger_examples}}`, `{{frames_visual_formats}}`, `{{co_ingest_partners}}`, `{{co_ingest_section}}`, `{{authority_table_enabled}}`, `{{authority_table_section}}`, `{{confidentiality_block}}`, `{{confidentiality_section}}`, `{{domain_specific_observation_section}}`, `{{model}}`, `{{effort}}`, `{{maxTurns}}`.
 
-> After generating the agents, optionally add `Bash(bash scripts/mcp/wiki-cli.sh *)` to `.claude/settings.json` `permissions.allow` so the experts' Domain-orientation queries (the `## Domain orientation` section) run without a first-use permission prompt. Existing vaults get this automatically through the `v1.1.2-domain-orientation` migration.
+> After generating the agents, optionally add `Bash(bash scripts/mcp/wiki-cli.sh *)` to `.claude/settings.json` `permissions.allow` so the experts' Domain-orientation queries (the `## Domain orientation` section) run without a first-use permission prompt. Existing vaults get this automatically through the `v1.1.2` migration (Part B).
 
 ### 5.3 Per-domain duplication — hubs
 
