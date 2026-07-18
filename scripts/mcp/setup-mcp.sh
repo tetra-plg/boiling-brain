@@ -17,6 +17,13 @@
 
 set -euo pipefail
 
+# Force UTF-8 on this script's Python subprocesses' stdio: several `python -c` / heredoc
+# blocks below print status emoji (✅). On a Windows console (cp1252) with PYTHONUTF8
+# unset, Python would encode stdout with the locale code page and crash with
+# UnicodeEncodeError. Setting PYTHONIOENCODING here is inherited by every python child and
+# overrides the console code page. Same root cause as #60 (format-md.py). (#69)
+export PYTHONIOENCODING=utf-8
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Post-#42 layout : ce script vit dans scripts/mcp/. La racine du vault est
 # donc 2 niveaux au-dessus (../..), pas 1 seul comme avant #42.
