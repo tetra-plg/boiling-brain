@@ -78,7 +78,8 @@ except Exception:
     # closes this whole class of bypass by construction instead of
     # enumerating dangerous syntax forms one at a time.
     SAFE_ARG='[A-Za-z0-9_./-]+'
-    if [[ "$command" =~ ^bash\ scripts/wiki-maint/scan-raw\.sh(\ raw(/$SAFE_ARG)?)?$ ]]; then
+    SCAN_FLAG='(--force|--orphans|--pending|--format=json)'
+    if [[ "$command" =~ ^bash\ scripts/wiki-maint/scan-raw\.sh(\ $SCAN_FLAG)*(\ raw(/$SAFE_ARG)?)?$ ]]; then
       exit 0
     fi
     if [[ "$command" =~ ^shasum\ -a\ 256\ raw/$SAFE_ARG$ ]]; then
@@ -88,6 +89,23 @@ except Exception:
       exit 0
     fi
     if [ "$command" = 'python3 scripts/wiki-maint/format-md.py --write "wiki/**/*.md"' ]; then
+      exit 0
+    fi
+
+    # wiki-cli.sh — read-only tiered-loading queries for domain orientation.
+    # Only the charset-safe subcommands are allowlisted: scan-domain / scan-<type>
+    # take a domain slug, preview / read take a wiki page path (all within
+    # SAFE_ARG), list-domains takes nothing. --query and search carry arbitrary
+    # quoted text that can't be charset-anchored, so they are intentionally NOT
+    # allowlisted — the agent falls back to Glob/Grep for those in headless mode.
+    WIKI_CLI_SCAN='scan-domain|scan-concepts|scan-entities|scan-decisions|scan-syntheses|scan-cheatsheets|scan-diagrams|scan-sources'
+    if [[ "$command" =~ ^bash\ scripts/mcp/wiki-cli\.sh\ ($WIKI_CLI_SCAN)\ $SAFE_ARG$ ]]; then
+      exit 0
+    fi
+    if [[ "$command" =~ ^bash\ scripts/mcp/wiki-cli\.sh\ list-domains$ ]]; then
+      exit 0
+    fi
+    if [[ "$command" =~ ^bash\ scripts/mcp/wiki-cli\.sh\ (preview|read)\ $SAFE_ARG$ ]]; then
       exit 0
     fi
 

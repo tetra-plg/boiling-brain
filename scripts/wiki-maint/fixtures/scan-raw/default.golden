@@ -1,0 +1,15 @@
+SKIP     raw/clippings/cover-dir/inside.md  (covered-by-dir: coverdir)
+SKIP     raw/deep/a/b/c/anchor.md  (covered-by: deep-anchor)
+SKIP     raw/deep/a/b/c/sibling.md  (covered-by-dir-implicit: deep-anchor)
+NEW      raw/notes/brand-new.md
+SKIP     raw/notes/composite-1.md  (covered-by: composite)
+SKIP     raw/notes/composite-2.md  (covered-by: composite)
+SKIP     raw/notes/legacy.md  (covered-by: legacy)
+SKIP     raw/notes/listed-a.md  (covered-by: listed)
+SKIP     raw/notes/listed-b.md  (covered-by: listed)
+MODIFIED raw/notes/modified.md  (covered-by: modified, sha-changed)
+SKIP     raw/notes/scalar.md  (covered-by: scalar)
+SKIP     raw/shallow/b/anchor.md  (covered-by: shallow-anchor)
+NEW      raw/shallow/b/sibling.md
+SKIP     raw/transcripts/vid-slug.md  (covered-by: transcript)
+SKIP     raw/videos-meta/vid-slug.meta.md  (covered-by-transcript: transcript)

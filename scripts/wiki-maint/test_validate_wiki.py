@@ -254,6 +254,101 @@ class ValidateWikiTest(unittest.TestCase):
             r = run(tmp)
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
+    # --- #77 A: a [[raw/…]] wikilink is a convention violation, not skipped ---
+    def test_wikilink_into_raw_is_flagged(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            # The wiki must never link into raw/ — flag it (independent of raw/'s
+            # presence on disk, unlike the relative-markdown-link raw/ skip).
+            make_vault(tmp, {
+                "concepts/foo.md": GOOD_FM + "\nSee [[raw/notes/x]].\n",
+            })
+            r = run(tmp)
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("raw/", r.stdout)
+
+    # --- #77 B: frontmatter that is syntactically invalid YAML is flagged ---
+    def test_invalid_yaml_frontmatter_detected(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            # All required fields present (the hand-rolled line parser is happy),
+            # but the sources flow sequence is unterminated → yaml.safe_load fails,
+            # which is exactly what the real consumers (wiki_core, indexing) hit.
+            body = textwrap.dedent("""\
+                ---
+                type: concept
+                domains: [poker]
+                created: 2026-05-01
+                summary_l0: "Short line"
+                summary_l1: |
+                  Two sentences of description.
+                sources: [x, y
+                ---
+
+                # Title
+                """)
+            make_vault(tmp, {"concepts/foo.md": body})
+            r = run(tmp)
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("YAML", r.stdout)
+
+    def test_valid_yaml_source_block_not_flagged(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            # A well-formed frontmatter with a sources block must NOT be flagged
+            # by the YAML-syntax check (no false positive).
+            body = textwrap.dedent("""\
+                ---
+                type: source
+                domains: [poker]
+                created: 2026-05-01
+                summary_l0: "Short line"
+                summary_l1: |
+                  Two sentences of description.
+                sources:
+                  - notes/x
+                  - notes/y
+                ---
+
+                # Title
+                """)
+            make_vault(tmp, {"sources/s.md": body})
+            r = run(tmp)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_yaml_check_degrades_without_pyyaml(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            body = textwrap.dedent("""\
+                ---
+                type: concept
+                domains: [poker]
+                created: 2026-05-01
+                summary_l0: "Short line"
+                summary_l1: |
+                  Two sentences of description.
+                sources: [x, y
+                ---
+
+                # Title
+                """)
+            make_vault(tmp, {"concepts/foo.md": body})
+            # Force `import yaml` to fail via a stub earlier on the path.
+            stub = tmp / "_noyaml"
+            stub.mkdir()
+            (stub / "yaml.py").write_text(
+                "raise ImportError('stubbed: no PyYAML')\n", encoding="utf-8")
+            env = dict(os.environ)
+            env["PYTHONPATH"] = str(stub) + os.pathsep + env.get("PYTHONPATH", "")
+            r = subprocess.run(
+                [sys.executable, str(SCRIPT), "--root", str(tmp)],
+                capture_output=True, text=True, env=env,
+            )
+            # Without PyYAML the syntax check is skipped (degrade like the
+            # consumers), but the skip is announced on stderr — not silent.
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("PyYAML", r.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

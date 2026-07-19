@@ -57,6 +57,27 @@ shasum -a 256 raw/<folder>/<file>.md | awk '{print $1}'
 
 If the file cannot be hashed (invalid path, access error), the ingestion fails — no silent fallback.
 
+### Composite hash `source_sha256_composite` (multi-file pages)
+
+A page that synthesizes several raws via `covered_paths` MAY carry a
+`source_sha256_composite`. Its **canonical** value — the one
+`scripts/wiki-maint/scan-raw.py` recomputes to detect drift — is the sha256 of
+the concatenation, over every `covered_paths` entry sorted lexicographically,
+of the exact line `shasum -a 256` prints for that file (`<hex>  <path>\n`, two
+spaces, trailing newline):
+
+```bash
+for p in $(printf '%s\n' "${covered_paths[@]}" | sort); do
+  shasum -a 256 "$p"
+done | shasum -a 256 | awk '{print $1}'
+```
+
+The scan emits `WARN: composite-mismatch <slug>` when a stored composite
+diverges from this recomputation (covered files all present). It does **not**
+yet turn a mismatch into a `MODIFIED` verdict — legacy composites predate this
+formula, so a mismatch does not by itself mean the content changed. Recompute
+and rewrite the field on the next re-ingest of the page.
+
 ## Fields specific to `type: decision` pages
 
 ```yaml

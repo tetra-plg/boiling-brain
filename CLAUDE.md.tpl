@@ -75,6 +75,8 @@ Operational memory lives in `.claude/agent-memory/<domain>/` (`MEMORY.md` + `pat
 
 The agent dispatch in `/ingest` proposes an agent with a confidence level + justification, then the user validates via `AskUserQuestion`. See `.claude/commands/ingest.md` for details.
 
+Beyond ingest, experts can be **selectively** delegated read-side judgment tasks — per-domain radar triage (`/radar`), the semantic pass of `/lint`, and a mono-domain judgment `/query`. Delegation is never the default: fact retrieval and cross-domain questions stay in the main context (tiered loading). See `.claude/agent-output-contract.md` (Read-side delegation contract) and the `/radar`, `/lint`, `/query` commands.
+
 ## Workflows
 
 Detailed workflows live in `.claude/commands/`. Summary table:
@@ -86,6 +88,7 @@ Detailed workflows live in `.claude/commands/`. Summary table:
 | `/sync-repos [names]` | Immutable snapshot of tracked GitHub repos (if `tracked-repos.config.json` is present) |
 | `/query <question>` | Search the wiki with citations, optional archive |
 | `/save <slug>` | Archive the latest synthesis into `wiki/syntheses/` |
+| `/radar [domain]` | Show the radar; selectively delegate per-domain triage to domain experts |
 | `/lint` | Detect contradictions, orphans, gaps |
 | `/evolve-agent <domain>` | Curated evolution of an agent's prompt from its accumulated suggestions |
 | `/domain <add\|rename\|remove> <slug>` | Manage a domain's lifecycle post-bootstrap (instantiate / rename / strip across all canonical declarations + frontmatters + wikilinks, with bucketed validation) |

@@ -3,6 +3,7 @@ raw/
 !raw/**/.gitkeep
 Clippings/
 docs/superpowers/
+docs/buildlog/
 __pycache__/
 *.pyc
 debug-*.png

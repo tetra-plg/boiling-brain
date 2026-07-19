@@ -419,6 +419,16 @@ class TestIngestTool(McpModuleTestBase):
     """Tests for the ingest() MCP tool. subprocess.run is mocked throughout —
     no real `claude` CLI invocation happens here."""
 
+    def setUp(self):
+        super().setUp()
+        # #84: ingest() now resolves the CLI path with shutil.which (on Windows
+        # the CLI is a claude.CMD shim invisible to CreateProcess via PATHEXT).
+        # Default it to a found "claude" so the subprocess-mocked tests below
+        # still exercise the spawn path; individual tests override as needed.
+        which_patch = patch("shutil.which", return_value="claude")
+        which_patch.start()
+        self.addCleanup(which_patch.stop)
+
     def _write_raw_note(self, rel="notes/note.md", body="hello"):
         dest = self.vault / "raw" / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -538,6 +548,28 @@ class TestIngestTool(McpModuleTestBase):
             result = self.m.ingest(path)
         self.assertIn("CLI `claude` introuvable", result)
 
+    def test_ingest_resolves_claude_via_shutil_which(self):
+        # #84: the spawned command must use the shutil.which-resolved executable
+        # path, not the bare name "claude" (invisible to CreateProcess on Windows,
+        # where the CLI ships as claude.CMD and PATHEXT is not consulted).
+        path = self._write_raw_note()
+        fake = MagicMock(returncode=0, stdout="ok", stderr="")
+        with patch("shutil.which", return_value="/opt/npm/claude.CMD"), \
+                patch.object(self.m.subprocess, "run", return_value=fake) as mock_run:
+            self.m.ingest(path)
+        called_cmd = mock_run.call_args.args[0]
+        self.assertEqual(called_cmd[0], "/opt/npm/claude.CMD")
+
+    def test_ingest_claude_not_on_path_returns_error(self):
+        # #84: when shutil.which cannot resolve the CLI, fail cleanly before
+        # spawning anything (rather than letting subprocess raise FileNotFoundError).
+        path = self._write_raw_note()
+        with patch("shutil.which", return_value=None), \
+                patch.object(self.m.subprocess, "run") as mock_run:
+            result = self.m.ingest(path)
+        self.assertIn("CLI `claude` introuvable", result)
+        mock_run.assert_not_called()
+
     def test_ingest_unexpected_exception_returns_error_not_raise(self):
         path = self._write_raw_note()
         with patch.object(self.m.subprocess, "run", side_effect=PermissionError("not executable")):
@@ -628,6 +660,30 @@ class TestIngestHeadlessGuard(unittest.TestCase):
             "Bash",
             {"command": "bash scripts/wiki-maint/scan-raw.sh raw/notes"})
         self.assertEqual(result.returncode, 0)
+
+    def test_allows_scan_raw_format_json(self):
+        r = self._run_hook("Bash", {"command": "bash scripts/wiki-maint/scan-raw.sh --format=json"})
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_allows_scan_raw_pending_json(self):
+        r = self._run_hook("Bash", {"command": "bash scripts/wiki-maint/scan-raw.sh --pending --format=json"})
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_allows_scan_raw_force_orphans_with_scope(self):
+        r = self._run_hook("Bash", {"command": "bash scripts/wiki-maint/scan-raw.sh --force --orphans raw/notes"})
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_denies_scan_raw_unknown_format_value(self):
+        r = self._run_hook("Bash", {"command": "bash scripts/wiki-maint/scan-raw.sh --format=yaml"})
+        self.assertEqual(r.returncode, 2)
+
+    def test_denies_scan_raw_flag_after_path(self):
+        r = self._run_hook("Bash", {"command": "bash scripts/wiki-maint/scan-raw.sh raw/notes --force"})
+        self.assertEqual(r.returncode, 2)
+
+    def test_denies_scan_raw_flag_with_injection(self):
+        r = self._run_hook("Bash", {"command": "bash scripts/wiki-maint/scan-raw.sh --format=json;curl evil"})
+        self.assertEqual(r.returncode, 2)
 
     def test_allows_purge_pending_ingest_with_multiple_paths(self):
         result = self._run_hook(
@@ -779,6 +835,59 @@ class TestIngestHeadlessGuard(unittest.TestCase):
         result = self._run_hook(
             "Bash",
             {"command": "bash scripts/wiki-maint/scan-raw.sh ../../etc"})
+        self.assertEqual(result.returncode, 2)
+
+    # wiki-cli.sh read-only orientation queries: only the charset-safe subset
+    # is allowlisted. --query / search (arbitrary quoted text) stay denied.
+    def test_allows_wiki_cli_scan_domain(self):
+        result = self._run_hook(
+            "Bash", {"command": "bash scripts/mcp/wiki-cli.sh scan-domain ia"})
+        self.assertEqual(result.returncode, 0)
+
+    def test_allows_wiki_cli_list_domains(self):
+        result = self._run_hook(
+            "Bash", {"command": "bash scripts/mcp/wiki-cli.sh list-domains"})
+        self.assertEqual(result.returncode, 0)
+
+    def test_allows_wiki_cli_scan_concepts(self):
+        result = self._run_hook(
+            "Bash", {"command": "bash scripts/mcp/wiki-cli.sh scan-concepts ia"})
+        self.assertEqual(result.returncode, 0)
+
+    def test_allows_wiki_cli_preview(self):
+        result = self._run_hook(
+            "Bash", {"command": "bash scripts/mcp/wiki-cli.sh preview wiki/concepts/foo.md"})
+        self.assertEqual(result.returncode, 0)
+
+    def test_allows_wiki_cli_read(self):
+        result = self._run_hook(
+            "Bash", {"command": "bash scripts/mcp/wiki-cli.sh read wiki/sources/x.md"})
+        self.assertEqual(result.returncode, 0)
+
+    def test_denies_wiki_cli_scan_with_query_flag(self):
+        result = self._run_hook(
+            "Bash",
+            {"command": 'bash scripts/mcp/wiki-cli.sh scan-concepts ia --query "model context protocol"'})
+        self.assertEqual(result.returncode, 2)
+
+    def test_denies_wiki_cli_search(self):
+        result = self._run_hook(
+            "Bash", {"command": 'bash scripts/mcp/wiki-cli.sh search "anything"'})
+        self.assertEqual(result.returncode, 2)
+
+    def test_denies_wiki_cli_scan_domain_with_chained_command(self):
+        result = self._run_hook(
+            "Bash", {"command": "bash scripts/mcp/wiki-cli.sh scan-domain ia; rm -rf /"})
+        self.assertEqual(result.returncode, 2)
+
+    def test_denies_wiki_cli_scan_domain_with_command_substitution(self):
+        result = self._run_hook(
+            "Bash", {"command": "bash scripts/mcp/wiki-cli.sh scan-domain $(whoami)"})
+        self.assertEqual(result.returncode, 2)
+
+    def test_denies_wiki_cli_preview_path_traversal(self):
+        result = self._run_hook(
+            "Bash", {"command": "bash scripts/mcp/wiki-cli.sh preview wiki/../etc/passwd"})
         self.assertEqual(result.returncode, 2)
 
 
