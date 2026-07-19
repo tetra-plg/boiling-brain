@@ -14,6 +14,7 @@ Usage:
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -263,7 +264,17 @@ def ingest(path: str, domain_hint: str = "") -> str:
     if domain_hint:
         prompt += f" --domain-hint={domain_hint}"
 
-    cmd = ["claude", "-p", prompt, "--settings", _ingest_settings_json()]
+    # Resolve the CLI with shutil.which before building the command. On Windows
+    # the CLI ships as a claude.CMD shim; subprocess.run(shell=False) uses
+    # CreateProcess, which does NOT consult PATHEXT, so a bare "claude" raises
+    # FileNotFoundError even when it is on PATH. shutil.which honours PATHEXT and
+    # returns the full path (also correct on POSIX); shell=False is preserved, so
+    # no command-injection surface is reintroduced. (#84)
+    claude_exe = shutil.which("claude")
+    if claude_exe is None:
+        return "Erreur : CLI `claude` introuvable dans l'environnement du serveur MCP."
+
+    cmd = [claude_exe, "-p", prompt, "--settings", _ingest_settings_json()]
     if INGEST_PERMISSION_MODE:
         cmd += ["--permission-mode", INGEST_PERMISSION_MODE]
 

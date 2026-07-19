@@ -419,6 +419,16 @@ class TestIngestTool(McpModuleTestBase):
     """Tests for the ingest() MCP tool. subprocess.run is mocked throughout —
     no real `claude` CLI invocation happens here."""
 
+    def setUp(self):
+        super().setUp()
+        # #84: ingest() now resolves the CLI path with shutil.which (on Windows
+        # the CLI is a claude.CMD shim invisible to CreateProcess via PATHEXT).
+        # Default it to a found "claude" so the subprocess-mocked tests below
+        # still exercise the spawn path; individual tests override as needed.
+        which_patch = patch("shutil.which", return_value="claude")
+        which_patch.start()
+        self.addCleanup(which_patch.stop)
+
     def _write_raw_note(self, rel="notes/note.md", body="hello"):
         dest = self.vault / "raw" / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -537,6 +547,28 @@ class TestIngestTool(McpModuleTestBase):
         with patch.object(self.m.subprocess, "run", side_effect=FileNotFoundError()):
             result = self.m.ingest(path)
         self.assertIn("CLI `claude` introuvable", result)
+
+    def test_ingest_resolves_claude_via_shutil_which(self):
+        # #84: the spawned command must use the shutil.which-resolved executable
+        # path, not the bare name "claude" (invisible to CreateProcess on Windows,
+        # where the CLI ships as claude.CMD and PATHEXT is not consulted).
+        path = self._write_raw_note()
+        fake = MagicMock(returncode=0, stdout="ok", stderr="")
+        with patch("shutil.which", return_value="/opt/npm/claude.CMD"), \
+                patch.object(self.m.subprocess, "run", return_value=fake) as mock_run:
+            self.m.ingest(path)
+        called_cmd = mock_run.call_args.args[0]
+        self.assertEqual(called_cmd[0], "/opt/npm/claude.CMD")
+
+    def test_ingest_claude_not_on_path_returns_error(self):
+        # #84: when shutil.which cannot resolve the CLI, fail cleanly before
+        # spawning anything (rather than letting subprocess raise FileNotFoundError).
+        path = self._write_raw_note()
+        with patch("shutil.which", return_value=None), \
+                patch.object(self.m.subprocess, "run") as mock_run:
+            result = self.m.ingest(path)
+        self.assertIn("CLI `claude` introuvable", result)
+        mock_run.assert_not_called()
 
     def test_ingest_unexpected_exception_returns_error_not_raise(self):
         path = self._write_raw_note()
