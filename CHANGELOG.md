@@ -6,6 +6,12 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 
 ---
 
+## [v1.2.1] — unreleased
+
+### Changed
+
+- **MCP documentation synced to the 14-tool surface**: `list_domains()` and `ingest()` (both shipped in v1.1.1, #62) were missing from the user-facing docs, which still described "12 tools". `README.md` and `docs/mcp-tiered-loading.md` now list all 14 tools and start the recommended tiered pattern with `list_domains` (domains evolve via `/domain`, so slugs are never guessed). `scripts/mcp/setup-mcp.sh` now injects a `list_domains`-first `CLAUDE.md` block and recognises the older 12-tool block (without `list_domains`) as outdated, replacing it in place. Documentation/setup only — no runtime tool change. (#91)
+
 ## [v1.2.0] — 2026-07-19
 
 ### Added
