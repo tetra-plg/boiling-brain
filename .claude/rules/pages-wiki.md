@@ -17,6 +17,8 @@ paths:
 
 - All internal links as `[[wikilinks]]` Obsidian-style.
 - Alias format: `[[path/slug|Display text]]` when the slug is not self-explanatory.
+  - Inside a table, prefer an **escaped pipe** — `[[path/slug\|Display text]]` — it renders identically in Obsidian and survives any Markdown formatter.
+  - Never run Prettier **bare** on `wiki/` (`npx prettier --write`, or an editor "format on save"): it reflows GFM tables and destroys these alias/code-span pipes. Format only through the Obsidian-safe wrapper — `/format` or `scripts/wiki-maint/format-md.py` — which masks the pipes. `wiki/` is in `.prettierignore` to enforce this.
 - No relative `../` paths for wiki pages — always wikilinks.
 - External links via standard markdown syntax `[text](url)`.
 
