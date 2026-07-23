@@ -1,15 +1,18 @@
 # MCP tiered-loading layer
 
-> **TL;DR:** reference for the `boiling-brain-wiki` MCP server's 12 tools and the tiered-loading pattern they implement (orient → drill → preview → read). Added in v1.1.0 (refactor #41). Measured ~96% token reduction vs the pre-v1.1.0 flat dump on a 388-page domain.
+> **TL;DR:** reference for the `boiling-brain-wiki` MCP server's 14 tools and the tiered-loading pattern they implement (orient → drill → preview → read). Added in v1.1.0 (refactor #41). Measured ~96% token reduction vs the pre-v1.1.0 flat dump on a 388-page domain.
 
 ## Why tiered loading
 
 A flat `scan_domain("ia")` on a 388-page domain returns ~23k tokens — too much for context-constrained backends (e.g. a Realtime voice agent against a 40k TPM org limit, or smaller models with tight context budgets). The MCP server now exposes a **hierarchical descent**: orient first, then drill into the right type, then read the matching pages. Measured reduction on the same query path: **~96%** (23k → ~900 tokens for the orientation step).
 
-## The 12 tools
+## The 14 tools
 
 ```
 ┌─ Orientation ──────────────────────────────────────────────────────┐
+│  list_domains()                                                    │
+│    → valid domain slugs + short description + expert-agent flag    │
+│    → call FIRST: domains evolve via /domain, never guess slugs     │
 │  scan_domain(domain)                                               │
 │    → hub summary_l1 + counts per type + top 10 by centrality       │
 │    → ~860 tokens, replaces the old "dump all pages" behaviour      │
@@ -49,6 +52,9 @@ A flat `scan_domain("ia")` on a 388-page domain returns ~23k tokens — too much
 │  drop_to_raw(subfolder, filename, content)                         │
 │    Sanctioned write into raw/ (bypasses protect-raw.sh PreToolUse  │
 │    hook by writing server-side). Auto-updates cache/.pending-ingest│
+│  ingest(path, domain_hint="")                                      │
+│    Headless ingestion of a file already in raw/ via a domain-expert│
+│    agent run. See the tool description for the permission opt-in.  │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -56,10 +62,11 @@ A flat `scan_domain("ia")` on a 388-page domain returns ~23k tokens — too much
 
 For a natural-language query (typical voice or chat usage):
 
-1. **Orient** with `scan_domain(domain)` — get the hub summary, see what types exist, pick the most relevant `scan_<type>` for the next step. ~860 tokens.
-2. **Drill** with `scan_<type>(domain, query="<topic>")` — get the top 20 pages of that type matching the query, ranked by centrality. ~500-800 tokens.
-3. **Preview** with `preview_page(<path>)` on the 1-3 most promising pages — read the L1 summary. ~300 tokens each.
-4. **Read** with `read_page(<path>)` only when the L1 confirms relevance — full body. Variable, often 2-10k tokens.
+1. **List** with `list_domains()` — learn which domain slugs exist before anything else; domains are added/renamed dynamically via `/domain`, so never guess.
+2. **Orient** with `scan_domain(domain)` — get the hub summary, see what types exist, pick the most relevant `scan_<type>` for the next step. ~860 tokens.
+3. **Drill** with `scan_<type>(domain, query="<topic>")` — get the top 20 pages of that type matching the query, ranked by centrality. ~500-800 tokens.
+4. **Preview** with `preview_page(<path>)` on the 1-3 most promising pages — read the L1 summary. ~300 tokens each.
+5. **Read** with `read_page(<path>)` only when the L1 confirms relevance — full body. Variable, often 2-10k tokens.
 
 Total typical session: **2-3k tokens**, sometimes 5k if the L2 read is mandatory. Compare to the pre-refactor ~23k just for the orientation step alone.
 

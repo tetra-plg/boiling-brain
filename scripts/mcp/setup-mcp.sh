@@ -154,36 +154,29 @@ MARKER="<!-- boiling-brain-wiki-mcp -->"
 CLAUDE_MD_BLOCK="$MARKER
 ## Wiki personnel (boiling-brain-wiki MCP)
 
-Tu as accès à un serveur MCP \`boiling-brain-wiki\` qui expose le wiki personnel de l'utilisateur.
+Le MCP \`boiling-brain-wiki\` expose le wiki de connaissances personnel de l'utilisateur (concepts, décisions, synthèses, cheatsheets, sources… organisés par domaines).
 
-**Règle d'invocation :** avant de répondre à toute question portant sur les domaines de connaissance de l'utilisateur, suis le pattern de tiered loading :
+**Déclencheur** : dès qu'une question peut toucher aux connaissances, projets ou décisions personnels de l'utilisateur (et pas seulement au code du repo courant), consulte le wiki AVANT de répondre de mémoire. Premier appel obligatoire : \`list_domains()\` — c'est lui qui te dit quels domaines existent, ne les devine pas.
 
-1. **\`scan_domain(domain)\`** — overview hiérarchique du domaine (hub + counts par type + top 10 centralité). ~1k tokens. À appeler EN PREMIER pour s'orienter.
-2. **\`scan_<type>(domain, query=\"\", top=20)\`** — drill-down par type une fois le domaine identifié. Sans query : top N par centralité. Avec query : filtrage tokenisé (case + séparateur insensible). 7 outils granulaires :
-   - \`scan_concepts\` — concepts / idées / principes
-   - \`scan_entities\` — acteurs, outils, lieux, organisations
-   - \`scan_decisions\` — ADRs, tradeoffs retenus
-   - \`scan_syntheses\` — résumés cross-cutting
-   - \`scan_cheatsheets\` — référence rapide / how-to
-   - \`scan_diagrams\` — artefacts visuels
-   - \`scan_sources\` — sources brutes (REQUIERT une query, sources trop nombreuses sans cible)
-3. **\`preview_page(page_path)\`** — frontmatter + summary_l1 d'une page (L1, ~300 tokens).
-4. **\`read_page(page_path)\`** — corps complet d'une page (L2, taille variable).
+**Pattern tiered — toujours dans cet ordre, jamais de dump de domaine :**
+1. \`list_domains()\` → domaines existants.
+2. \`scan_domain(domain)\` → overview hiérarchique (~1k tokens).
+3. \`scan_<type>(domain, query=\"\", top=20)\` → drill-down par type : \`scan_concepts\`, \`scan_entities\`, \`scan_decisions\`, \`scan_syntheses\`, \`scan_cheatsheets\`, \`scan_diagrams\`, \`scan_sources\` (ce dernier REQUIERT une query). Sans query : top N par centralité.
+4. \`preview_page(page_path)\` (résumé, ~300 tokens) avant \`read_page(page_path)\` (corps complet).
 
-**Cross-coupe** : \`search_wiki(query, limit=10)\` — recherche full-text tokenisée cross-type, cross-domain, format enrichi (path, type, summary_l0, wikilinks). Complémentaire aux scan_<type> qui sont intra-domaine.
+**Cross-domaine** : \`search_wiki(query, limit=10)\` — full-text cross-type/cross-domain, quand tu ne sais pas dans quel domaine chercher.
 
 **Écriture** : \`drop_to_raw(subfolder, filename, content)\` — dépose un fichier dans raw/ pour ingest (bypass propre du hook protect-raw.sh).
-
-Le pattern tiered (scan_domain → scan_<type> → preview → read) économise drastiquement les tokens vs un dump de domaine (mesuré : ~96% de réduction sur un domaine de 388 pages).
 $MARKER"
 
 if [[ -f "$CLAUDE_MD" ]] && grep -qF "$MARKER" "$CLAUDE_MD"; then
-  # Marker present — check if the existing block is the current (12-tool) version
-  # by looking for a distinctive string of the new content.
-  if grep -qF "scan_concepts" "$CLAUDE_MD"; then
+  # Marker present — check if the existing block is the current (list_domains-first)
+  # version by looking for a distinctive string of the new content.
+  if grep -qF "list_domains" "$CLAUDE_MD"; then
     echo "✅ $CLAUDE_MD déjà configuré (marqueur présent, contenu à jour)."
   else
-    # Outdated block (pre-#47, only 5 tools listed). Replace in place.
+    # Outdated block (pre-#47 5-tool version, or 12-tool version without
+    # list_domains-first). Replace in place.
     CLAUDE_MD="$CLAUDE_MD" python3 - <<PYEOF
 import os, re, pathlib
 p = pathlib.Path(os.environ["CLAUDE_MD"])
@@ -197,7 +190,7 @@ if n == 0:
     # Shouldn't happen (grep above confirmed marker presence) but fallback safely.
     new_content = content.rstrip() + "\n\n" + new_block + "\n"
 p.write_text(new_content, encoding="utf-8")
-print(f"✅ {p} mis à jour (bloc obsolète remplacé par la version 12 outils + tiered loading).")
+print(f"✅ {p} mis à jour (bloc obsolète remplacé par la version list_domains-first + tiered loading).")
 PYEOF
   fi
 else
