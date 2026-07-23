@@ -353,6 +353,7 @@ _DETAIL = {
     "dir-implicit": "covered-by-dir-implicit: {slug}",
     "transcript": "covered-by-transcript: {slug}",
     "forced": "covered-by: {slug}, forced",
+    "content": "covered-by-content: {slug}",
 }
 
 
@@ -373,6 +374,92 @@ def find_orphans(vault_root: str, idx: Index):
         if not os.path.exists(abs_p) and key not in seen:
             seen[key] = slug
     return sorted(seen.items(), key=lambda kv: kv[0].encode("utf-8"))
+
+
+SYNC_META = ".sync-meta.json"
+
+
+def find_snapshot_dirs(vault_root: str):
+    """Vault-relative dirs that hold a .sync-meta.json (a /sync-repos snapshot)."""
+    dirs = set()
+    raw = os.path.join(vault_root, "raw")
+    for dirpath, _, filenames in os.walk(raw):
+        if SYNC_META in filenames:
+            dirs.add(os.path.relpath(dirpath, vault_root).replace(os.sep, "/"))
+    return dirs
+
+
+def lineage_key(rel: str, snapshot_dirs):
+    """(dest, relpath) if `rel` sits under a snapshot dir, else None.
+    dest = parent of the snapshot dir; relpath = path below <shortsha>/.
+    Longest matching snapshot prefix wins (nested dests stay unambiguous)."""
+    parts = rel.split("/")
+    for i in range(len(parts) - 1, 0, -1):
+        cand = "/".join(parts[:i])
+        if cand in snapshot_dirs:
+            dest = "/".join(parts[:i - 1])
+            relpath = "/".join(parts[i:])
+            return (dest, relpath)
+    return None
+
+
+def _index_one(content, rel, abs_path, cache, snapshot_dirs, slug):
+    key = lineage_key(rel, snapshot_dirs)
+    if key is None:
+        return
+    try:
+        if os.path.getsize(abs_path) == 0:
+            return  # empty files share a trivial hash; never content-cover them
+    except OSError:
+        return
+    dest, relpath = key
+    content.setdefault((dest, relpath, cache.get(abs_path)), slug)  # first wins
+
+
+def build_content_index(idx, vault_root, cache, snapshot_dirs):
+    """(dest, relpath, sha256) -> slug, over covered files that live under a
+    snapshot. Covered = referenced by a page (source_path / covered_paths,
+    including trailing-slash dir covers)."""
+    content = {}
+    for path, slug in idx.path_to_slug.items():
+        if path.endswith("/"):
+            base = os.path.join(vault_root, path.rstrip("/"))
+            if not os.path.isdir(base):
+                continue
+            for dp, _, fns in os.walk(base):
+                for fn in fns:
+                    if fn == SYNC_META:
+                        continue
+                    abs_p = os.path.join(dp, fn)
+                    rel = os.path.relpath(abs_p, vault_root).replace(os.sep, "/")
+                    _index_one(content, rel, abs_p, cache, snapshot_dirs, slug)
+        else:
+            abs_p = os.path.join(vault_root, path)
+            if os.path.isfile(abs_p):
+                _index_one(content, path, abs_p, cache, snapshot_dirs, slug)
+    return content
+
+
+def apply_content_coverage(results, vault_root, cache, snapshot_dirs, content_index):
+    """Reclassify NEW files under a snapshot to SKIP when their
+    (dest, relpath, sha256) is already covered. Mutates `results` in place."""
+    if not content_index:
+        return
+    for i, (rel, v) in enumerate(results):
+        if v.status != "NEW":
+            continue
+        key = lineage_key(rel, snapshot_dirs)
+        if key is None:
+            continue
+        abs_p = os.path.join(vault_root, rel)
+        try:
+            if os.path.getsize(abs_p) == 0:
+                continue
+        except OSError:
+            continue
+        slug = content_index.get((key[0], key[1], cache.get(abs_p)))
+        if slug:
+            results[i] = (rel, Verdict("SKIP", slug, "content"))
 
 
 def run(vault_root: str, ns, idx=None, cache=None):
@@ -501,11 +588,14 @@ def main(argv):
     vault_root = os.environ.get("VAULT_ROOT") or str(Path(__file__).resolve().parents[2])
     cache = HashCache(vault_root)
     idx = build_index(os.path.join(vault_root, "wiki", "sources"))
+    snapshot_dirs = find_snapshot_dirs(vault_root)
+    content_index = build_content_index(idx, vault_root, cache, snapshot_dirs)
     warnings = compute_warnings(idx, vault_root)
     emit_stderr_warnings(warnings)
 
     if ns.pending:
         results, stale = run_pending(vault_root, idx, ns.force, cache)
+        apply_content_coverage(results, vault_root, cache, snapshot_dirs, content_index)
         cache.save()
         purgeable = [rel for rel, v in results if v.status == "SKIP"]
         if ns.format == "json":
@@ -526,6 +616,7 @@ def main(argv):
 
     # non-pending: reuse the index already built at the top of main()
     files, results, _ = run(vault_root, ns, idx, cache)
+    apply_content_coverage(results, vault_root, cache, snapshot_dirs, content_index)
     cache.save()
     orphan_pairs = find_orphans(vault_root, idx) if ns.orphans else []
     if ns.format == "json":
