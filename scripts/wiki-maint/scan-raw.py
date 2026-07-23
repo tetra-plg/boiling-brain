@@ -248,6 +248,52 @@ def sha256_file(abs_path: str) -> str:
     return h.hexdigest()
 
 
+class HashCache:
+    """Persistent (mtime, size) -> sha256 cache in cache/.hash-cache.json.
+    raw/ files are immutable, so each is hashed once across runs. This is a
+    reconstructible artifact, never a source of truth: a missing, corrupt or
+    unwritable cache degrades to direct hashing and never raises."""
+
+    def __init__(self, vault_root, cache_path=None):
+        self.vault_root = vault_root
+        self.cache_path = cache_path or os.path.join(vault_root, "cache", ".hash-cache.json")
+        self.data = {}   # rel -> [mtime_ns, size, sha256]
+        self.dirty = False
+        try:
+            with open(self.cache_path, encoding="utf-8") as f:
+                loaded = json.load(f)
+            if isinstance(loaded, dict):
+                self.data = loaded
+        except (OSError, ValueError):
+            self.data = {}
+
+    def get(self, abs_path):
+        rel = os.path.relpath(abs_path, self.vault_root).replace(os.sep, "/")
+        try:
+            st = os.stat(abs_path)
+        except OSError:
+            return sha256_file(abs_path)  # let a genuine read error surface
+        entry = self.data.get(rel)
+        if entry and entry[0] == st.st_mtime_ns and entry[1] == st.st_size:
+            return entry[2]
+        digest = sha256_file(abs_path)
+        self.data[rel] = [st.st_mtime_ns, st.st_size, digest]
+        self.dirty = True
+        return digest
+
+    def save(self):
+        if not self.dirty:
+            return
+        try:
+            os.makedirs(os.path.dirname(self.cache_path), exist_ok=True)
+            tmp = self.cache_path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(self.data, f)
+            os.replace(tmp, self.cache_path)
+        except OSError:
+            pass  # graceful: an unwritable cache is not fatal
+
+
 class Verdict:
     def __init__(self, status, covered_by=None, reason=None, sha_stored=None, sha_current=None):
         self.status = status
@@ -257,7 +303,7 @@ class Verdict:
         self.sha_current = sha_current
 
 
-def classify(rel: str, abs_path: str, idx: Index, force: bool) -> Verdict:
+def classify(rel: str, abs_path: str, idx: Index, force: bool, cache=None) -> Verdict:
     key = normalize_path(rel)
 
     # 1. exact match on source_path / covered_paths
@@ -265,7 +311,7 @@ def classify(rel: str, abs_path: str, idx: Index, force: bool) -> Verdict:
         slug = idx.path_to_slug[key]
         stored = idx.path_to_sha.get(key)
         if stored:
-            current = sha256_file(abs_path)
+            current = cache.get(abs_path) if cache is not None else sha256_file(abs_path)
             if current != stored:
                 return Verdict("MODIFIED", slug, "sha-changed", stored, current)
             if force:
@@ -329,16 +375,18 @@ def find_orphans(vault_root: str, idx: Index):
     return sorted(seen.items(), key=lambda kv: kv[0].encode("utf-8"))
 
 
-def run(vault_root: str, ns, idx=None):
+def run(vault_root: str, ns, idx=None, cache=None):
     files, warnings = collect_files(vault_root, ns.paths)
     for w in warnings:
         print(f"WARN: {w}", file=sys.stderr)
     if idx is None:
         idx = build_index(os.path.join(vault_root, "wiki", "sources"))
+    if cache is None:
+        cache = HashCache(vault_root)
     results = []
     for abs_path in files:
         rel = os.path.relpath(abs_path, vault_root).replace(os.sep, "/")
-        results.append((rel, classify(rel, abs_path, idx, ns.force)))
+        results.append((rel, classify(rel, abs_path, idx, ns.force, cache)))
     return files, results, idx
 
 
@@ -430,7 +478,7 @@ def read_pending(vault_root: str):
         return [ln.strip() for ln in f if ln.strip()]
 
 
-def run_pending(vault_root: str, idx: Index, force: bool):
+def run_pending(vault_root: str, idx: Index, force: bool, cache):
     """Classify manifest entries. Returns (results, stale) where results is a
     list of (rel, Verdict) for on-disk entries and stale is a list of rels
     absent from disk. Read-only: never writes the manifest."""
@@ -438,7 +486,7 @@ def run_pending(vault_root: str, idx: Index, force: bool):
     for rel in read_pending(vault_root):
         abs_p = os.path.join(vault_root, rel)
         if os.path.isfile(abs_p):
-            results.append((rel, classify(rel, abs_p, idx, force)))
+            results.append((rel, classify(rel, abs_p, idx, force, cache)))
         else:
             stale.append(rel)
     return results, stale
@@ -451,12 +499,14 @@ def main(argv):
         print("usage: --pending takes no positional path", file=sys.stderr)
         return 2
     vault_root = os.environ.get("VAULT_ROOT") or str(Path(__file__).resolve().parents[2])
+    cache = HashCache(vault_root)
     idx = build_index(os.path.join(vault_root, "wiki", "sources"))
     warnings = compute_warnings(idx, vault_root)
     emit_stderr_warnings(warnings)
 
     if ns.pending:
-        results, stale = run_pending(vault_root, idx, ns.force)
+        results, stale = run_pending(vault_root, idx, ns.force, cache)
+        cache.save()
         purgeable = [rel for rel, v in results if v.status == "SKIP"]
         if ns.format == "json":
             files = [str(os.path.join(vault_root, rel)) for rel, _ in results]
@@ -475,7 +525,8 @@ def main(argv):
         return 0
 
     # non-pending: reuse the index already built at the top of main()
-    files, results, _ = run(vault_root, ns, idx)
+    files, results, _ = run(vault_root, ns, idx, cache)
+    cache.save()
     orphan_pairs = find_orphans(vault_root, idx) if ns.orphans else []
     if ns.format == "json":
         doc = build_json(files, results, idx, ns, vault_root, warnings)

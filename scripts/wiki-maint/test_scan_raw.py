@@ -631,5 +631,53 @@ class GoldenParityTest(unittest.TestCase):
             self.assertEqual(r.stdout, expected)
 
 
+class HashCacheTest(unittest.TestCase):
+    def test_hit_reuses_stored_digest_without_rehashing(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            f = root / "raw" / "a.md"; f.parent.mkdir(parents=True); f.write_text("hello", encoding="utf-8")
+            c = scan_raw.HashCache(str(root))
+            first = c.get(str(f))
+            self.assertEqual(first, hashlib.sha256(b"hello").hexdigest())
+            # poison the cache entry; a hit must return the poisoned value (proves no re-hash)
+            c.data["raw/a.md"][2] = "deadbeef"
+            self.assertEqual(c.get(str(f)), "deadbeef")
+
+    def test_miss_on_size_change_recomputes(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            f = root / "raw" / "a.md"; f.parent.mkdir(parents=True); f.write_text("hello", encoding="utf-8")
+            c = scan_raw.HashCache(str(root))
+            c.get(str(f))
+            f.write_text("hello world", encoding="utf-8")  # size changes
+            self.assertEqual(c.get(str(f)), hashlib.sha256(b"hello world").hexdigest())
+
+    def test_save_and_reload_roundtrip(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            f = root / "raw" / "a.md"; f.parent.mkdir(parents=True); f.write_text("hello", encoding="utf-8")
+            c = scan_raw.HashCache(str(root)); c.get(str(f)); c.save()
+            self.assertTrue((root / "cache" / ".hash-cache.json").is_file())
+            c2 = scan_raw.HashCache(str(root))
+            self.assertIn("raw/a.md", c2.data)
+
+    def test_corrupt_cache_is_ignored(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "cache").mkdir(parents=True)
+            (root / "cache" / ".hash-cache.json").write_text("{not json", encoding="utf-8")
+            c = scan_raw.HashCache(str(root))  # must not raise
+            self.assertEqual(c.data, {})
+
+    def test_unwritable_cache_dir_degrades_gracefully(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            f = root / "raw" / "a.md"; f.parent.mkdir(parents=True); f.write_text("hi", encoding="utf-8")
+            (root / "cache").write_text("blocker", encoding="utf-8")  # cache/ is a FILE
+            c = scan_raw.HashCache(str(root))
+            self.assertEqual(c.get(str(f)), hashlib.sha256(b"hi").hexdigest())
+            c.save()  # must not raise
+
+
 if __name__ == "__main__":
     unittest.main()
