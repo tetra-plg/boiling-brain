@@ -9,3 +9,4 @@ __pycache__/
 debug-*.png
 debug_*.png
 .claude/settings.json
+.DS_Store
