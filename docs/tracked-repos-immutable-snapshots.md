@@ -88,6 +88,10 @@ Each source declares its own `dest`. If you track several categories of repos (e
 - **Long-term volume.** If N repos each merge M times per year, that's N×M snapshots/year. To watch — a future `/lint` could suggest consolidating old snapshots of the same component if they're no longer referenced by any live wiki page.
 - **`paths` granularity.** Default for now is `["docs/", "README.md", "CHANGELOG.md"]`. If a repo has its docs elsewhere (e.g. `docs-site/content/`), tune per-source in the manifest.
 
+## Idempotent re-snapshots (content coverage)
+
+A tracked repo's HEAD SHA advances on **every** commit, so `/sync-repos` creates a new `<dest>/<shortsha>/` even when the documented `paths:` did not change. `scan-raw` covers those files **by content** (sha256), scoped to the same `(dest, relative-path)` lineage via each snapshot's `.sync-meta.json`. Consequence: a full `/ingest` sweep after a no-op or partial re-snapshot reports `NEW` only for files whose **content** actually changed — realising the "no noise if nothing moved" principle above. Hashes are cached (`cache/.hash-cache.json`, keyed by mtime+size) so immutable snapshots are hashed once. Disk duplication of identical snapshots remains (a future purge could consolidate them); it no longer costs anything at scan time.
+
 ## Files shipped
 
 - [`tracked-repos.config.json`](../../tracked-repos.config.json) — manifest (empty by default at bootstrap, populate as you go).
