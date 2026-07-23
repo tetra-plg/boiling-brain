@@ -188,11 +188,12 @@ Run `/format` to normalise a pre-formatter vault; generation commands (`/ingest`
 
 Run `bash scripts/mcp/setup-mcp.sh` once after bootstrap to register the `boiling-brain-wiki` MCP server (user-scope). Once active, Claude Code can query your wiki from **any project** — not just inside the vault directory.
 
-**12 tools** are exposed, organised as a tiered-loading hierarchy (orient → drill → read). Full reference: [docs/mcp-tiered-loading.md](docs/mcp-tiered-loading.md).
+**14 tools** are exposed, organised as a tiered-loading hierarchy (orient → drill → read). Full reference: [docs/mcp-tiered-loading.md](docs/mcp-tiered-loading.md).
 
 | Tool                                                                                     | Purpose                                                                                                                             |
 | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `scan_domain(domain)`                                                                    | **Orient**: hub `summary_l1` + counts per type + top 10 pages by centrality (backlinks). ~860 tokens. Use FIRST.                    |
+| `list_domains()`                                                                         | **Orient**: valid domain slugs + short description + whether a domain-expert agent exists. Use FIRST — domains evolve via `/domain`. |
+| `scan_domain(domain)`                                                                    | **Orient**: hub `summary_l1` + counts per type + top 10 pages by centrality (backlinks). ~860 tokens.                               |
 | `scan_concepts(domain, query="", top=20)`                                                | **Drill**: concepts in a domain, ranked by centrality. Optional query (case + separator insensitive).                               |
 | `scan_entities`, `scan_decisions`, `scan_syntheses`, `scan_cheatsheets`, `scan_diagrams` | Same semantics, per type.                                                                                                           |
 | `scan_sources(domain, query, top=20)`                                                    | Same shape but query is **required** (sources too numerous without a target).                                                       |
@@ -200,8 +201,9 @@ Run `bash scripts/mcp/setup-mcp.sh` once after bootstrap to register the `boilin
 | `read_page(page_path)`                                                                   | L2: full body.                                                                                                                      |
 | `search_wiki(query, limit=10)`                                                           | Cross-type, cross-domain. Format enriched: path, type, summary_l0, outgoing wikilinks.                                              |
 | `drop_to_raw(subfolder, filename, content)`                                              | Sanctioned write into `raw/` (server-side, bypasses the `protect-raw.sh` hook by design). Auto-signals via `cache/.pending-ingest`. |
+| `ingest(path, domain_hint="")`                                                           | Trigger headless ingestion of a file already in `raw/` (see tool description for the permission-mode opt-in).                       |
 
-**Recommended pattern**: `scan_domain` → `scan_<type>(query=...)` → `preview_page` → `read_page`. Measured: ~96% token reduction vs a flat dump on a 388-page domain.
+**Recommended pattern**: `list_domains` → `scan_domain` → `scan_<type>(query=...)` → `preview_page` → `read_page`. Measured: ~96% token reduction vs a flat dump on a 388-page domain.
 
 A standalone smoke test (`scripts/mcp/smoke_test.py`) asserts per-tool token budgets against any vault — run it after any non-trivial change to `mcp-wiki.py`.
 
