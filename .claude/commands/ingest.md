@@ -27,7 +27,7 @@ SKIP      (reason: exact | dir | dir-implicit | transcript)      → already cov
 MODIFIED  (reason: sha-changed | forced)                         → covered but content changed / re-ingest forced
 ```
 
-Detection is **robust**: it checks exact match on `source_path`, then on `covered_paths` (list of all raw paths covered by a composite page), then on parent directory. This avoids false "NEW" entries when an agent synthesized several files into a single page without listing each file individually.
+Detection is **robust**: it checks exact match on `source_path`, then on `covered_paths` (list of all raw paths covered by a composite page), then on parent directory, and finally — for files under a `/sync-repos` snapshot (a dir carrying a `.sync-meta.json`) — by **content** (sha256). A re-snapshot whose files are byte-identical to an already-covered version of the same file (same `dest` + relative path) is therefore `SKIP`, not `NEW`: 0 doc change → 0 NEW, 1 file changed → 1 NEW. This avoids false "NEW" entries both when an agent synthesized several files into a single page and when a tracked repo's HEAD advanced without touching its documented paths.
 
 Arbitration:
 
