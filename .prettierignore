@@ -1,3 +1,9 @@
+# wiki/ is formatted ONLY through the Obsidian-safe wrapper
+# (scripts/wiki-maint/format-md.py), which opts out of this file via
+# `--ignore-path`. Never run Prettier bare on wiki/ (CLI or editor "format on
+# save"): it reflows GFM tables and destroys the pipes in `[[wikilink|alias]]`
+# and code spans. See .claude/rules/pages-wiki.md.
+wiki/
 # Raw sources are gitignored in vaults and never present on the remote.
 raw/
 # Generated / vendored.

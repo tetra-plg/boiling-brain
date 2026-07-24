@@ -165,5 +165,65 @@ class ExpandTest(unittest.TestCase):
         self.assertFalse(fmt._excluded("docs/guide.md"))
 
 
+class WikiIgnoreOptOutTest(unittest.TestCase):
+    """wiki/ est dans .prettierignore (Prettier nu le skippe) mais le wrapper
+    opt-out via --ignore-path et DOIT quand même le formatter et le vérifier."""
+
+    _UNFORMATTED_WIKI = (
+        "#  Bad   heading\n\n\n\n"
+        "| Col | Lien | Détail |\n| --- | --- | --- |\n"
+        "| a | [[entities/y|Alias]] | `skip|rewrite` |\n"
+    )
+
+    def _vault(self, tmp):
+        (tmp / ".prettierrc").write_text('{"proseWrap":"preserve"}', encoding="utf-8")
+        (tmp / ".prettierignore").write_text("wiki/\n", encoding="utf-8")
+        page = tmp / "wiki" / "domains" / "d.md"
+        page.parent.mkdir(parents=True)
+        page.write_text(self._UNFORMATTED_WIKI, encoding="utf-8")
+        return page
+
+    def test_write_formats_wiki_despite_prettierignore(self):
+        # Sans l'opt-out, Prettier skiperait wiki/ (ignoré) → fichier inchangé.
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            page = self._vault(tmp)
+            r = run(["--write", "wiki/domains/d.md"], cwd=str(tmp))
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            out = page.read_text(encoding="utf-8")
+            self.assertNotIn("#  Bad", out)            # heading normalisé → reformaté
+            self.assertNotIn("\n\n\n", out)            # runs de lignes vides collapsés
+            self.assertIn("[[entities/y|Alias]]", out)  # pipe d'alias préservé
+            self.assertIn("`skip|rewrite`", out)        # pipe de code-span préservé
+
+    def test_check_flags_unformatted_wiki_despite_prettierignore(self):
+        # Garde-fou anti-faux-négatif : --check doit voir le fichier mal formaté.
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            self._vault(tmp)
+            r = run(["--check", "wiki/domains/d.md"], cwd=str(tmp))
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+
+    def test_bare_prettier_skips_wiki(self):
+        # Caractérisation (done-criterion #1) : Prettier nu respecte .prettierignore.
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            page = self._vault(tmp)
+            before = page.read_text(encoding="utf-8")
+            proc = subprocess.run(
+                [fmt._npx(), "-y", "prettier", "--write", "wiki/domains/d.md"],
+                capture_output=True, text=True, cwd=str(tmp),
+            )
+            self.assertEqual(page.read_text(encoding="utf-8"), before,
+                             proc.stdout + proc.stderr)
+
+
+class RepoPrettierIgnoreTest(unittest.TestCase):
+    def test_repo_prettierignore_excludes_wiki(self):
+        repo_root = HERE.parent.parent
+        ignore = (repo_root / ".prettierignore").read_text(encoding="utf-8")
+        self.assertRegex(ignore, r"(?m)^wiki/\s*$")
+
+
 if __name__ == "__main__":
     unittest.main()

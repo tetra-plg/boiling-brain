@@ -12,6 +12,10 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 
 - **MCP documentation synced to the 14-tool surface**: `list_domains()` and `ingest()` (both shipped in v1.1.1, #62) were missing from the user-facing docs, which still described "12 tools". `README.md` and `docs/mcp-tiered-loading.md` now list all 14 tools and start the recommended tiered pattern with `list_domains` (domains evolve via `/domain`, so slugs are never guessed). `scripts/mcp/setup-mcp.sh` now injects a `list_domains`-first `CLAUDE.md` block and recognises the older 12-tool block (without `list_domains`) as outdated, replacing it in place. Documentation/setup only — no runtime tool change. (#91)
 
+### Fixed
+
+- **`.prettierignore` + `scripts/wiki-maint/format-md.py`**: a bare Prettier run on `wiki/` (`npx prettier --write`, or an editor "format on save") reflowed GFM tables and silently destroyed the pipes inside `[[wikilink|alias]]` and code spans. The Obsidian-safe wrapper masks those pipes, but nothing forced callers through it. `wiki/` is now in `.prettierignore` so bare Prettier skips it; the wrapper opts out of that ignore via `--ignore-path` (an empty file) to keep formatting `wiki/` in both `--write` and `--check`, and `do_check` no longer copies `.prettierignore` into its temp tree — which would otherwise make `--check` skip the `wiki/` copies and report unformatted pages as clean (silent false negatives). `.claude/rules/pages-wiki.md` documents the hazard and the escaped-pipe (`\|`) alternative. (#89)
+
 ## [v1.2.0] — 2026-07-19
 
 ### Added
