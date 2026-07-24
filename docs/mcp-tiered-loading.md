@@ -139,7 +139,7 @@ The hub page lookup uses `wiki/domains/<domain>.md` and reads its `summary_l1`. 
 - `scripts/mcp/wiki_core.py` — shared query layer used by both entry points.
 - `scripts/mcp/setup-mcp.sh` — installer + self-healing maintainer of `~/.claude/CLAUDE.md` block.
 - `scripts/mcp/smoke_test.py` — token-budget harness.
-- `scripts/migrations/v1.1.0.md` — migration that installs/refreshes the stack. Marked `force-rerun: true` to re-evaluate at every `/update-vault`.
+- `scripts/migrations/v1.1.0.md` — migration that installs the stack on a vault that never enabled it (runs once, like every other migration). Refreshing an already-installed stack is handled by `/update-vault` **step 7**, which detects propagated `scripts/mcp/**` changes and offers `setup-mcp.sh` only then, plus a reload signal when the server code changed (#90).
 
 ## CLI mode (no MCP client)
 
