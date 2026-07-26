@@ -398,13 +398,13 @@ class TestMcpParity(McpModuleTestBase):
         dest = self.vault / "raw" / "notes" / "task7-check.md"
         self.assertTrue(dest.exists())
         self.assertEqual(dest.read_text(encoding="utf-8"), "# Hello\nbody\n")
-        self.assertIn("Fichier créé", result)
+        self.assertIn("File created", result)
         pending = (self.vault / "cache" / ".pending-ingest").read_text(encoding="utf-8")
         self.assertIn("raw/notes/task7-check.md", pending)
 
     def test_drop_to_raw_rejects_path_traversal(self):
         result = self.m.drop_to_raw("../evil", "x.md", "nope")
-        self.assertIn("path traversal détecté", result)
+        self.assertIn("path traversal detected", result)
         self.assertFalse((self.vault / "raw" / "evil").exists())
 
     def _safe_md(self, fn):
@@ -504,34 +504,34 @@ class TestIngestTool(McpModuleTestBase):
     def test_ingest_rejects_invalid_domain_hint_slug(self):
         path = self._write_raw_note()
         result = self.m.ingest(path, domain_hint="not a slug!")
-        self.assertIn("domain_hint invalide", result)
+        self.assertIn("invalid domain_hint", result)
 
     def test_ingest_rejects_path_with_injected_flag(self):
         result = self.m.ingest("raw/notes/x.md --domain-hint=evil")
-        self.assertIn("path invalide", result)
+        self.assertIn("invalid path", result)
 
     def test_ingest_rejects_path_with_whitespace(self):
         result = self.m.ingest("raw/notes/has space.md")
-        self.assertIn("path invalide", result)
+        self.assertIn("invalid path", result)
 
     def test_ingest_rejects_path_traversal(self):
         result = self.m.ingest("../../etc/passwd")
-        self.assertIn("path traversal détecté", result)
+        self.assertIn("path traversal detected", result)
 
     def test_ingest_rejects_path_outside_raw(self):
         result = self.m.ingest("wiki/concepts/alpha.md")
-        self.assertIn("path traversal détecté", result)
+        self.assertIn("path traversal detected", result)
 
     def test_ingest_missing_file(self):
         result = self.m.ingest("raw/notes/ghost.md")
-        self.assertIn("fichier introuvable", result)
+        self.assertIn("file not found", result)
 
     def test_ingest_nonzero_exit_returns_stderr_detail(self):
         path = self._write_raw_note()
         fake = MagicMock(returncode=1, stdout="", stderr="boom")
         with patch.object(self.m.subprocess, "run", return_value=fake):
             result = self.m.ingest(path)
-        self.assertIn("échoué", result)
+        self.assertIn("failed", result)
         self.assertIn("boom", result)
 
     def test_ingest_timeout_returns_error(self):
@@ -546,7 +546,7 @@ class TestIngestTool(McpModuleTestBase):
         path = self._write_raw_note()
         with patch.object(self.m.subprocess, "run", side_effect=FileNotFoundError()):
             result = self.m.ingest(path)
-        self.assertIn("CLI `claude` introuvable", result)
+        self.assertIn("`claude` CLI not found", result)
 
     def test_ingest_resolves_claude_via_shutil_which(self):
         # #84: the spawned command must use the shutil.which-resolved executable
@@ -567,14 +567,14 @@ class TestIngestTool(McpModuleTestBase):
         with patch("shutil.which", return_value=None), \
                 patch.object(self.m.subprocess, "run") as mock_run:
             result = self.m.ingest(path)
-        self.assertIn("CLI `claude` introuvable", result)
+        self.assertIn("`claude` CLI not found", result)
         mock_run.assert_not_called()
 
     def test_ingest_unexpected_exception_returns_error_not_raise(self):
         path = self._write_raw_note()
         with patch.object(self.m.subprocess, "run", side_effect=PermissionError("not executable")):
             result = self.m.ingest(path)
-        self.assertIn("interrompue de façon inattendue", result)
+        self.assertIn("aborted unexpectedly", result)
 
 
 class TestIngestHeadlessGuard(unittest.TestCase):
