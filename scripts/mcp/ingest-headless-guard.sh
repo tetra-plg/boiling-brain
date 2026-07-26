@@ -20,7 +20,7 @@
 # built-in base set — for a custom domain-expert agent whose Bash needs go
 # beyond `shasum`.
 set -euo pipefail
-trap 'echo "BLOQUÉ (ingest headless guard) : payload JSON invalide ou erreur interne du hook" >&2; exit 2' ERR
+trap 'echo "BLOCKED (ingest headless guard): invalid JSON payload or internal hook error" >&2; exit 2' ERR
 
 VAULT_PATH="${VAULT_PATH:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 LOCAL_ALLOWLIST="$VAULT_PATH/.claude/ingest-bash-allowlist.local.txt"
@@ -28,7 +28,7 @@ LOCAL_ALLOWLIST="$VAULT_PATH/.claude/ingest-bash-allowlist.local.txt"
 input=$(cat)
 
 deny() {
-  echo "BLOQUÉ (ingest headless guard) : $1" >&2
+  echo "BLOCKED (ingest headless guard): $1" >&2
   exit 2
 }
 
@@ -51,14 +51,14 @@ except Exception:
       .claude/agents/*-expert.suggestions.md)
         exit 0 ;;
       *)
-        deny "écriture hors périmètre autorisé : $rel" ;;
+        deny "write outside the allowed scope: $rel" ;;
     esac
     ;;
   Bash)
     command=$(printf '%s' "$input" | python3 -c "import sys, json; print(json.load(sys.stdin).get('tool_input', {}).get('command', ''))")
 
     if [[ "$command" == *".."* ]]; then
-      deny "commande Bash contenant « .. » (traversal potentiel) : $command"
+      deny "Bash command containing \"..\" (potential traversal): $command"
     fi
 
     has_shell_metachars() {
@@ -121,19 +121,19 @@ except Exception:
         case "$command" in
           "$prefix"*)
             if has_shell_metachars "$command"; then
-              deny "commande Bash avec métacaractères suspects après un préfixe local autorisé : $command"
+              deny "Bash command with suspicious metacharacters after an allowed local prefix: $command"
             fi
             exit 0
             ;;
         esac
       done < "$LOCAL_ALLOWLIST"
     fi
-    deny "commande Bash hors allowlist : $command"
+    deny "Bash command not in allowlist: $command"
     ;;
   Read|Glob|Grep|Task|TodoWrite)
     exit 0
     ;;
   *)
-    deny "outil non explicitement autorisé pendant un run headless : $tool_name"
+    deny "tool not explicitly allowed during a headless run: $tool_name"
     ;;
 esac

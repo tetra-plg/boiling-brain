@@ -617,7 +617,7 @@ class TestIngestHeadlessGuard(unittest.TestCase):
     def test_denies_write_outside_wiki(self):
         result = self._run_hook("Write", {"file_path": str(self.vault / "CLAUDE.md")})
         self.assertEqual(result.returncode, 2)
-        self.assertIn("hors périmètre", result.stderr)
+        self.assertIn("outside the allowed scope", result.stderr)
 
     def test_denies_write_to_scripts(self):
         result = self._run_hook("Write", {"file_path": str(self.vault / "scripts/evil.sh")})
@@ -694,7 +694,7 @@ class TestIngestHeadlessGuard(unittest.TestCase):
     def test_denies_arbitrary_bash(self):
         result = self._run_hook("Bash", {"command": "rm -rf /"})
         self.assertEqual(result.returncode, 2)
-        self.assertIn("hors allowlist", result.stderr)
+        self.assertIn("not in allowlist", result.stderr)
 
     def test_denies_shasum_with_chained_command(self):
         result = self._run_hook(
