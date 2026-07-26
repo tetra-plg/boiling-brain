@@ -195,15 +195,15 @@ def drop_to_raw(subfolder: str, filename: str, content: str) -> str:
     try:
         dest_dir = (wiki_core.RAW_DIR / subfolder).resolve()
         if not str(dest_dir).startswith(str(wiki_core.RAW_DIR.resolve())):
-            return "Erreur : sous-dossier invalide (path traversal détecté)."
+            return "Error: invalid subfolder (path traversal detected)."
         dest_file = (dest_dir / filename).resolve()
         if not str(dest_file).startswith(str(dest_dir)):
-            return "Erreur : nom de fichier invalide (path traversal détecté)."
+            return "Error: invalid filename (path traversal detected)."
     except Exception as e:
-        return f"Erreur de validation du chemin : {e}"
+        return f"Path validation error: {e}"
 
     if dest_file.exists():
-        return f"Fichier déjà existant : {dest_file.relative_to(wiki_core.WIKI_PATH)}. Utilise un autre nom."
+        return f"File already exists: {dest_file.relative_to(wiki_core.WIKI_PATH)}. Use another name."
 
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_file.write_text(content, encoding="utf-8")
@@ -215,7 +215,7 @@ def drop_to_raw(subfolder: str, filename: str, content: str) -> str:
     with open(pending, "a", encoding="utf-8") as f:
         f.write(rel_path + "\n")
 
-    return f"Fichier créé : {rel_path}\nSignal .pending-ingest mis à jour."
+    return f"File created: {rel_path}\n.pending-ingest signal updated."
 
 
 @mcp.tool(
@@ -243,22 +243,22 @@ def drop_to_raw(subfolder: str, filename: str, content: str) -> str:
 )
 def ingest(path: str, domain_hint: str = "") -> str:
     if domain_hint and not _SLUG_RE.match(domain_hint):
-        return (f"Erreur : domain_hint invalide : « {domain_hint} » — attendu un slug "
-                 f"(minuscules, chiffres, tirets). Voir list_domains() pour les valeurs valides.")
+        return (f"Error: invalid domain_hint: \"{domain_hint}\" — expected a slug "
+                 f"(lowercase, digits, hyphens). See list_domains() for valid values.")
 
     if any(c.isspace() for c in path) or any(part.startswith("-") for part in path.split("/")):
-        return (f"Erreur : path invalide : « {path} » — ne doit contenir ni espace ni "
-                 f"segment commençant par « - » (risque d'injection de flag dans la commande construite).")
+        return (f"Error: invalid path: \"{path}\" — must not contain a space or a "
+                 f"segment starting with \"-\" (flag-injection risk in the built command).")
 
     try:
         target = (wiki_core.WIKI_PATH / path).resolve()
         if not str(target).startswith(str(wiki_core.RAW_DIR.resolve())):
-            return "Erreur : chemin invalide (path traversal détecté)."
+            return "Error: invalid path (path traversal detected)."
     except Exception as e:
-        return f"Erreur de validation du chemin : {e}"
+        return f"Path validation error: {e}"
 
     if not target.exists():
-        return f"Erreur : fichier introuvable : {path}."
+        return f"Error: file not found: {path}."
 
     prompt = f"/ingest {path} --headless"
     if domain_hint:
@@ -272,7 +272,7 @@ def ingest(path: str, domain_hint: str = "") -> str:
     # no command-injection surface is reintroduced. (#84)
     claude_exe = shutil.which("claude")
     if claude_exe is None:
-        return "Erreur : CLI `claude` introuvable dans l'environnement du serveur MCP."
+        return "Error: `claude` CLI not found in the MCP server environment."
 
     cmd = [claude_exe, "-p", prompt, "--settings", _ingest_settings_json()]
     if INGEST_PERMISSION_MODE:
@@ -283,15 +283,15 @@ def ingest(path: str, domain_hint: str = "") -> str:
             cmd, capture_output=True, text=True, timeout=INGEST_TIMEOUT_S,
             cwd=str(wiki_core.WIKI_PATH))
     except subprocess.TimeoutExpired:
-        return f"Erreur : ingestion de {path} interrompue après {INGEST_TIMEOUT_S}s (timeout)."
+        return f"Error: ingestion of {path} aborted after {INGEST_TIMEOUT_S}s (timeout)."
     except FileNotFoundError:
-        return "Erreur : CLI `claude` introuvable dans l'environnement du serveur MCP."
+        return "Error: `claude` CLI not found in the MCP server environment."
     except Exception as e:
-        return f"Erreur : ingestion de {path} interrompue de façon inattendue ({e})."
+        return f"Error: ingestion of {path} aborted unexpectedly ({e})."
 
     if result.returncode != 0:
-        detail = result.stderr.strip() or "code de sortie non nul, sans détail sur stderr."
-        return f"Erreur : l'ingestion de {path} a échoué ({detail})"
+        detail = result.stderr.strip() or "non-zero exit code, no detail on stderr."
+        return f"Error: ingestion of {path} failed ({detail})"
 
     return result.stdout
 

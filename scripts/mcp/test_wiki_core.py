@@ -116,7 +116,7 @@ class TestReadPage(WikiCoreTestBase):
     def test_read_missing_raises(self):
         with self.assertRaises(wiki_core.WikiLookupError) as ctx:
             wiki_core.read_page_data("wiki/concepts/ghost.md")
-        self.assertEqual(str(ctx.exception), "Page introuvable : wiki/concepts/ghost.md")
+        self.assertEqual(str(ctx.exception), "Page not found: wiki/concepts/ghost.md")
 
     def test_read_path_traversal_raises(self):
         with self.assertRaises(wiki_core.WikiLookupError) as ctx:
@@ -131,7 +131,7 @@ class TestPreviewPage(WikiCoreTestBase):
         self.assertEqual(data["summary_l1"], "Alpha is the central concept.")
         self.assertIsNone(data["body_snippet"])
         md = wiki_core.preview_page_md(data)
-        self.assertTrue(md.startswith("# Preview : wiki/concepts/alpha.md"))
+        self.assertTrue(md.startswith("# Preview: wiki/concepts/alpha.md"))
         self.assertIn("**type**: concept", md)
         self.assertIn("## summary_l1\nAlpha is the central concept.", md)
 
@@ -140,7 +140,7 @@ class TestPreviewPage(WikiCoreTestBase):
         data = wiki_core.preview_page_data("wiki/concepts/beta.md")
         self.assertEqual(data["summary_l1"], "")
         self.assertIsNotNone(data["body_snippet"])
-        self.assertIn("## Début de page", wiki_core.preview_page_md(data))
+        self.assertIn("## Page start", wiki_core.preview_page_md(data))
 
     def test_preview_missing_raises(self):
         with self.assertRaises(wiki_core.WikiLookupError):
@@ -162,12 +162,12 @@ class TestSearchWiki(WikiCoreTestBase):
         data = wiki_core.search_wiki_data("zzzznomatch")
         self.assertEqual(data["results"], [])
         self.assertEqual(wiki_core.search_wiki_md(data),
-                         "Aucun résultat pour « zzzznomatch ».")
+                         'No result for "zzzznomatch".')
 
     def test_search_empty_query_raises(self):
         with self.assertRaises(wiki_core.WikiLookupError) as ctx:
             wiki_core.search_wiki_data("   ")
-        self.assertEqual(str(ctx.exception), "Requête vide.")
+        self.assertEqual(str(ctx.exception), "Empty query.")
 
     def test_search_null_summary_l0_renders_dash(self):
         # A page whose summary_l0 is explicitly null must render "—", not "None".
@@ -189,37 +189,37 @@ class TestScanType(WikiCoreTestBase):
         slugs = [r["slug"] for r in data["results"]]
         self.assertEqual(slugs, ["alpha", "beta"])  # 4 backlinks before 2
         md = wiki_core.scan_type_md(data)
-        self.assertTrue(md.startswith("# Concepts dans demo — top 2 par centralité"))
+        self.assertTrue(md.startswith("# Concepts in demo — top 2 by centrality"))
         self.assertIn("- alpha — Alpha concept", md)
 
     def test_concepts_with_query_header(self):
         data = wiki_core.scan_type_data("demo", "concept", query="alpha")
         md = wiki_core.scan_type_md(data)
-        self.assertIn("pour « alpha »", md)
+        self.assertIn('for "alpha"', md)
 
     def test_empty_domain_raises(self):
         with self.assertRaises(wiki_core.WikiLookupError) as ctx:
             wiki_core.scan_type_data("nope", "concept")
         self.assertEqual(str(ctx.exception),
-                         "Aucune page de type « concept » dans le domaine « nope ».")
+                         'No page of type "concept" in domain "nope".')
 
     def test_type_absent_in_populated_domain_is_empty(self):
         data = wiki_core.scan_type_data("demo", "diagram")  # no diagrams in demo
         self.assertEqual(data["results"], [])
         self.assertEqual(data["_reason"], "no_typed")
         self.assertEqual(wiki_core.scan_type_md(data),
-                         "Aucune page de type « diagram » dans le domaine « demo ».")
+                         'No page of type "diagram" in domain "demo".')
 
     def test_query_no_match_is_empty(self):
         data = wiki_core.scan_type_data("demo", "concept", query="zzzz")
         self.assertEqual(data["results"], [])
         self.assertEqual(data["_reason"], "no_match")
-        self.assertIn("ne matche « zzzz »", wiki_core.scan_type_md(data))
+        self.assertIn('matches "zzzz"', wiki_core.scan_type_md(data))
 
     def test_scan_sources_without_query_raises_guidance(self):
         with self.assertRaises(wiki_core.WikiLookupError) as ctx:
             wiki_core.scan_sources_data("demo")
-        self.assertIn("sans query retournerait 1 sources", str(ctx.exception))
+        self.assertIn("without a query would return 1 sources", str(ctx.exception))
 
     def test_scan_sources_with_query(self):
         data = wiki_core.scan_sources_data("demo", query="source")
@@ -247,18 +247,18 @@ class TestScanDomain(WikiCoreTestBase):
 
     def test_domain_md_rendering(self):
         md = wiki_core.scan_domain_md(wiki_core.scan_domain_data("demo"))
-        self.assertTrue(md.startswith("# Domaine demo (5 pages)"))
+        self.assertTrue(md.startswith("# Domain demo (5 pages)"))
         self.assertIn("## Hub", md)
         self.assertIn("## Structure", md)
         self.assertIn("- concept: 2 → scan_concepts(\"demo\")", md)
-        self.assertIn("## Top 10 pages centrales (par backlinks)", md)
+        self.assertIn("## Top 10 central pages (by backlinks)", md)
         # display path is rel_dir/slug, not the canonical wiki/...md
         self.assertIn("- concepts/alpha (concept, 4 backlinks) — Alpha concept", md)
 
     def test_empty_domain_raises(self):
         with self.assertRaises(wiki_core.WikiLookupError) as ctx:
             wiki_core.scan_domain_data("nope")
-        self.assertEqual(str(ctx.exception), "Aucune page trouvée pour le domaine « nope ».")
+        self.assertEqual(str(ctx.exception), 'No page found for domain "nope".')
 
 
 class TestListDomains(WikiCoreTestBase):
@@ -286,9 +286,9 @@ class TestListDomains(WikiCoreTestBase):
 
     def test_list_domains_md_flags_missing_expert(self):
         md = wiki_core.list_domains_md(wiki_core.list_domains_data())
-        self.assertIn("- demo (agent expert disponible) — Demo domain hub", md)
+        self.assertIn("- demo (expert agent available) — Demo domain hub", md)
         self.assertIn(
-            "- orphan (pas d'agent expert (domain_hint inutilisable)) — "
+            "- orphan (no expert agent (domain_hint unusable)) — "
             "Orphan domain, no expert yet", md)
 
     def test_list_domains_empty_vault(self):
@@ -298,7 +298,7 @@ class TestListDomains(WikiCoreTestBase):
             data = wiki_core.list_domains_data()
             self.assertEqual(data["domains"], [])
             self.assertEqual(wiki_core.list_domains_md(data),
-                             "Aucun domaine déclaré dans ce vault.")
+                             "No domain declared in this vault.")
         finally:
             empty.cleanup()
             wiki_core.configure(self.vault)
@@ -398,13 +398,13 @@ class TestMcpParity(McpModuleTestBase):
         dest = self.vault / "raw" / "notes" / "task7-check.md"
         self.assertTrue(dest.exists())
         self.assertEqual(dest.read_text(encoding="utf-8"), "# Hello\nbody\n")
-        self.assertIn("Fichier créé", result)
+        self.assertIn("File created", result)
         pending = (self.vault / "cache" / ".pending-ingest").read_text(encoding="utf-8")
         self.assertIn("raw/notes/task7-check.md", pending)
 
     def test_drop_to_raw_rejects_path_traversal(self):
         result = self.m.drop_to_raw("../evil", "x.md", "nope")
-        self.assertIn("path traversal détecté", result)
+        self.assertIn("path traversal detected", result)
         self.assertFalse((self.vault / "raw" / "evil").exists())
 
     def _safe_md(self, fn):
@@ -504,34 +504,34 @@ class TestIngestTool(McpModuleTestBase):
     def test_ingest_rejects_invalid_domain_hint_slug(self):
         path = self._write_raw_note()
         result = self.m.ingest(path, domain_hint="not a slug!")
-        self.assertIn("domain_hint invalide", result)
+        self.assertIn("invalid domain_hint", result)
 
     def test_ingest_rejects_path_with_injected_flag(self):
         result = self.m.ingest("raw/notes/x.md --domain-hint=evil")
-        self.assertIn("path invalide", result)
+        self.assertIn("invalid path", result)
 
     def test_ingest_rejects_path_with_whitespace(self):
         result = self.m.ingest("raw/notes/has space.md")
-        self.assertIn("path invalide", result)
+        self.assertIn("invalid path", result)
 
     def test_ingest_rejects_path_traversal(self):
         result = self.m.ingest("../../etc/passwd")
-        self.assertIn("path traversal détecté", result)
+        self.assertIn("path traversal detected", result)
 
     def test_ingest_rejects_path_outside_raw(self):
         result = self.m.ingest("wiki/concepts/alpha.md")
-        self.assertIn("path traversal détecté", result)
+        self.assertIn("path traversal detected", result)
 
     def test_ingest_missing_file(self):
         result = self.m.ingest("raw/notes/ghost.md")
-        self.assertIn("fichier introuvable", result)
+        self.assertIn("file not found", result)
 
     def test_ingest_nonzero_exit_returns_stderr_detail(self):
         path = self._write_raw_note()
         fake = MagicMock(returncode=1, stdout="", stderr="boom")
         with patch.object(self.m.subprocess, "run", return_value=fake):
             result = self.m.ingest(path)
-        self.assertIn("échoué", result)
+        self.assertIn("failed", result)
         self.assertIn("boom", result)
 
     def test_ingest_timeout_returns_error(self):
@@ -546,7 +546,7 @@ class TestIngestTool(McpModuleTestBase):
         path = self._write_raw_note()
         with patch.object(self.m.subprocess, "run", side_effect=FileNotFoundError()):
             result = self.m.ingest(path)
-        self.assertIn("CLI `claude` introuvable", result)
+        self.assertIn("`claude` CLI not found", result)
 
     def test_ingest_resolves_claude_via_shutil_which(self):
         # #84: the spawned command must use the shutil.which-resolved executable
@@ -567,14 +567,14 @@ class TestIngestTool(McpModuleTestBase):
         with patch("shutil.which", return_value=None), \
                 patch.object(self.m.subprocess, "run") as mock_run:
             result = self.m.ingest(path)
-        self.assertIn("CLI `claude` introuvable", result)
+        self.assertIn("`claude` CLI not found", result)
         mock_run.assert_not_called()
 
     def test_ingest_unexpected_exception_returns_error_not_raise(self):
         path = self._write_raw_note()
         with patch.object(self.m.subprocess, "run", side_effect=PermissionError("not executable")):
             result = self.m.ingest(path)
-        self.assertIn("interrompue de façon inattendue", result)
+        self.assertIn("aborted unexpectedly", result)
 
 
 class TestIngestHeadlessGuard(unittest.TestCase):
@@ -617,7 +617,7 @@ class TestIngestHeadlessGuard(unittest.TestCase):
     def test_denies_write_outside_wiki(self):
         result = self._run_hook("Write", {"file_path": str(self.vault / "CLAUDE.md")})
         self.assertEqual(result.returncode, 2)
-        self.assertIn("hors périmètre", result.stderr)
+        self.assertIn("outside the allowed scope", result.stderr)
 
     def test_denies_write_to_scripts(self):
         result = self._run_hook("Write", {"file_path": str(self.vault / "scripts/evil.sh")})
@@ -694,7 +694,7 @@ class TestIngestHeadlessGuard(unittest.TestCase):
     def test_denies_arbitrary_bash(self):
         result = self._run_hook("Bash", {"command": "rm -rf /"})
         self.assertEqual(result.returncode, 2)
-        self.assertIn("hors allowlist", result.stderr)
+        self.assertIn("not in allowlist", result.stderr)
 
     def test_denies_shasum_with_chained_command(self):
         result = self._run_hook(
