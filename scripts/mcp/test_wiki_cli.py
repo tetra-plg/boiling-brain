@@ -44,7 +44,7 @@ class TestWikiCli(unittest.TestCase):
     def test_search_markdown_exit_zero(self):
         r = run(self.vault, "search", "alpha")
         self.assertEqual(r.returncode, 0)
-        self.assertIn("Résultats pour « alpha »", r.stdout)
+        self.assertIn('Results for "alpha"', r.stdout)
 
     def test_search_json_is_parsable(self):
         r = run(self.vault, "search", "alpha", "--json")
@@ -63,18 +63,18 @@ class TestWikiCli(unittest.TestCase):
     def test_missing_page_exits_2_with_stderr(self):
         r = run(self.vault, "read", "wiki/concepts/ghost.md")
         self.assertEqual(r.returncode, 2)
-        self.assertIn("Page introuvable", r.stderr)
+        self.assertIn("Page not found", r.stderr)
         self.assertEqual(r.stdout, "")
 
     def test_empty_search_no_match_exits_0(self):
         r = run(self.vault, "search", "zzzznope")
         self.assertEqual(r.returncode, 0)
-        self.assertIn("Aucun résultat", r.stdout)
+        self.assertIn("No result", r.stdout)
 
     def test_scan_sources_without_query_exits_2(self):
         r = run(self.vault, "scan-sources", "demo")
         self.assertEqual(r.returncode, 2)
-        self.assertIn("sans query", r.stderr)
+        self.assertIn("without a query", r.stderr)
 
     def test_scan_domain_json(self):
         r = run(self.vault, "scan-domain", "demo", "--json")
@@ -84,7 +84,7 @@ class TestWikiCli(unittest.TestCase):
     def test_list_domains_markdown_and_json(self):
         r = run(self.vault, "list-domains")
         self.assertEqual(r.returncode, 0)
-        self.assertIn("Domaines déclarés", r.stdout)
+        self.assertIn("Declared domains", r.stdout)
         self.assertIn("- demo", r.stdout)
         rj = run(self.vault, "list-domains", "--json")
         self.assertEqual(rj.returncode, 0)
@@ -95,7 +95,7 @@ class TestWikiCli(unittest.TestCase):
     def test_scan_concepts_markdown_and_json(self):
         r = run(self.vault, "scan-concepts", "demo")
         self.assertEqual(r.returncode, 0)
-        self.assertIn("Concepts dans demo", r.stdout)
+        self.assertIn("Concepts in demo", r.stdout)
         self.assertIn("- alpha — Alpha", r.stdout)
         rj = run(self.vault, "scan-concepts", "demo", "--json")
         self.assertEqual(rj.returncode, 0)
@@ -106,7 +106,7 @@ class TestWikiCli(unittest.TestCase):
     def test_preview_markdown(self):
         r = run(self.vault, "preview", "wiki/concepts/alpha.md")
         self.assertEqual(r.returncode, 0)
-        self.assertTrue(r.stdout.startswith("# Preview : wiki/concepts/alpha.md"))
+        self.assertTrue(r.stdout.startswith("# Preview: wiki/concepts/alpha.md"))
         self.assertIn("**type**: concept", r.stdout)
 
 
