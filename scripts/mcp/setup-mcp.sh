@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# setup-mcp.sh — Configure le serveur MCP boiling-brain-wiki et les hooks Claude Code.
-#   - Enregistre le serveur MCP via `claude mcp add -s user` (scope user, visible cross-projets)
-#   - Ajoute le hook Stop (check-session-activity.sh) dans ~/.claude/settings.json
-#   - Ajoute les instructions d'invocation dans ~/.claude/CLAUDE.md
+# setup-mcp.sh — Configure the boiling-brain-wiki MCP server and the Claude Code hooks.
+#   - Registers the MCP server via `claude mcp add -s user` (user scope, visible cross-project)
+#   - Adds the Stop hook (check-session-activity.sh) to ~/.claude/settings.json
+#   - Adds the invocation instructions to ~/.claude/CLAUDE.md
 #
-# Usage : bash scripts/mcp/setup-mcp.sh [--vault-path /chemin/vers/vault]
+# Usage: bash scripts/mcp/setup-mcp.sh [--vault-path /path/to/vault]
 #
-# Par défaut, le vault est le répertoire parent de ce script (racine du vault).
-# Pré-requis :
+# By default, the vault is this script's parent directory (the vault root).
+# Requirements:
 #   - Claude Code CLI (`claude`)
 #   - Python 3.9+
-#   - fastmcp (installé automatiquement via pipx si dispo, sinon pip --user)
+#   - fastmcp (installed automatically via pipx if available, otherwise pip --user)
 #   - For headless / scriptable access without an MCP client, use wiki-cli.py
 #     (same query layer via wiki_core, no fastmcp dependency):
 #       python3 scripts/mcp/wiki-cli.py search "<query>" --json
@@ -25,15 +25,15 @@ set -euo pipefail
 export PYTHONIOENCODING=utf-8
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Post-#42 layout : ce script vit dans scripts/mcp/. La racine du vault est
-# donc 2 niveaux au-dessus (../..), pas 1 seul comme avant #42.
+# Post-#42 layout: this script lives in scripts/mcp/. The vault root is
+# therefore 2 levels up (../..), not just 1 as before #42.
 VAULT_PATH="${VAULT_PATH:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 
 # --- Parse args ---
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --vault-path) VAULT_PATH="$2"; shift 2 ;;
-    *) echo "Usage: $0 [--vault-path /chemin/vers/vault]" >&2; exit 1 ;;
+    *) echo "Usage: $0 [--vault-path /path/to/vault]" >&2; exit 1 ;;
   esac
 done
 
@@ -43,69 +43,69 @@ CLAUDE_MD="$HOME/.claude/CLAUDE.md"
 SERVER_NAME="boiling-brain-wiki"
 
 echo "=== Setup MCP $SERVER_NAME ==="
-echo "Vault : $VAULT_PATH"
-echo "Script MCP : $MCP_SCRIPT"
+echo "Vault: $VAULT_PATH"
+echo "MCP script: $MCP_SCRIPT"
 
-# --- Vérifier Python ---
+# --- Check Python ---
 if ! command -v python3 &>/dev/null; then
-  echo "❌ python3 introuvable. Installe Python 3.9+." >&2
+  echo "❌ python3 not found. Install Python 3.9+." >&2
   exit 1
 fi
 
-# --- Vérifier Claude Code CLI ---
+# --- Check Claude Code CLI ---
 if ! command -v claude &>/dev/null; then
-  echo "❌ Commande \`claude\` introuvable. Installe Claude Code CLI." >&2
+  echo "❌ \`claude\` command not found. Install the Claude Code CLI." >&2
   exit 1
 fi
 
-# --- Installer fastmcp + résoudre l'interpréteur Python qui peut le charger ---
-# Priorité : pipx (isolé, propre macOS/Debian PEP 668) → pip --user (pollue moins) → erreur.
-# Important : pipx isole fastmcp dans son propre venv ; il faut donc utiliser le python
-# de ce venv (pas python3 système) pour invoquer mcp-wiki.py, sinon import fastmcp échoue.
+# --- Install fastmcp + resolve the Python interpreter that can load it ---
+# Priority: pipx (isolated, clean on macOS/Debian PEP 668) → pip --user (less polluting) → error.
+# Important: pipx isolates fastmcp in its own venv; you must therefore use that venv's
+# python (not the system python3) to invoke mcp-wiki.py, otherwise import fastmcp fails.
 
 MCP_PYTHON=""
 
 if python3 -c "import fastmcp" 2>/dev/null; then
-  # fastmcp déjà importable depuis python3 système (pip install antérieur, environnement géré, etc.)
+  # fastmcp already importable from the system python3 (prior pip install, managed env, etc.)
   MCP_PYTHON="$(command -v python3)"
-  echo "✅ fastmcp déjà disponible pour python3 système."
+  echo "✅ fastmcp already available for the system python3."
 elif command -v pipx &>/dev/null; then
-  echo "📦 Installation de fastmcp via pipx…"
+  echo "📦 Installing fastmcp via pipx…"
   pipx install fastmcp || pipx upgrade fastmcp || true
   PIPX_VENVS="$(pipx environment --value PIPX_LOCAL_VENVS 2>/dev/null || echo "$HOME/.local/pipx/venvs")"
   CANDIDATE="$PIPX_VENVS/fastmcp/bin/python"
   if [[ -x "$CANDIDATE" ]] && "$CANDIDATE" -c "import fastmcp" 2>/dev/null; then
     MCP_PYTHON="$CANDIDATE"
   else
-    echo "❌ pipx a installé fastmcp mais le python du venv ($CANDIDATE) n'est pas exploitable." >&2
+    echo "❌ pipx installed fastmcp but the venv python ($CANDIDATE) is not usable." >&2
     exit 1
   fi
 else
-  echo "📦 pipx introuvable, fallback pip install --user…"
+  echo "📦 pipx not found, falling back to pip install --user…"
   if python3 -m pip install --user "fastmcp>=2.14" 2>/dev/null; then
     MCP_PYTHON="$(command -v python3)"
   else
-    echo "❌ Impossible d'installer fastmcp (pip --user bloqué par PEP 668, pipx absent)." >&2
-    echo "   Installe pipx (\`brew install pipx\` ou \`apt install pipx\`) puis relance." >&2
+    echo "❌ Cannot install fastmcp (pip --user blocked by PEP 668, pipx missing)." >&2
+    echo "   Install pipx (\`brew install pipx\` or \`apt install pipx\`) then re-run." >&2
     exit 1
   fi
 fi
 
-"$MCP_PYTHON" -c "import fastmcp; print(f'✅ fastmcp {fastmcp.__version__} OK (interpréteur : $MCP_PYTHON)')"
+"$MCP_PYTHON" -c "import fastmcp; print(f'✅ fastmcp {fastmcp.__version__} OK (interpreter: $MCP_PYTHON)')"
 
-# --- Enregistrer le serveur MCP via claude mcp add (scope user) ---
+# --- Register the MCP server via claude mcp add (user scope) ---
 mkdir -p "$HOME/.claude"
 
 if claude mcp get "$SERVER_NAME" >/dev/null 2>&1; then
-  echo "✅ MCP server '$SERVER_NAME' déjà enregistré."
+  echo "✅ MCP server '$SERVER_NAME' already registered."
 else
   claude mcp add -s user "$SERVER_NAME" \
     -e "WIKI_PATH=$VAULT_PATH" \
     -- "$MCP_PYTHON" "$MCP_SCRIPT"
-  echo "✅ MCP server '$SERVER_NAME' enregistré (scope user, interpréteur $MCP_PYTHON)."
+  echo "✅ MCP server '$SERVER_NAME' registered (user scope, interpreter $MCP_PYTHON)."
 fi
 
-# --- Hook Stop dans ~/.claude/settings.json ---
+# --- Stop hook in ~/.claude/settings.json ---
 CLAUDE_SETTINGS="$CLAUDE_SETTINGS" VAULT_PATH="$VAULT_PATH" python3 - <<'PYEOF'
 import json
 import os
@@ -141,39 +141,39 @@ if not already_registered:
         "matcher": "",
         "hooks": [{"type": "command", "command": hook_script}]
     })
-    print("✅ Hook Stop enregistré.")
+    print("✅ Stop hook registered.")
 else:
-    print("✅ Hook Stop déjà enregistré.")
+    print("✅ Stop hook already registered.")
 
 settings_path.write_text(json.dumps(settings, indent=2, ensure_ascii=False))
-print(f"✅ {settings_path} mis à jour (hook Stop).")
+print(f"✅ {settings_path} updated (Stop hook).")
 PYEOF
 
-# --- Append ~/.claude/CLAUDE.md (idempotent via marqueur ; replace if outdated) ---
+# --- Append ~/.claude/CLAUDE.md (idempotent via marker; replace if outdated) ---
 MARKER="<!-- boiling-brain-wiki-mcp -->"
 CLAUDE_MD_BLOCK="$MARKER
-## Wiki personnel (boiling-brain-wiki MCP)
+## Personal wiki (boiling-brain-wiki MCP)
 
-Le MCP \`boiling-brain-wiki\` expose le wiki de connaissances personnel de l'utilisateur (concepts, décisions, synthèses, cheatsheets, sources… organisés par domaines).
+The \`boiling-brain-wiki\` MCP exposes the user's personal knowledge wiki (concepts, decisions, syntheses, cheatsheets, sources… organised by domain).
 
-**Déclencheur** : dès qu'une question peut toucher aux connaissances, projets ou décisions personnels de l'utilisateur (et pas seulement au code du repo courant), consulte le wiki AVANT de répondre de mémoire. Premier appel obligatoire : \`list_domains()\` — c'est lui qui te dit quels domaines existent, ne les devine pas.
+**Trigger**: whenever a question may touch the user's personal knowledge, projects or decisions (not just the current repo's code), consult the wiki BEFORE answering from memory. Mandatory first call: \`list_domains()\` — it tells you which domains exist; never guess them.
 
-**Pattern tiered — toujours dans cet ordre, jamais de dump de domaine :**
-1. \`list_domains()\` → domaines existants.
-2. \`scan_domain(domain)\` → overview hiérarchique (~1k tokens).
-3. \`scan_<type>(domain, query=\"\", top=20)\` → drill-down par type : \`scan_concepts\`, \`scan_entities\`, \`scan_decisions\`, \`scan_syntheses\`, \`scan_cheatsheets\`, \`scan_diagrams\`, \`scan_sources\` (ce dernier REQUIERT une query). Sans query : top N par centralité.
-4. \`preview_page(page_path)\` (résumé, ~300 tokens) avant \`read_page(page_path)\` (corps complet).
+**Tiered pattern — always in this order, never a full domain dump:**
+1. \`list_domains()\` → existing domains.
+2. \`scan_domain(domain)\` → hierarchical overview (~1k tokens).
+3. \`scan_<type>(domain, query=\"\", top=20)\` → per-type drill-down: \`scan_concepts\`, \`scan_entities\`, \`scan_decisions\`, \`scan_syntheses\`, \`scan_cheatsheets\`, \`scan_diagrams\`, \`scan_sources\` (this last one REQUIRES a query). Without a query: top N by centrality.
+4. \`preview_page(page_path)\` (summary, ~300 tokens) before \`read_page(page_path)\` (full body).
 
-**Cross-domaine** : \`search_wiki(query, limit=10)\` — full-text cross-type/cross-domain, quand tu ne sais pas dans quel domaine chercher.
+**Cross-domain**: \`search_wiki(query, limit=10)\` — full-text cross-type/cross-domain, when you don't know which domain to look in.
 
-**Écriture** : \`drop_to_raw(subfolder, filename, content)\` — dépose un fichier dans raw/ pour ingest (bypass propre du hook protect-raw.sh).
+**Writing**: \`drop_to_raw(subfolder, filename, content)\` — drops a file into raw/ for ingest (clean bypass of the protect-raw.sh hook).
 $MARKER"
 
 if [[ -f "$CLAUDE_MD" ]] && grep -qF "$MARKER" "$CLAUDE_MD"; then
   # Marker present — check if the existing block is the current (list_domains-first)
   # version by looking for a distinctive string of the new content.
   if grep -qF "list_domains" "$CLAUDE_MD"; then
-    echo "✅ $CLAUDE_MD déjà configuré (marqueur présent, contenu à jour)."
+    echo "✅ $CLAUDE_MD already configured (marker present, content up to date)."
   else
     # Outdated block (pre-#47 5-tool version, or 12-tool version without
     # list_domains-first). Replace in place.
@@ -190,18 +190,18 @@ if n == 0:
     # Shouldn't happen (grep above confirmed marker presence) but fallback safely.
     new_content = content.rstrip() + "\n\n" + new_block + "\n"
 p.write_text(new_content, encoding="utf-8")
-print(f"✅ {p} mis à jour (bloc obsolète remplacé par la version list_domains-first + tiered loading).")
+print(f"✅ {p} updated (outdated block replaced with the list_domains-first + tiered-loading version).")
 PYEOF
   fi
 else
   echo "" >> "$CLAUDE_MD"
   echo "$CLAUDE_MD_BLOCK" >> "$CLAUDE_MD"
-  echo "✅ $CLAUDE_MD mis à jour."
+  echo "✅ $CLAUDE_MD updated."
 fi
 
 chmod +x "$VAULT_PATH/scripts/hooks/check-session-activity.sh"
 
 echo ""
-echo "=== Configuration terminée ==="
-echo "Redémarre Claude Code pour charger le serveur MCP et les hooks."
-echo "Teste avec : /mcp"
+echo "=== Configuration complete ==="
+echo "Restart Claude Code to load the MCP server and hooks."
+echo "Test with: /mcp"
