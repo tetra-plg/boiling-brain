@@ -29,6 +29,24 @@ def run(args, cwd, env=None):
     )
 
 
+class PythonVersionGuardTest(unittest.TestCase):
+    def test_too_old_interpreter_exits_with_actionable_message(self):
+        import io, contextlib
+        stderr = io.StringIO()
+        with self.assertRaises(SystemExit) as cm, contextlib.redirect_stderr(stderr):
+            fmt.require_python(current=(3, 9, 6))
+        self.assertNotEqual(cm.exception.code, 0)
+        msg = stderr.getvalue()
+        self.assertIn("3.11", msg)   # required version named
+        self.assertIn("3.9.6", msg)  # found version named
+        self.assertNotIn("TypeError", msg)
+
+    def test_supported_interpreter_is_a_noop(self):
+        # Must not raise on the minimum supported version.
+        self.assertIsNone(fmt.require_python(current=(3, 11, 0)))
+        self.assertIsNone(fmt.require_python(current=(3, 14, 4)))
+
+
 class NpxResolutionTest(unittest.TestCase):
     def test_npx_found_via_which(self):
         with mock.patch.object(fmt.shutil, "which", return_value="/usr/bin/npx") as m:
