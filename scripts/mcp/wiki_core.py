@@ -188,9 +188,9 @@ def _resolve_in_vault(page_path):
     """Resolve page_path under the vault, guarding against path traversal."""
     target = (WIKI_PATH / page_path).resolve()
     if not str(target).startswith(str(WIKI_PATH.resolve())):
-        raise WikiLookupError("Erreur : chemin invalide (path traversal détecté).")
+        raise WikiLookupError("Error: invalid path (path traversal detected).")
     if not target.exists():
-        raise WikiLookupError(f"Page introuvable : {page_path}")
+        raise WikiLookupError(f"Page not found: {page_path}")
     return target
 
 
@@ -200,7 +200,7 @@ def read_page_data(page_path):
     try:
         content = target.read_text(encoding="utf-8")
     except Exception as e:
-        raise WikiLookupError(f"Erreur de lecture : {e}")
+        raise WikiLookupError(f"Read error: {e}")
     return {"page_path": page_path, "content": content}
 
 
@@ -214,7 +214,7 @@ def preview_page_data(page_path):
     try:
         content = target.read_text(encoding="utf-8")
     except Exception as e:
-        raise WikiLookupError(f"Erreur de lecture : {e}")
+        raise WikiLookupError(f"Read error: {e}")
     fm, body = _parse_front(content)
     # Whitelist caps verbosity — mirrors the historical preview_page output.
     preview_fields = ("type", "domains", "created", "updated", "summary_l0",
@@ -227,13 +227,13 @@ def preview_page_data(page_path):
 
 
 def preview_page_md(data):
-    lines = [f"# Preview : {data['page_path']}\n"]
+    lines = [f"# Preview: {data['page_path']}\n"]
     for k, v in data["frontmatter"].items():
         lines.append(f"**{k}**: {v}")
     if data["summary_l1"]:
         lines.append(f"\n## summary_l1\n{data['summary_l1']}")
     else:
-        lines.append(f"\n## Début de page\n{data['body_snippet']}…")
+        lines.append(f"\n## Page start\n{data['body_snippet']}…")
     return "\n".join(lines)
 
 
@@ -241,7 +241,7 @@ def preview_page_md(data):
 def search_wiki_data(query, limit=10):
     tokens = _normalize_query(query)
     if not tokens:
-        raise WikiLookupError("Requête vide.")
+        raise WikiLookupError("Empty query.")
     scored = []
     for p in _all_wiki_pages():
         try:
@@ -273,8 +273,8 @@ def search_wiki_data(query, limit=10):
 def search_wiki_md(data):
     results = data["results"]
     if not results:
-        return f"Aucun résultat pour « {data['query']} »."
-    lines = [f"# Résultats pour « {data['query']} » ({len(results)})", ""]
+        return f"No result for \"{data['query']}\"."
+    lines = [f"# Results for \"{data['query']}\" ({len(results)})", ""]
     for r in results:
         l0 = r["summary_l0"] or "—"
         wl = ", ".join(r["wikilinks"]) if r["wikilinks"] else "—"
@@ -294,7 +294,7 @@ def scan_type_data(domain, type_singular, query="", top=20):
     domain_pages = _domain_pages(domain)
     if not domain_pages:
         raise WikiLookupError(
-            f"Aucune page de type « {type_singular} » dans le domaine « {domain} ».")
+            f"No page of type \"{type_singular}\" in domain \"{domain}\".")
     typed = []
     for p in domain_pages:
         try:
@@ -349,11 +349,11 @@ def scan_type_md(data):
     domain, query = data["domain"], data["query"]
     if not data["results"]:
         if data.get("_reason") == "no_match":
-            return (f"Aucune page de type « {type_singular} » dans « {domain} » "
-                    f"ne matche « {query} ».")
-        return f"Aucune page de type « {type_singular} » dans le domaine « {domain} »."
-    header = (f"# {type_plural} dans {domain} — top {len(data['results'])}"
-              + (f" pour « {query} »" if query.strip() else " par centralité"))
+            return (f"No page of type \"{type_singular}\" in \"{domain}\" "
+                    f"matches \"{query}\".")
+        return f"No page of type \"{type_singular}\" in domain \"{domain}\"."
+    header = (f"# {type_plural} in {domain} — top {len(data['results'])}"
+              + (f" for \"{query}\"" if query.strip() else " by centrality"))
     lines = [header, ""]
     for r in data["results"]:
         l0 = r["summary_l0"] or "—"
@@ -370,10 +370,10 @@ def scan_sources_data(domain, query="", top=20):
     if not query.strip():
         n_sources = sum(1 for p in _domain_pages(domain) if _safe_get_type(p) == "source")
         raise WikiLookupError(
-            f"scan_sources(\"{domain}\") sans query retournerait {n_sources} sources, peu utile.\n"
-            f"Préciser une query : scan_sources(\"{domain}\", query=\"<topic>\").\n"
-            f"Pour explorer le domaine sans cible, préférer scan_domain(\"{domain}\") "
-            f"ou scan_concepts(\"{domain}\")."
+            f"scan_sources(\"{domain}\") without a query would return {n_sources} sources, not useful.\n"
+            f"Specify a query: scan_sources(\"{domain}\", query=\"<topic>\").\n"
+            f"To explore the domain without a target, prefer scan_domain(\"{domain}\") "
+            f"or scan_concepts(\"{domain}\")."
         )
     return scan_type_data(domain, "source", query, top)
 
@@ -387,7 +387,7 @@ def scan_domain_data(domain):
     """
     pages = _domain_pages(domain)
     if not pages:
-        raise WikiLookupError(f"Aucune page trouvée pour le domaine « {domain} ».")
+        raise WikiLookupError(f"No page found for domain \"{domain}\".")
     hub_path = WIKI_DIR / "domains" / f"{domain}.md"
     hub_l1 = ""
     if hub_path.exists():
@@ -433,7 +433,7 @@ def scan_domain_data(domain):
 def scan_domain_md(data):
     """Render scan_domain_data() output as a human-readable markdown string."""
     domain = data["domain"]
-    lines = [f"# Domaine {domain} ({data['page_count']} pages)\n"]
+    lines = [f"# Domain {domain} ({data['page_count']} pages)\n"]
     if data["hub_summary_l1"]:
         lines.append("## Hub\n")
         lines.append(data["hub_summary_l1"].strip())
@@ -451,7 +451,7 @@ def scan_domain_md(data):
             hint = "(no dedicated scan tool for this type)"
         lines.append(f"- {t}: {n} → {hint}")
     lines.append("")
-    lines.append("## Top 10 pages centrales (par backlinks)")
+    lines.append("## Top 10 central pages (by backlinks)")
     for r in data["top_central"]:
         p = WIKI_PATH / r["path"]
         rel_dir = str(p.parent.relative_to(WIKI_DIR))
@@ -487,11 +487,11 @@ def list_domains_data():
 
 def list_domains_md(data):
     if not data["domains"]:
-        return "Aucun domaine déclaré dans ce vault."
-    lines = ["# Domaines déclarés", ""]
+        return "No domain declared in this vault."
+    lines = ["# Declared domains", ""]
     for d in data["domains"]:
-        flag = ("agent expert disponible" if d["has_expert"]
-                else "pas d'agent expert (domain_hint inutilisable)")
+        flag = ("expert agent available" if d["has_expert"]
+                else "no expert agent (domain_hint unusable)")
         l0 = d["summary_l0"] or "—"
         lines.append(f"- {d['slug']} ({flag}) — {l0}")
     return "\n".join(lines)

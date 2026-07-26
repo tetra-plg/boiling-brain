@@ -8,3 +8,5 @@ __pycache__/
 *.pyc
 debug-*.png
 debug_*.png
+.claude/settings.json
+.DS_Store

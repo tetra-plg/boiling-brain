@@ -146,6 +146,18 @@ Skipped: <files in UNSTAGE>
 "
 ```
 
+Record which MCP-stack files were **actually staged** (propagated minus `UNSTAGE`) — this drives step 7:
+
+```bash
+# STAGED = the exact list passed to `git add` above
+MCP_SERVER_CHANGED=$(printf '%s\n' "${STAGED[@]}" \
+  | grep -cE '^scripts/mcp/(mcp-wiki\.py|wiki_core\.py)$' || true)
+MCP_SETUP_CHANGED=$(printf '%s\n' "${STAGED[@]}" \
+  | grep -cE '^scripts/mcp/setup-mcp\.sh$' || true)
+```
+
+`wiki-cli.*`, `ingest-headless-guard.sh` and the MCP test files are deliberately excluded: they affect neither the running server process nor its registration, so they must not trigger a reconnect prompt. A file the user skipped must not trigger step 7 either — hence "staged", not "changed".
+
 ### 6. Run the migration chain
 
 For each migration in `MIGRATIONS_TO_APPLY` (ascending version order), invoke it as a sub-workflow. Migration files live under `scripts/migrations/v<X>-*.md` — read the file and execute its steps (AskUserQuestion, edits, commit).
@@ -155,7 +167,66 @@ Each migration returns one of three verdicts:
 - **Applied**: file updated, dedicated commit by the migration. Append its slug to `APPLIED_MIGRATIONS`.
 - **Manual edit / Skipped**: do NOT append. The migration is re-proposed at the next `/update-vault`.
 
-### 7. Bump `.claude/template-version`
+### 7. Refresh the MCP stack (conditional)
+
+Run this step **only** if `MCP_SERVER_CHANGED` or `MCP_SETUP_CHANGED` (step 5) is non-zero. Otherwise skip it entirely — no prompt, no output.
+
+Why it is needed: the MCP server is registered against a **fixed path**, so propagating new code leaves the registration valid but the **running process** stale — the harness started it at session boot and it still serves the previous `mcp-wiki.py`.
+
+#### 7.1 Offer to re-run `setup-mcp.sh`
+
+`setup-mcp.sh` mutates **user-global** state, so it is offered, never run silently:
+
+```json
+{
+  "questions": [
+    {
+      "question": "The MCP stack changed (<changed MCP files>). Re-run setup-mcp.sh to refresh the registration and the global tool-instructions block?",
+      "header": "MCP refresh",
+      "multiSelect": false,
+      "options": [
+        {
+          "label": "Yes, re-run setup-mcp.sh",
+          "description": "Runs `bash scripts/mcp/setup-mcp.sh --vault-path \"$(pwd)\"`. Idempotent, but mutates ~/.claude/settings.json and ~/.claude/CLAUDE.md, and re-registers the server at user scope (visible from every project)."
+        },
+        {
+          "label": "No, skip",
+          "description": "Registration and global instructions block stay as they are. Re-run the command manually later if needed."
+        }
+      ]
+    }
+  ]
+}
+```
+
+If accepted:
+
+```bash
+bash scripts/mcp/setup-mcp.sh --vault-path "$(pwd)"
+```
+
+Capture its stdout and show it to the user. If the script fails, report the failure and continue — the propagation commit is already done and must not be rolled back.
+
+#### 7.2 Signal the reload when the server code changed
+
+If `MCP_SERVER_CHANGED` is non-zero, print this block. Re-running `setup-mcp.sh` re-registers and refreshes the instructions block, but it does **not** reload the running process:
+
+```
+⚠️  MCP server code changed (mcp-wiki.py / wiki_core.py).
+    This session is still running the PREVIOUS version.
+    Restart Claude Code (or reconnect the boiling-brain-wiki MCP server)
+    to load the new code. Until then, MCP tool results come from the old server.
+```
+
+#### 7.3 Report
+
+Close the step with one line, to be included in the run summary:
+
+```
+MCP: <changed files> · setup-mcp.sh <run|skipped|failed> · reload <required|not required>
+```
+
+### 8. Bump `.claude/template-version`
 
 ```bash
 TODAY=$(date +%Y-%m-%d)
@@ -180,9 +251,9 @@ else
 fi
 ```
 
-### 8. Legacy vault edge case
+### 9. Legacy vault edge case
 
-If `.claude/template-version` did not exist at session start (step 2 detected v1.0.0 or v1.0.1), step 7 creates it for the first time — even if not all migrations were accepted, with version set to the last fully-applied baseline. This pins the versioning mechanism going forward.
+If `.claude/template-version` did not exist at session start (step 2 detected v1.0.0 or v1.0.1), step 8 creates it for the first time — even if not all migrations were accepted, with version set to the last fully-applied baseline. This pins the versioning mechanism going forward.
 
 ## Notes
 

@@ -248,6 +248,52 @@ def sha256_file(abs_path: str) -> str:
     return h.hexdigest()
 
 
+class HashCache:
+    """Persistent (mtime, size) -> sha256 cache in cache/.hash-cache.json.
+    raw/ files are immutable, so each is hashed once across runs. This is a
+    reconstructible artifact, never a source of truth: a missing, corrupt or
+    unwritable cache degrades to direct hashing and never raises."""
+
+    def __init__(self, vault_root, cache_path=None):
+        self.vault_root = vault_root
+        self.cache_path = cache_path or os.path.join(vault_root, "cache", ".hash-cache.json")
+        self.data = {}   # rel -> [mtime_ns, size, sha256]
+        self.dirty = False
+        try:
+            with open(self.cache_path, encoding="utf-8") as f:
+                loaded = json.load(f)
+            if isinstance(loaded, dict):
+                self.data = loaded
+        except (OSError, ValueError):
+            self.data = {}
+
+    def get(self, abs_path):
+        rel = os.path.relpath(abs_path, self.vault_root).replace(os.sep, "/")
+        try:
+            st = os.stat(abs_path)
+        except OSError:
+            return sha256_file(abs_path)  # let a genuine read error surface
+        entry = self.data.get(rel)
+        if entry and entry[0] == st.st_mtime_ns and entry[1] == st.st_size:
+            return entry[2]
+        digest = sha256_file(abs_path)
+        self.data[rel] = [st.st_mtime_ns, st.st_size, digest]
+        self.dirty = True
+        return digest
+
+    def save(self):
+        if not self.dirty:
+            return
+        try:
+            os.makedirs(os.path.dirname(self.cache_path), exist_ok=True)
+            tmp = self.cache_path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(self.data, f)
+            os.replace(tmp, self.cache_path)
+        except OSError:
+            pass  # graceful: an unwritable cache is not fatal
+
+
 class Verdict:
     def __init__(self, status, covered_by=None, reason=None, sha_stored=None, sha_current=None):
         self.status = status
@@ -257,7 +303,7 @@ class Verdict:
         self.sha_current = sha_current
 
 
-def classify(rel: str, abs_path: str, idx: Index, force: bool) -> Verdict:
+def classify(rel: str, abs_path: str, idx: Index, force: bool, cache=None) -> Verdict:
     key = normalize_path(rel)
 
     # 1. exact match on source_path / covered_paths
@@ -265,7 +311,7 @@ def classify(rel: str, abs_path: str, idx: Index, force: bool) -> Verdict:
         slug = idx.path_to_slug[key]
         stored = idx.path_to_sha.get(key)
         if stored:
-            current = sha256_file(abs_path)
+            current = cache.get(abs_path) if cache is not None else sha256_file(abs_path)
             if current != stored:
                 return Verdict("MODIFIED", slug, "sha-changed", stored, current)
             if force:
@@ -307,6 +353,7 @@ _DETAIL = {
     "dir-implicit": "covered-by-dir-implicit: {slug}",
     "transcript": "covered-by-transcript: {slug}",
     "forced": "covered-by: {slug}, forced",
+    "content": "covered-by-content: {slug}",
 }
 
 
@@ -329,16 +376,104 @@ def find_orphans(vault_root: str, idx: Index):
     return sorted(seen.items(), key=lambda kv: kv[0].encode("utf-8"))
 
 
-def run(vault_root: str, ns, idx=None):
+SYNC_META = ".sync-meta.json"
+
+
+def find_snapshot_dirs(vault_root: str):
+    """Vault-relative dirs that hold a .sync-meta.json (a /sync-repos snapshot)."""
+    dirs = set()
+    raw = os.path.join(vault_root, "raw")
+    for dirpath, _, filenames in os.walk(raw):
+        if SYNC_META in filenames:
+            dirs.add(os.path.relpath(dirpath, vault_root).replace(os.sep, "/"))
+    return dirs
+
+
+def lineage_key(rel: str, snapshot_dirs):
+    """(dest, relpath) if `rel` sits under a snapshot dir, else None.
+    dest = parent of the snapshot dir; relpath = path below <shortsha>/.
+    Longest matching snapshot prefix wins (nested dests stay unambiguous)."""
+    parts = rel.split("/")
+    for i in range(len(parts) - 1, 0, -1):
+        cand = "/".join(parts[:i])
+        if cand in snapshot_dirs:
+            dest = "/".join(parts[:i - 1])
+            relpath = "/".join(parts[i:])
+            return (dest, relpath)
+    return None
+
+
+def _index_one(content, rel, abs_path, cache, snapshot_dirs, slug):
+    key = lineage_key(rel, snapshot_dirs)
+    if key is None:
+        return
+    try:
+        if os.path.getsize(abs_path) == 0:
+            return  # empty files share a trivial hash; never content-cover them
+    except OSError:
+        return
+    dest, relpath = key
+    content.setdefault((dest, relpath, cache.get(abs_path)), slug)  # first wins
+
+
+def build_content_index(idx, vault_root, cache, snapshot_dirs):
+    """(dest, relpath, sha256) -> slug, over covered files that live under a
+    snapshot. Covered = referenced by a page (source_path / covered_paths,
+    including trailing-slash dir covers)."""
+    content = {}
+    for path, slug in idx.path_to_slug.items():
+        if path.endswith("/"):
+            base = os.path.join(vault_root, path.rstrip("/"))
+            if not os.path.isdir(base):
+                continue
+            for dp, _, fns in os.walk(base):
+                for fn in fns:
+                    if fn == SYNC_META:
+                        continue
+                    abs_p = os.path.join(dp, fn)
+                    rel = os.path.relpath(abs_p, vault_root).replace(os.sep, "/")
+                    _index_one(content, rel, abs_p, cache, snapshot_dirs, slug)
+        else:
+            abs_p = os.path.join(vault_root, path)
+            if os.path.isfile(abs_p):
+                _index_one(content, path, abs_p, cache, snapshot_dirs, slug)
+    return content
+
+
+def apply_content_coverage(results, vault_root, cache, snapshot_dirs, content_index):
+    """Reclassify NEW files under a snapshot to SKIP when their
+    (dest, relpath, sha256) is already covered. Mutates `results` in place."""
+    if not content_index:
+        return
+    for i, (rel, v) in enumerate(results):
+        if v.status != "NEW":
+            continue
+        key = lineage_key(rel, snapshot_dirs)
+        if key is None:
+            continue
+        abs_p = os.path.join(vault_root, rel)
+        try:
+            if os.path.getsize(abs_p) == 0:
+                continue
+        except OSError:
+            continue
+        slug = content_index.get((key[0], key[1], cache.get(abs_p)))
+        if slug:
+            results[i] = (rel, Verdict("SKIP", slug, "content"))
+
+
+def run(vault_root: str, ns, idx=None, cache=None):
     files, warnings = collect_files(vault_root, ns.paths)
     for w in warnings:
         print(f"WARN: {w}", file=sys.stderr)
     if idx is None:
         idx = build_index(os.path.join(vault_root, "wiki", "sources"))
+    if cache is None:
+        cache = HashCache(vault_root)
     results = []
     for abs_path in files:
         rel = os.path.relpath(abs_path, vault_root).replace(os.sep, "/")
-        results.append((rel, classify(rel, abs_path, idx, ns.force)))
+        results.append((rel, classify(rel, abs_path, idx, ns.force, cache)))
     return files, results, idx
 
 
@@ -430,7 +565,7 @@ def read_pending(vault_root: str):
         return [ln.strip() for ln in f if ln.strip()]
 
 
-def run_pending(vault_root: str, idx: Index, force: bool):
+def run_pending(vault_root: str, idx: Index, force: bool, cache):
     """Classify manifest entries. Returns (results, stale) where results is a
     list of (rel, Verdict) for on-disk entries and stale is a list of rels
     absent from disk. Read-only: never writes the manifest."""
@@ -438,7 +573,7 @@ def run_pending(vault_root: str, idx: Index, force: bool):
     for rel in read_pending(vault_root):
         abs_p = os.path.join(vault_root, rel)
         if os.path.isfile(abs_p):
-            results.append((rel, classify(rel, abs_p, idx, force)))
+            results.append((rel, classify(rel, abs_p, idx, force, cache)))
         else:
             stale.append(rel)
     return results, stale
@@ -451,12 +586,17 @@ def main(argv):
         print("usage: --pending takes no positional path", file=sys.stderr)
         return 2
     vault_root = os.environ.get("VAULT_ROOT") or str(Path(__file__).resolve().parents[2])
+    cache = HashCache(vault_root)
     idx = build_index(os.path.join(vault_root, "wiki", "sources"))
+    snapshot_dirs = find_snapshot_dirs(vault_root)
+    content_index = build_content_index(idx, vault_root, cache, snapshot_dirs)
     warnings = compute_warnings(idx, vault_root)
     emit_stderr_warnings(warnings)
 
     if ns.pending:
-        results, stale = run_pending(vault_root, idx, ns.force)
+        results, stale = run_pending(vault_root, idx, ns.force, cache)
+        apply_content_coverage(results, vault_root, cache, snapshot_dirs, content_index)
+        cache.save()
         purgeable = [rel for rel, v in results if v.status == "SKIP"]
         if ns.format == "json":
             files = [str(os.path.join(vault_root, rel)) for rel, _ in results]
@@ -475,7 +615,9 @@ def main(argv):
         return 0
 
     # non-pending: reuse the index already built at the top of main()
-    files, results, _ = run(vault_root, ns, idx)
+    files, results, _ = run(vault_root, ns, idx, cache)
+    apply_content_coverage(results, vault_root, cache, snapshot_dirs, content_index)
+    cache.save()
     orphan_pairs = find_orphans(vault_root, idx) if ns.orphans else []
     if ns.format == "json":
         doc = build_json(files, results, idx, ns, vault_root, warnings)

@@ -631,5 +631,159 @@ class GoldenParityTest(unittest.TestCase):
             self.assertEqual(r.stdout, expected)
 
 
+class HashCacheTest(unittest.TestCase):
+    def test_hit_reuses_stored_digest_without_rehashing(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            f = root / "raw" / "a.md"; f.parent.mkdir(parents=True); f.write_text("hello", encoding="utf-8")
+            c = scan_raw.HashCache(str(root))
+            first = c.get(str(f))
+            self.assertEqual(first, hashlib.sha256(b"hello").hexdigest())
+            # poison the cache entry; a hit must return the poisoned value (proves no re-hash)
+            c.data["raw/a.md"][2] = "deadbeef"
+            self.assertEqual(c.get(str(f)), "deadbeef")
+
+    def test_miss_on_size_change_recomputes(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            f = root / "raw" / "a.md"; f.parent.mkdir(parents=True); f.write_text("hello", encoding="utf-8")
+            c = scan_raw.HashCache(str(root))
+            c.get(str(f))
+            f.write_text("hello world", encoding="utf-8")  # size changes
+            self.assertEqual(c.get(str(f)), hashlib.sha256(b"hello world").hexdigest())
+
+    def test_save_and_reload_roundtrip(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            f = root / "raw" / "a.md"; f.parent.mkdir(parents=True); f.write_text("hello", encoding="utf-8")
+            c = scan_raw.HashCache(str(root)); c.get(str(f)); c.save()
+            self.assertTrue((root / "cache" / ".hash-cache.json").is_file())
+            c2 = scan_raw.HashCache(str(root))
+            self.assertIn("raw/a.md", c2.data)
+
+    def test_corrupt_cache_is_ignored(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "cache").mkdir(parents=True)
+            (root / "cache" / ".hash-cache.json").write_text("{not json", encoding="utf-8")
+            c = scan_raw.HashCache(str(root))  # must not raise
+            self.assertEqual(c.data, {})
+
+    def test_unwritable_cache_dir_degrades_gracefully(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            f = root / "raw" / "a.md"; f.parent.mkdir(parents=True); f.write_text("hi", encoding="utf-8")
+            (root / "cache").write_text("blocker", encoding="utf-8")  # cache/ is a FILE
+            c = scan_raw.HashCache(str(root))
+            self.assertEqual(c.get(str(f)), hashlib.sha256(b"hi").hexdigest())
+            c.save()  # must not raise
+
+
+class LineageTest(unittest.TestCase):
+    def test_lineage_key_under_snapshot(self):
+        snaps = {"raw/tracked-repos/next/abc1234"}
+        self.assertEqual(
+            scan_raw.lineage_key("raw/tracked-repos/next/abc1234/docs/a.md", snaps),
+            ("raw/tracked-repos/next", "docs/a.md"),
+        )
+
+    def test_lineage_key_none_outside_snapshot(self):
+        self.assertIsNone(scan_raw.lineage_key("raw/notes/x.md", set()))
+
+    def test_find_snapshot_dirs(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            snap = root / "raw" / "tracked-repos" / "next" / "abc1234"
+            snap.mkdir(parents=True)
+            (snap / ".sync-meta.json").write_text("{}", encoding="utf-8")
+            (snap / "README.md").write_text("x", encoding="utf-8")
+            self.assertEqual(
+                scan_raw.find_snapshot_dirs(str(root)),
+                {"raw/tracked-repos/next/abc1234"},
+            )
+
+
+class ContentCoverageTest(unittest.TestCase):
+    def _vault_two_snapshots(self, tmp, second_files):
+        """snapA (abc1234) covered by a page (dir cover). snapB (def5678) = second_files.
+        Each snapshot gets a .sync-meta.json. Returns vault_root path (str)."""
+        root = Path(tmp)
+        dest = root / "raw" / "tracked-repos" / "next"
+        a = dest / "abc1234"; a.mkdir(parents=True)
+        (a / ".sync-meta.json").write_text('{"shortsha":"abc1234"}', encoding="utf-8")
+        (a / "README.md").write_text("readme v1\n", encoding="utf-8")
+        (a / "docs").mkdir()
+        (a / "docs" / "a.md").write_text("alpha\n", encoding="utf-8")
+        (a / "docs" / "b.md").write_text("bravo\n", encoding="utf-8")
+        b = dest / "def5678"; b.mkdir(parents=True)
+        (b / ".sync-meta.json").write_text('{"shortsha":"def5678"}', encoding="utf-8")
+        for rel, content in second_files.items():
+            p = b / rel; p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(content, encoding="utf-8")
+        sources = root / "wiki" / "sources"; sources.mkdir(parents=True)
+        (sources / "next-abc1234.md").write_text(
+            "---\ntype: source\nsource_path: raw/tracked-repos/next/abc1234/README.md\n"
+            "covered_paths:\n  - raw/tracked-repos/next/abc1234/\n---\n", encoding="utf-8")
+        return str(root)
+
+    def _scan(self, vault_root):
+        cache = scan_raw.HashCache(vault_root)
+        idx = scan_raw.build_index(os.path.join(vault_root, "wiki", "sources"))
+        snaps = scan_raw.find_snapshot_dirs(vault_root)
+        content = scan_raw.build_content_index(idx, vault_root, cache, snaps)
+
+        class NS:
+            force = False; orphans = False; pending = False; paths = []; format = "text"
+        files, results, _ = scan_raw.run(vault_root, NS, idx, cache)
+        scan_raw.apply_content_coverage(results, vault_root, cache, snaps, content)
+        return {rel: v.status for rel, v in results}
+
+    def test_noop_total_all_skip(self):
+        with tempfile.TemporaryDirectory() as d:
+            vr = self._vault_two_snapshots(d, {
+                "README.md": "readme v1\n", "docs/a.md": "alpha\n", "docs/b.md": "bravo\n",
+            })
+            st = self._scan(vr)
+            for rel in ["raw/tracked-repos/next/def5678/README.md",
+                        "raw/tracked-repos/next/def5678/docs/a.md",
+                        "raw/tracked-repos/next/def5678/docs/b.md"]:
+                self.assertEqual(st[rel], "SKIP", rel)
+
+    def test_partial_change_only_changed_is_new(self):
+        with tempfile.TemporaryDirectory() as d:
+            vr = self._vault_two_snapshots(d, {
+                "README.md": "readme v1\n", "docs/a.md": "ALPHA CHANGED\n", "docs/b.md": "bravo\n",
+            })
+            st = self._scan(vr)
+            self.assertEqual(st["raw/tracked-repos/next/def5678/docs/a.md"], "NEW")
+            self.assertEqual(st["raw/tracked-repos/next/def5678/docs/b.md"], "SKIP")
+            self.assertEqual(st["raw/tracked-repos/next/def5678/README.md"], "SKIP")
+
+    def test_cross_dest_no_leak(self):
+        with tempfile.TemporaryDirectory() as d:
+            vr = self._vault_two_snapshots(d, {"README.md": "readme v1\n"})
+            other = Path(vr) / "raw" / "tracked-repos" / "other" / "zzz9999"
+            other.mkdir(parents=True)
+            (other / ".sync-meta.json").write_text('{"shortsha":"zzz9999"}', encoding="utf-8")
+            (other / "README.md").write_text("readme v1\n", encoding="utf-8")
+            st = self._scan(vr)
+            self.assertEqual(st["raw/tracked-repos/other/zzz9999/README.md"], "NEW")
+
+    def test_outside_snapshot_not_content_covered(self):
+        with tempfile.TemporaryDirectory() as d:
+            vr = self._vault_two_snapshots(d, {"README.md": "readme v1\n"})
+            note = Path(vr) / "raw" / "notes" / "loose.md"
+            note.parent.mkdir(parents=True)
+            note.write_text("alpha\n", encoding="utf-8")  # identical to covered docs/a.md
+            st = self._scan(vr)
+            self.assertEqual(st["raw/notes/loose.md"], "NEW")
+
+    def test_empty_file_not_content_covered(self):
+        with tempfile.TemporaryDirectory() as d:
+            vr = self._vault_two_snapshots(d, {"README.md": "readme v1\n", "empty.txt": ""})
+            st = self._scan(vr)
+            self.assertEqual(st["raw/tracked-repos/next/def5678/empty.txt"], "NEW")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -28,6 +28,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+MIN_PYTHON = (3, 11)  # glob(..., include_hidden=True) requires Python 3.11+
+
 # Unicode private-use codepoint, width 1, never present in real markdown.
 SENTINEL = ""
 
@@ -84,12 +86,22 @@ def _npx():
 
 
 def run_prettier(files, cwd=None):
-    proc = subprocess.run(
-        [_npx(), "-y", "prettier", "--write", *files],
-        capture_output=True, text=True, cwd=cwd,
-    )
-    if proc.returncode != 0:
-        raise RuntimeError(f"prettier failed:\n{proc.stderr}")
+    # wiki/ is excluded in .prettierignore so a *bare* prettier refuses to touch
+    # it (that reflow corrupts table pipes). This wrapper already masks pipes and
+    # filters directories itself (mask() + EXCLUDE_DIRS), so it MUST format wiki/
+    # regardless — it opts out of .prettierignore/.gitignore by pointing
+    # --ignore-path at an empty file. mkstemp is portable (Windows included).
+    fd, empty_ignore = tempfile.mkstemp(prefix="prettier-noignore-")
+    os.close(fd)
+    try:
+        proc = subprocess.run(
+            [_npx(), "-y", "prettier", "--ignore-path", empty_ignore, "--write", *files],
+            capture_output=True, text=True, cwd=cwd,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"prettier failed:\n{proc.stderr}")
+    finally:
+        os.unlink(empty_ignore)
 
 
 MAX_WRITE_PASSES = 5
@@ -136,8 +148,12 @@ def do_check(files):
     repo_root = Path.cwd()
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
-        # Carry the Prettier config so formatting matches the real run.
-        for cfg in (".prettierrc", ".prettierignore", ".prettierrc.json", ".prettierrc.yaml"):
+        # Carry the Prettier *formatting* config so --check matches the real run.
+        # .prettierignore is deliberately NOT copied: run_prettier() opts out of
+        # it via --ignore-path (wiki/ is ignored for bare Prettier but MUST be
+        # checked here). Copying it would make Prettier skip the wiki/ copies →
+        # silent false negatives (unformatted wiki pages reported clean).
+        for cfg in (".prettierrc", ".prettierrc.json", ".prettierrc.yaml"):
             if (repo_root / cfg).is_file():
                 shutil.copy(repo_root / cfg, tmp / cfg)
         rel_copies = []
@@ -169,7 +185,27 @@ def do_check(files):
     return 0
 
 
+def require_python(current=sys.version_info):
+    """Fail fast on interpreters older than MIN_PYTHON with an actionable
+    message. glob(..., include_hidden=True) in expand() is 3.11+ only; without
+    this guard the script dies on an opaque `TypeError` that never mentions the
+    version requirement. Kept pure (version injected) so it is testable without
+    a real old interpreter."""
+    if tuple(current[:2]) < MIN_PYTHON:
+        found = "{}.{}.{}".format(current[0], current[1], current[2])
+        required = "{}.{}+".format(MIN_PYTHON[0], MIN_PYTHON[1])
+        print(
+            "format-md.py requires Python {} (found {}). "
+            "Run it with a newer interpreter (e.g. a Homebrew or pyenv python3).".format(
+                required, found
+            ),
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
 def main():
+    require_python()
     for stream in (sys.stdout, sys.stderr):
         try:
             stream.reconfigure(encoding="utf-8")
