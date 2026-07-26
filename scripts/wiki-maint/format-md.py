@@ -28,6 +28,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+MIN_PYTHON = (3, 11)  # glob(..., include_hidden=True) requires Python 3.11+
+
 # Unicode private-use codepoint, width 1, never present in real markdown.
 SENTINEL = ""
 
@@ -183,7 +185,27 @@ def do_check(files):
     return 0
 
 
+def require_python(current=sys.version_info):
+    """Fail fast on interpreters older than MIN_PYTHON with an actionable
+    message. glob(..., include_hidden=True) in expand() is 3.11+ only; without
+    this guard the script dies on an opaque `TypeError` that never mentions the
+    version requirement. Kept pure (version injected) so it is testable without
+    a real old interpreter."""
+    if tuple(current[:2]) < MIN_PYTHON:
+        found = "{}.{}.{}".format(current[0], current[1], current[2])
+        required = "{}.{}+".format(MIN_PYTHON[0], MIN_PYTHON[1])
+        print(
+            "format-md.py requires Python {} (found {}). "
+            "Run it with a newer interpreter (e.g. a Homebrew or pyenv python3).".format(
+                required, found
+            ),
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
 def main():
+    require_python()
     for stream in (sys.stdout, sys.stderr):
         try:
             stream.reconfigure(encoding="utf-8")
