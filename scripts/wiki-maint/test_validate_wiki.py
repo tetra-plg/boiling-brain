@@ -463,6 +463,49 @@ class ValidateWikiTest(unittest.TestCase):
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             self.assertIn("PyYAML", r.stderr)
 
+    def test_decision_template_shape_passes(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            # A decision page using the shipped template's exact value shapes with
+            # trailing YAML comments — must pass (comments are stripped for enum check).
+            body = textwrap.dedent("""\
+                ---
+                type: decision
+                domains: [poker]
+                created: 2026-05-01
+                status: pending              # pending | accepted
+                verdict: null            # null | validated | invalidated | partial — fill after T+30/60/90d
+                verdict_date: null
+                verdict_evidence: null
+                summary_l0: "Short line"
+                summary_l1: |
+                  Two sentences of description here.
+                ---
+
+                # ADR
+                """)
+            make_vault(tmp, {"decisions/adr.md": body})
+            r = run(tmp)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_quoted_status_passes(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            body = DECISION_FM.replace("status: accepted", 'status: "accepted"')
+            make_vault(tmp, {"decisions/adr.md": body})
+            r = run(tmp)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_sha_with_trailing_comment_passes(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            body = SOURCE_FM.replace(
+                'source_sha256: "%s"' % ("a" * 64),
+                'source_sha256: "%s"  # computed at ingest' % ("a" * 64))
+            make_vault(tmp, {"sources/src.md": body})
+            r = run(tmp)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

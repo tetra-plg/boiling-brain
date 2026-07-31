@@ -81,10 +81,16 @@ YAML_NULLS = (None, "", "null", "~", "Null", "NULL")
 
 
 def _fm_value(fm, key):
-    """Frontmatter value with surrounding quotes stripped; None if absent."""
+    """Frontmatter value for per-type checks: surrounding quotes honoured,
+    trailing YAML comment (` # ...`) dropped for unquoted values; None if absent."""
     if key not in fm:
         return None
-    return fm[key].strip().strip('"').strip("'")
+    raw = fm[key].strip()
+    if raw[:1] in ('"', "'"):
+        q = raw[0]
+        end = raw.find(q, 1)
+        return raw[1:end] if end != -1 else raw.strip(q)
+    return re.sub(r"\s+#.*$", "", raw).strip()
 
 
 def parse_frontmatter(text):
@@ -152,12 +158,14 @@ def check_frontmatter_by_type(relpath, text, out):
     if ptype == "decision":
         status = _fm_value(fm, "status")
         if status not in (None, "") and status not in ENUMS["status"]:
-            out.append(f"{relpath}:1 — 'status' must be one of pending|accepted (got '{status}')")
+            shown = "a block scalar" if status == "<block>" else f"'{status}'"
+            out.append(f"{relpath}:1 — 'status' must be one of pending|accepted (got {shown})")
         verdict = _fm_value(fm, "verdict")
         if verdict not in YAML_NULLS:
             if verdict not in ENUMS["verdict"]:
+                shown = "a block scalar" if verdict == "<block>" else f"'{verdict}'"
                 out.append(f"{relpath}:1 — 'verdict' must be one of "
-                           f"validated|invalidated|partial (got '{verdict}')")
+                           f"validated|invalidated|partial (got {shown})")
             for comp in ("verdict_date", "verdict_evidence"):
                 if _fm_value(fm, comp) in YAML_NULLS:
                     out.append(f"{relpath}:1 — 'verdict' is set but '{comp}' is missing or null")
