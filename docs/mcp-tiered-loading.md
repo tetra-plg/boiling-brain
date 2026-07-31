@@ -1,12 +1,12 @@
 # MCP tiered-loading layer
 
-> **TL;DR:** reference for the `boiling-brain-wiki` MCP server's 14 tools and the tiered-loading pattern they implement (orient → drill → preview → read). Added in v1.1.0 (refactor #41). Measured ~96% token reduction vs the pre-v1.1.0 flat dump on a 388-page domain.
+> **TL;DR:** reference for the `boiling-brain-wiki` MCP server's 15 tools and the tiered-loading pattern they implement (orient → drill → preview → read). Added in v1.1.0 (refactor #41). Measured ~96% token reduction vs the pre-v1.1.0 flat dump on a 388-page domain.
 
 ## Why tiered loading
 
 A flat `scan_domain("ia")` on a 388-page domain returns ~23k tokens — too much for context-constrained backends (e.g. a Realtime voice agent against a 40k TPM org limit, or smaller models with tight context budgets). The MCP server now exposes a **hierarchical descent**: orient first, then drill into the right type, then read the matching pages. Measured reduction on the same query path: **~96%** (23k → ~900 tokens for the orientation step).
 
-## The 14 tools
+## The 15 tools
 
 ```
 ┌─ Orientation ──────────────────────────────────────────────────────┐
@@ -50,13 +50,33 @@ A flat `scan_domain("ia")` on a 388-page domain returns ~23k tokens — too much
 
 ┌─ Write side ───────────────────────────────────────────────────────┐
 │  drop_to_raw(subfolder, filename, content)                         │
-│    Sanctioned write into raw/ (bypasses protect-raw.sh PreToolUse  │
-│    hook by writing server-side). Auto-updates cache/.pending-ingest│
+│    Sanctioned TEXT write into raw/ (bypasses protect-raw.sh        │
+│    PreToolUse hook by writing server-side). Auto-updates           │
+│    cache/.pending-ingest                                           │
+│  drop_file_to_raw(source_path, subfolder)                          │
+│    Sanctioned BINARY deposit: server-side copy of a local file     │
+│    into raw/. Source must sit under an allowed root ($HOME by      │
+│    default, LLMWIKI_DROP_SOURCE_ROOTS to override). Same signal.   │
 │  ingest(path, domain_hint="")                                      │
 │    Headless ingestion of a file already in raw/ via a domain-expert│
 │    agent run. See the tool description for the permission opt-in.  │
 └────────────────────────────────────────────────────────────────────┘
 ```
+
+## Format parity: deposit channel vs ingestion engine
+
+The deposit channel must offer the same format surface as the ingestion engine — any asymmetry between the two is a design bug (#112). What each side handles today:
+
+| Format                | Ingestion (`/ingest`)                               | Deposit                             |
+| --------------------- | --------------------------------------------------- | ----------------------------------- |
+| markdown / text       | native                                              | `drop_to_raw` or `drop_file_to_raw` |
+| PDF, png/jpg/webp/gif | native (multimodal read)                            | `drop_file_to_raw`                  |
+| `.docx`, `.pptx`      | markdown twin via `scripts/convert-doc.sh` (pandoc) | `drop_file_to_raw`                  |
+| audio / video         | `/ingest-video` (transcription)                     | `drop_file_to_raw`                  |
+
+`drop_file_to_raw` copies server-side — the stdio server runs on the vault machine, so it reads the file itself instead of having the client stream bytes through a tool argument. Guardrails: the source must resolve (symlinks followed) under an allowed root, carry an extension the engine consumes, and not already live in `raw/`; the destination is confined to `raw/<subfolder>/`; an existing target is never overwritten.
+
+The `.docx`/`.pptx` twin is written **next to** the original (`brief.docx` → `brief.docx.md`). The binary stays in `raw/`, archived and hash-indexed: the source page declares it as `source_path` and lists the twin in `covered_paths`. Media embedded in the document are not extracted — the twin carries the text; visuals go through the frame pipeline.
 
 ## Recommended usage pattern
 
@@ -135,6 +155,7 @@ The hub page lookup uses `wiki/domains/<domain>.md` and reads its `summary_l1`. 
 ## Related artefacts
 
 - `scripts/mcp/mcp-wiki.py` — server implementation (FastMCP stdio).
+- `scripts/convert-doc.sh` — markdown twin of a `.docx`/`.pptx` already in `raw/` (pandoc). Chained by `/ingest` step 1, allowlisted in the headless guard.
 - `scripts/mcp/wiki-cli.py` — headless CLI (argparse), no fastmcp dependency.
 - `scripts/mcp/wiki_core.py` — shared query layer used by both entry points.
 - `scripts/mcp/setup-mcp.sh` — installer + self-healing maintainer of `~/.claude/CLAUDE.md` block.

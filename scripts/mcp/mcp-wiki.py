@@ -30,6 +30,81 @@ INGEST_TIMEOUT_S = 600
 INGEST_PERMISSION_MODE = os.environ.get("MCP_INGEST_PERMISSION_MODE", "")
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
+# Formats the ingestion engine can consume: markdown/text and PDF natively,
+# png/jpg images natively, audio/video through /ingest-video, docx/pptx through
+# the markdown-twin conversion of /ingest (scripts/convert-doc.sh). The deposit
+# channel must offer the same surface — any asymmetry between the two is a
+# design bug (#112).
+INGESTIBLE_EXT = (
+    ".md", ".txt", ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp",
+    ".docx", ".pptx", ".m4a", ".mp4", ".wav",
+)
+
+
+def _allowed_source_roots():
+    """Directories drop_file_to_raw is allowed to read from.
+
+    Defaults to the vault owner's home — wide enough for Downloads and for a
+    client app's working folder, narrow enough that the tool never becomes an
+    arbitrary file reader for any MCP client. Override with
+    LLMWIKI_DROP_SOURCE_ROOTS (os.pathsep-separated list of directories).
+    Read at call time, so retargeting it doesn't require a server restart."""
+    raw = os.environ.get("LLMWIKI_DROP_SOURCE_ROOTS", "")
+    parts = [p for p in raw.split(os.pathsep) if p.strip()] or [str(Path.home())]
+    roots = []
+    for p in parts:
+        try:
+            roots.append(Path(p).expanduser().resolve())
+        except Exception:
+            continue
+    return roots
+
+
+def _vault_rel(p: Path) -> str:
+    """Vault-relative form of an absolute path, tolerant of an unresolved
+    WIKI_PATH (symlinked temp roots on macOS: /var -> /private/var)."""
+    try:
+        return str(p.relative_to(wiki_core.WIKI_PATH.resolve()))
+    except ValueError:
+        return str(p)
+
+
+def _within(child: Path, parent: Path) -> bool:
+    """True when child is parent itself or sits under it.
+
+    Compared component-wise, never as a string prefix: `str.startswith` lets a
+    sibling directory whose name extends the parent's slip through — subfolder
+    "../rawbis" resolves to <vault>/rawbis, whose string does start with
+    <vault>/raw, and the write lands outside raw/."""
+    return child == parent or parent in child.parents
+
+
+def _resolve_raw_dest(subfolder: str, filename: str):
+    """Resolve raw/<subfolder>/<filename>, guarding both segments against path
+    traversal. Returns ((dest_dir, dest_file), None) or (None, error message)."""
+    try:
+        raw_root = wiki_core.RAW_DIR.resolve()
+        dest_dir = (wiki_core.RAW_DIR / subfolder).resolve()
+        if not _within(dest_dir, raw_root):
+            return None, "Error: invalid subfolder (path traversal detected)."
+        dest_file = (dest_dir / filename).resolve()
+        if not _within(dest_file, dest_dir):
+            return None, "Error: invalid filename (path traversal detected)."
+    except Exception as e:
+        return None, f"Path validation error: {e}"
+    return (dest_dir, dest_file), None
+
+
+def _signal_pending(dest_file: Path) -> str:
+    """Append the deposited path to cache/.pending-ingest (SessionStart signal)
+    and return its vault-relative form."""
+    wiki_core.CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    pending = wiki_core.CACHE_DIR / ".pending-ingest"
+    rel_path = _vault_rel(dest_file)
+    with open(pending, "a", encoding="utf-8") as f:
+        f.write(rel_path + "\n")
+    return rel_path
+
 
 def _ingest_settings_json():
     """Build a --settings JSON that scopes a PreToolUse allowlist hook to just
@@ -191,31 +266,85 @@ def list_domains() -> str:
     )
 )
 def drop_to_raw(subfolder: str, filename: str, content: str) -> str:
-    # Path traversal protection
-    try:
-        dest_dir = (wiki_core.RAW_DIR / subfolder).resolve()
-        if not str(dest_dir).startswith(str(wiki_core.RAW_DIR.resolve())):
-            return "Error: invalid subfolder (path traversal detected)."
-        dest_file = (dest_dir / filename).resolve()
-        if not str(dest_file).startswith(str(dest_dir)):
-            return "Error: invalid filename (path traversal detected)."
-    except Exception as e:
-        return f"Path validation error: {e}"
+    resolved, err = _resolve_raw_dest(subfolder, filename)
+    if err:
+        return err
+    dest_dir, dest_file = resolved
 
     if dest_file.exists():
-        return f"File already exists: {dest_file.relative_to(wiki_core.WIKI_PATH)}. Use another name."
+        return f"File already exists: {_vault_rel(dest_file)}. Use another name."
 
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_file.write_text(content, encoding="utf-8")
 
-    # Signal for SessionStart hook
-    wiki_core.CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    pending = wiki_core.CACHE_DIR / ".pending-ingest"
-    rel_path = str(dest_file.relative_to(wiki_core.WIKI_PATH))
-    with open(pending, "a", encoding="utf-8") as f:
-        f.write(rel_path + "\n")
-
+    rel_path = _signal_pending(dest_file)
     return f"File created: {rel_path}\n.pending-ingest signal updated."
+
+
+@mcp.tool(
+    description=(
+        "Copy an existing local file into raw/ and signal it for ingestion. "
+        "The binary counterpart of drop_to_raw: use it for PDFs, images, "
+        "docx/pptx documents, audio and video — anything drop_to_raw's text-only "
+        "content parameter cannot carry. Essential from MCP clients without a "
+        "terminal (Claude Desktop, Claude Cowork): the server runs on the vault "
+        "machine, so it copies the file server-side. "
+        "source_path: absolute (or ~-prefixed) path of the file to deposit; it "
+        "must sit under an allowed source root ($HOME by default, override with "
+        "the LLMWIKI_DROP_SOURCE_ROOTS env var) and carry an extension the "
+        "ingestion engine consumes. "
+        "subfolder: subpath under raw/ (e.g. 'pdfs', 'documents', 'clippings'). "
+        "The original is left in place (a copy, not a move) and the target "
+        "filename is taken from the source — an existing file is never "
+        "overwritten, raw/ being immutable. Creates cache/.pending-ingest with "
+        "the new file path; run /ingest (or the ingest() tool) to actually "
+        "ingest it. See tetra-plg/boiling-brain#112."
+    )
+)
+def drop_file_to_raw(source_path: str, subfolder: str) -> str:
+    try:
+        src = Path(source_path).expanduser().resolve()
+    except Exception as e:
+        return f"Path validation error: {e}"
+
+    # Source allowlist, checked on the symlink-resolved path so a link planted
+    # inside an allowed root can't smuggle a file out of it.
+    roots = _allowed_source_roots()
+    if not roots:
+        return ("Error: no usable source root — LLMWIKI_DROP_SOURCE_ROOTS lists "
+                "no resolvable directory.")
+    if not any(_within(src, r) for r in roots):
+        return (f"Error: source path outside the allowed source roots "
+                f"({os.pathsep.join(str(r) for r in roots)}). Set "
+                f"LLMWIKI_DROP_SOURCE_ROOTS to widen them.")
+
+    if _within(src, wiki_core.RAW_DIR.resolve()):
+        return "Error: source is already inside raw/ — nothing to deposit."
+    if not src.exists():
+        return f"Error: file not found: {source_path}."
+    if not src.is_file():
+        return f"Error: not a regular file: {source_path}."
+    if src.suffix.lower() not in INGESTIBLE_EXT:
+        return (f"Error: unsupported file type \"{src.suffix}\" — the ingestion "
+                f"engine consumes {', '.join(INGESTIBLE_EXT)}.")
+
+    resolved, err = _resolve_raw_dest(subfolder, src.name)
+    if err:
+        return err
+    dest_dir, dest_file = resolved
+
+    if dest_file.exists():
+        return (f"File already exists: {_vault_rel(dest_file)}. raw/ is immutable — "
+                f"deposit the new version under another name.")
+
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        shutil.copy2(src, dest_file)
+    except OSError as e:
+        return f"Error: could not copy {source_path} ({e})."
+
+    rel_path = _signal_pending(dest_file)
+    return f"File copied: {rel_path}\n.pending-ingest signal updated."
 
 
 @mcp.tool(

@@ -88,6 +88,12 @@ except Exception:
     if [[ "$command" =~ ^bash\ scripts/wiki-maint/purge-pending-ingest\.sh(\ $SAFE_ARG)*$ ]]; then
       exit 0
     fi
+    # convert-doc.sh — markdown twin of a docx/pptx already in raw/ (#112). The
+    # script writes exactly one file (<original>.md, never overwritten) and the
+    # "$command == *..*" check above already blocks traversal in the argument.
+    if [[ "$command" =~ ^bash\ scripts/convert-doc\.sh\ raw/$SAFE_ARG$ ]]; then
+      exit 0
+    fi
     if [ "$command" = 'python3 scripts/wiki-maint/format-md.py --write "wiki/**/*.md"' ]; then
       exit 0
     fi
