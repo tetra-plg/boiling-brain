@@ -11,6 +11,7 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 ### Fixed
 
 - **`README.md` tool-count disambiguation**: L144 attributed the read-subset count (12) to the MCP server as a whole, 47 lines before the correct server-surface count (14) at L191 — a leftover of the #91 resync, which corrected the canonical section only. The sentence now reads "12 read tools of the 14 exposed", so both counts appear where they are correct (14 = server surface, 12 = read subset / headless CLI). Historical occurrences (v1.1.0 migration file, v1.1.0-era CHANGELOG entries) are untouched: 12 was accurate before `list_domains()` and `ingest()` shipped in v1.1.1. Documentation-only. (#107)
+- **`scripts/wiki-maint/scan-raw.py` orphan detection no longer flags legacy `sources:` entries**: `--orphans` tested every legacy `sources:` frontmatter item — documented as a wiki-to-wiki cross-reference (`[[sources/<slug>]]`), never a disk path — with `os.path.exists()`, so every such entry was reported as a missing raw file (100% false positives on vaults using the field, drowning any real orphan). Legacy entries are now excluded from orphan detection only: they still grant coverage (`SKIP`), still feed the double-coverage lint, and a genuinely deleted file declared via `source_path`/`covered_paths` is still reported. (#103)
 
 ## [v1.2.1] — 2026-07-26
 

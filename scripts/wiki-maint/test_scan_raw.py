@@ -246,8 +246,8 @@ class FrontmatterTest(unittest.TestCase):
                 "source_sha256: abc123\n"
                 "---\n")
         meta = scan_raw.parse_source_page(text)
-        self.assertEqual(meta["indexed_paths"],
-                         ["raw/a.md", "raw/b.md", "raw/c.md", "raw/legacy.md"])
+        self.assertEqual(meta["indexed_paths"], ["raw/a.md", "raw/b.md", "raw/c.md"])
+        self.assertEqual(meta["legacy_paths"], ["raw/legacy.md"])
         self.assertEqual(meta["first_source_path"], "raw/a.md")
         self.assertEqual(meta["source_sha256"], "abc123")
         self.assertEqual(meta["covered_paths"], ["raw/c.md"])
@@ -255,6 +255,7 @@ class FrontmatterTest(unittest.TestCase):
     def test_no_frontmatter_yields_nothing(self):
         meta = scan_raw.parse_source_page("no fm here\nsource_path: raw/x.md\n")
         self.assertEqual(meta["indexed_paths"], [])
+        self.assertEqual(meta["legacy_paths"], [])
 
 
 class BuildIndexTest(unittest.TestCase):
@@ -360,6 +361,65 @@ class ClassifyTest(unittest.TestCase):
         self.assertEqual(scan_raw.format_text_line(V("MODIFIED", "s", "forced"), "raw/a.md"),
                          "MODIFIED raw/a.md  (covered-by: s, forced)")
 
+    def test_legacy_only_coverage_and_claims_preserved(self):
+        # issue #103 caveat: legacy `sources:` entries stay in path_to_slug
+        # (coverage) and claims (double-coverage lint); only orphan
+        # detection ignores them.
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            raw = tmp / "raw" / "notes" / "old.md"
+            raw.parent.mkdir(parents=True, exist_ok=True)
+            raw.write_text("x\n", encoding="utf-8")
+            idx = self._idx(tmp, {
+                "legacy-page": "---\nsources:\n  - raw/notes/old.md\n---\n",
+                "modern-page": "---\ncovered_paths:\n  - raw/notes/old.md\n---\n",
+            })
+            key = scan_raw.normalize_path("raw/notes/old.md")
+            self.assertEqual(sorted(idx.claims[key]), ["legacy-page", "modern-page"])
+            v = scan_raw.classify("raw/notes/old.md", str(raw), idx, force=False)
+            self.assertEqual(v.status, "SKIP")
+            self.assertEqual(v.covered_by, "modern-page")
+
+    def test_legacy_entries_feed_dir_and_meta_indexes(self):
+        # issue #103 caveat: legacy `sources:` entries still feed dir_to_slug
+        # and meta_to_slug indexes (implicit dir coverage, transcript meta maps);
+        # only orphan detection ignores them.
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            # Create the legacy-only page with transcript and deep dir entries
+            d = tmp / "wiki" / "sources"
+            d.mkdir(parents=True)
+            (d / "legacy-vid.md").write_text(
+                "---\nsources:\n"
+                '  - raw/transcripts/vid.md\n'
+                '  - raw/deep/a/b/c/anchor.md\n'
+                "---\n",
+                encoding="utf-8",
+            )
+            # Create actual files on disk so classify() can work
+            vid_file = tmp / "raw" / "transcripts" / "vid.md"
+            vid_file.parent.mkdir(parents=True, exist_ok=True)
+            vid_file.write_text("x\n", encoding="utf-8")
+            sibling_file = tmp / "raw" / "deep" / "a" / "b" / "c" / "sibling.md"
+            sibling_file.parent.mkdir(parents=True, exist_ok=True)
+            sibling_file.write_text("x\n", encoding="utf-8")
+
+            idx = scan_raw.build_index(str(d))
+
+            # Check meta_to_slug index: legacy transcript entries feed it
+            meta_key = scan_raw.normalize_path("raw/videos-meta/vid.meta.md")
+            self.assertEqual(idx.meta_to_slug[meta_key], "legacy-vid")
+
+            # Check dir_to_slug index: legacy deep-dir entries feed it
+            # (depth >= 4 slashes: raw/deep/a/b/c/ has 5 slashes)
+            dir_key = scan_raw.normalize_path("raw/deep/a/b/c/")
+            self.assertEqual(idx.dir_to_slug[dir_key], "legacy-vid")
+
+            # Sibling file under the dir should classify as SKIP via dir coverage
+            v = scan_raw.classify("raw/deep/a/b/c/sibling.md", str(sibling_file), idx, force=False)
+            self.assertEqual(v.status, "SKIP")
+            self.assertEqual(v.reason, "dir-implicit")
+
 
 class StrictFrontmatterDivergenceTest(unittest.TestCase):
     """The one intentional default-verdict divergence (spec §5.2): a source_path
@@ -410,6 +470,47 @@ class OrphansTest(unittest.TestCase):
                                capture_output=True, text=True,
                                env=dict(os.environ, VAULT_ROOT=str(tmp)))
             self.assertIn("ORPHAN   raw/gone.md  (covered-by: gone)", r.stdout)
+
+    def test_legacy_sources_wikilinks_are_not_orphans(self):
+        # issue #103: [[wikilink]] entries in legacy `sources:` are wiki refs,
+        # never disk paths — they must not be reported as missing raw files.
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            d = tmp / "wiki" / "sources"
+            d.mkdir(parents=True)
+            (d / "page.md").write_text(
+                "---\n"
+                "source_path: raw/notes/real.md\n"
+                "sources:\n"
+                '  - "[[sources/some-source]]"\n'
+                "  - https://example.com/article\n"
+                "---\n",
+                encoding="utf-8",
+            )
+            (tmp / "raw" / "notes").mkdir(parents=True)
+            (tmp / "raw" / "notes" / "real.md").write_text("x\n", encoding="utf-8")
+            idx = scan_raw.build_index(str(d))
+            self.assertEqual(scan_raw.find_orphans(str(tmp), idx), [])
+
+    def test_deleted_pass1_path_still_reported_even_if_also_legacy(self):
+        # A genuinely deleted raw file declared via covered_paths must stay
+        # reported, even when the same path also appears in legacy `sources:`.
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            d = tmp / "wiki" / "sources"
+            d.mkdir(parents=True)
+            (d / "dual.md").write_text(
+                "---\n"
+                "covered_paths:\n"
+                "  - raw/gone/deleted.md\n"
+                "sources:\n"
+                "  - raw/gone/deleted.md\n"
+                "---\n",
+                encoding="utf-8",
+            )
+            idx = scan_raw.build_index(str(d))
+            self.assertEqual(scan_raw.find_orphans(str(tmp), idx),
+                             [("raw/gone/deleted.md", "dual")])
 
 
 class JsonFormatTest(unittest.TestCase):
