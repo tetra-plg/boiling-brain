@@ -41,7 +41,7 @@ covered_paths: # optional: if the page synthesizes multiple raws
   - "raw/<folder>/<file2>.md"
 ```
 
-These fields are **enforced by `validate-wiki.py` since v1.2.2 (#104)**: any source page missing `source_path`, `source_sha256`, or `ingested` will fail validation and CI.
+These fields are **enforced by `validate-wiki.py` since v1.3.0 (#104)**: any source page missing `source_path`, `source_sha256`, or `ingested` will fail validation and CI.
 
 ### Hard rule `source_path` round-trip
 
@@ -89,7 +89,7 @@ verdict_date: null | YYYY-MM-DD # optional, must accompany verdict
 verdict_evidence: null | "short narrative" # optional, must accompany verdict
 ```
 
-The `status` field (closed enum: `pending` or `accepted`) is **enforced by `validate-wiki.py` since v1.2.2 (#104)**. A non-null `verdict` must be in the closed enum (`validated`, `invalidated`, or `partial`) and must be accompanied by both `verdict_date` and `verdict_evidence`.
+The `status` field (closed enum: `pending` or `accepted`) is **enforced by `validate-wiki.py` since v1.3.0 (#104)**. A non-null `verdict` must be in the closed enum (`validated`, `invalidated`, or `partial`) and must be accompanied by both `verdict_date` and `verdict_evidence`.
 
 ADRs without `verdict` after **90 days** are flagged by `/lint` (forces L3 confrontation with reality).
 

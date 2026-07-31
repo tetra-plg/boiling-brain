@@ -4,6 +4,7 @@ raw/
 Clippings/
 docs/superpowers/
 docs/buildlog/
+docs/brainstorms/
 __pycache__/
 *.pyc
 debug-*.png
