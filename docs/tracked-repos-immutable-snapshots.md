@@ -32,7 +32,7 @@ Two regimes coexist, increased complexity for `/ingest` and `/lint`. And above a
 ### Mechanics
 
 1. Manifest [`tracked-repos.config.json`](../../tracked-repos.config.json) at the vault root — list of tracked repos, their `branch`, `paths` (doc files/folders to extract), `exclude_paths` (paths removed from the snapshot after copy), `dest` (target path — typically `raw/tracked-repos/<slug>`, but free).
-2. `scripts/sync-repos.sh`: for each source, `gh api repos/<repo>/commits/<branch>` → HEAD SHA. If `<dest>/<shortsha>/` exists → **skip** (the source is identical to a known snapshot). Otherwise `gh repo clone --depth=1`, copy listed `paths`, write `.sync-meta.json`, purge the clone in `cache/sync-repos/`.
+2. `scripts/sync-repos.sh`: for each source, `gh api repos/<repo>/commits/<branch>` → HEAD SHA. If `<dest>/<shortsha>/` exists → **skip** (the source is identical to a known snapshot; unless the perimeter changed — see [Perimeter revisions](#perimeter-revisions) below). Otherwise `gh repo clone --depth=1`, copy listed `paths`, write `.sync-meta.json`, purge the clone in `cache/sync-repos/`.
 3. `.claude/commands/sync-repos.md`: resolves `$ARGUMENTS` (explicit names or interactive multiSelect if empty), invokes the script, then chains `/ingest <snapshot>` on each `CREATED`.
 
 ### Why this setup is faithful to Karpathy
@@ -96,7 +96,7 @@ A `0 NEW` default run does **not** mean every snapshot file was declared: a sing
 
 ### Perimeter revisions
 
-Widening (or otherwise editing) a source's `paths:`/`exclude_paths:` used to have no effect until the upstream repo received an unrelated commit — the SHA had not moved, so the sync answered `SKIPPED` (#106). Every snapshot records its capture perimeter in `.sync-meta.json` (`paths`, `exclude_paths`); `/sync-repos` now compares the manifest against the **latest revision** of the current SHA (set-wise, order-insensitive) and, on any difference, captures a **perimeter revision** into `<dest>/<shortsha>-rN/` (N ≥ 2; the base snapshot is r1). The previous snapshot is never modified — immutability holds per directory. `/ingest` needs no special handling: files byte-identical to a covered earlier revision are content-covered (`SKIP (content)`), so a revision surfaces `NEW` only for the newly captured paths. Snapshots predating `.sync-meta.json` perimeters (hand-made) are never auto-revisioned: the sync keeps `SKIPPED` and prints a `note:` on stderr.
+Widening (or otherwise editing) a source's `paths:`/`exclude_paths:` used to have no effect until the upstream repo received an unrelated commit — the SHA had not moved, so the sync answered `SKIPPED` (#106). Every snapshot records its capture perimeter in `.sync-meta.json` (`paths`, `exclude_paths`); `/sync-repos` now compares the manifest against the **latest revision** of the current SHA (set-wise, order-insensitive) and, on any difference, captures a **perimeter revision** into `<dest>/<shortsha>-rN/` (N ≥ 2; the base snapshot is r1). The previous snapshot is never modified — immutability holds per directory. `/ingest` needs no special handling: files byte-identical to a **declared** file of an earlier revision are content-covered (`SKIP (content)`) — dir-implicit-only files are not in the content index and may resurface as `NEW`. Snapshots predating `.sync-meta.json` perimeters (hand-made) are never auto-revisioned: the sync keeps `SKIPPED` and prints a `note:` on stderr.
 
 ## Files shipped
 

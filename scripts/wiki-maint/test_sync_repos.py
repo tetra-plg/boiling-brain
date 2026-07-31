@@ -140,6 +140,22 @@ class SyncReposPerimeterTest(unittest.TestCase):
         self.assertIn("cannot compare perimeter", r.stderr)
         self.assertNotIn("CREATED", r.stdout)
 
+    def test_zero_byte_meta_skips_with_note(self):
+        # Regression for #106 finding: `jq` on an empty .sync-meta.json exits
+        # 0 with no output, so `stored_perim` becomes the empty string rather
+        # than the literal "null" — must not fall through to a re-snapshot.
+        tmp, script, stub, repo = self._setup(["docs/"])
+        run_sync(tmp, script, stub, repo, SHA1)
+        base = tmp / "raw/repos/proj" / SHA1[:7]
+        meta_p = base / ".sync-meta.json"
+        meta_p.write_text("", encoding="utf-8")
+        write_manifest(tmp, ["docs/", "plans/"])
+        r = run_sync(tmp, script, stub, repo, SHA1)
+        self.assertIn("SKIPPED", r.stdout)
+        self.assertIn("cannot compare perimeter", r.stderr)
+        self.assertNotIn("CREATED", r.stdout)
+        self.assertFalse((tmp / "raw/repos/proj" / f"{SHA1[:7]}-r2").exists())
+
     def test_new_sha_creates_plain_base(self):
         tmp, script, stub, repo = self._setup(["docs/"])
         run_sync(tmp, script, stub, repo, SHA1)

@@ -5,7 +5,7 @@
 #
 # Pour chaque source :
 #   - récupère le SHA du HEAD de la branche via `gh api`
-#   - si <dest>/<shortsha>/ existe déjà → SKIPPED
+#   - si <dest>/<shortsha>/ existe déjà → SKIPPED, sauf périmètre modifié → <shortsha>-rN
 #   - sinon → clone --depth=1, copie les paths listés, écrit .sync-meta.json
 #
 # Sortie stdout (consommée par le slash command /sync-repos) :
@@ -86,12 +86,12 @@ while IFS=$'\t' read -r name repo branch dest paths_json excludes_json; do
       [[ -d "$d" ]] || continue
       n="${d%/}"; n="${n##*-r}"
       [[ "$n" =~ ^[0-9]+$ ]] || continue
-      if (( n > latest_n )); then latest_n="$n"; latest_dir="${d%/}"; fi
+      if (( 10#$n > 10#$latest_n )); then latest_n="$n"; latest_dir="${d%/}"; fi
     done
     stored_perim="$(jq -c 'if (.paths // null) == null then null else [(.paths | sort), ((.exclude_paths // []) | sort)] end' \
       "$latest_dir/.sync-meta.json" 2>/dev/null || echo null)"
     wanted_perim="$(jq -cn --argjson p "$paths_json" --argjson x "$excludes_json" '[($p | sort), ($x | sort)]')"
-    if [[ "$stored_perim" == "null" ]]; then
+    if [[ -z "$stored_perim" || "$stored_perim" == "null" ]]; then
       echo "SKIPPED $name (sha $shortsha already snapshotted)"
       echo "note: $name cannot compare perimeter (no paths in .sync-meta.json)" >&2
       continue
@@ -100,7 +100,7 @@ while IFS=$'\t' read -r name repo branch dest paths_json excludes_json; do
       echo "SKIPPED $name (sha $shortsha already snapshotted)"
       continue
     fi
-    rev=$((latest_n + 1))
+    rev=$((10#$latest_n + 1))
     snapshot_dir="$base_dir-r$rev"
     echo "note: $name perimeter changed since $shortsha → revision r$rev" >&2
   fi
