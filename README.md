@@ -141,7 +141,7 @@ Every wiki page carries two extra frontmatter fields:
 - `summary_l0` — single line, ≤140 chars. Telegraphic. Used as a TOC entry when an agent scans a list of pages.
 - `summary_l1` — 2-5 sentences (~50-150 words). Used when the agent decides whether to load the full body.
 
-This lets agents (and you, via `/query`) navigate the wiki without paying the full body cost on every page they consider. Starting in v1.1.0, the MCP server pushes this further by exposing a **hierarchical orient → drill → preview → read** pattern across **12 read tools of the 14 exposed** (~96% token reduction vs flat dumps on large domains). See [docs/mcp-tiered-loading.md](docs/mcp-tiered-loading.md) for the full pattern.
+This lets agents (and you, via `/query`) navigate the wiki without paying the full body cost on every page they consider. Starting in v1.1.0, the MCP server pushes this further by exposing a **hierarchical orient → drill → preview → read** pattern across **12 read tools of the 15 exposed** (~96% token reduction vs flat dumps on large domains). See [docs/mcp-tiered-loading.md](docs/mcp-tiered-loading.md) for the full pattern.
 
 ## Scripts layout
 
@@ -188,20 +188,21 @@ Run `/format` to normalise a pre-formatter vault; generation commands (`/ingest`
 
 Run `bash scripts/mcp/setup-mcp.sh` once after bootstrap to register the `boiling-brain-wiki` MCP server (user-scope). Once active, Claude Code can query your wiki from **any project** — not just inside the vault directory.
 
-**14 tools** are exposed, organised as a tiered-loading hierarchy (orient → drill → read). Full reference: [docs/mcp-tiered-loading.md](docs/mcp-tiered-loading.md).
+**15 tools** are exposed, organised as a tiered-loading hierarchy (orient → drill → read). Full reference: [docs/mcp-tiered-loading.md](docs/mcp-tiered-loading.md).
 
-| Tool                                                                                     | Purpose                                                                                                                              |
-| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `list_domains()`                                                                         | **Orient**: valid domain slugs + short description + whether a domain-expert agent exists. Use FIRST — domains evolve via `/domain`. |
-| `scan_domain(domain)`                                                                    | **Orient**: hub `summary_l1` + counts per type + top 10 pages by centrality (backlinks). ~860 tokens.                                |
-| `scan_concepts(domain, query="", top=20)`                                                | **Drill**: concepts in a domain, ranked by centrality. Optional query (case + separator insensitive).                                |
-| `scan_entities`, `scan_decisions`, `scan_syntheses`, `scan_cheatsheets`, `scan_diagrams` | Same semantics, per type.                                                                                                            |
-| `scan_sources(domain, query, top=20)`                                                    | Same shape but query is **required** (sources too numerous without a target).                                                        |
-| `preview_page(page_path)`                                                                | L1: frontmatter (whitelisted fields) + `summary_l1`.                                                                                 |
-| `read_page(page_path)`                                                                   | L2: full body.                                                                                                                       |
-| `search_wiki(query, limit=10)`                                                           | Cross-type, cross-domain. Format enriched: path, type, summary_l0, outgoing wikilinks.                                               |
-| `drop_to_raw(subfolder, filename, content)`                                              | Sanctioned write into `raw/` (server-side, bypasses the `protect-raw.sh` hook by design). Auto-signals via `cache/.pending-ingest`.  |
-| `ingest(path, domain_hint="")`                                                           | Trigger headless ingestion of a file already in `raw/` (see tool description for the permission-mode opt-in).                        |
+| Tool                                                                                     | Purpose                                                                                                                                                                                                                                               |
+| ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_domains()`                                                                         | **Orient**: valid domain slugs + short description + whether a domain-expert agent exists. Use FIRST — domains evolve via `/domain`.                                                                                                                  |
+| `scan_domain(domain)`                                                                    | **Orient**: hub `summary_l1` + counts per type + top 10 pages by centrality (backlinks). ~860 tokens.                                                                                                                                                 |
+| `scan_concepts(domain, query="", top=20)`                                                | **Drill**: concepts in a domain, ranked by centrality. Optional query (case + separator insensitive).                                                                                                                                                 |
+| `scan_entities`, `scan_decisions`, `scan_syntheses`, `scan_cheatsheets`, `scan_diagrams` | Same semantics, per type.                                                                                                                                                                                                                             |
+| `scan_sources(domain, query, top=20)`                                                    | Same shape but query is **required** (sources too numerous without a target).                                                                                                                                                                         |
+| `preview_page(page_path)`                                                                | L1: frontmatter (whitelisted fields) + `summary_l1`.                                                                                                                                                                                                  |
+| `read_page(page_path)`                                                                   | L2: full body.                                                                                                                                                                                                                                        |
+| `search_wiki(query, limit=10)`                                                           | Cross-type, cross-domain. Format enriched: path, type, summary_l0, outgoing wikilinks.                                                                                                                                                                |
+| `drop_to_raw(subfolder, filename, content)`                                              | Sanctioned **text** write into `raw/` (server-side, bypasses the `protect-raw.sh` hook by design). Auto-signals via `cache/.pending-ingest`.                                                                                                          |
+| `drop_file_to_raw(source_path, subfolder)`                                               | Sanctioned **binary** deposit: server-side copy of a local file (PDF, image, docx/pptx, audio/video) into `raw/`. Source must sit under an allowed root (`$HOME` by default, `LLMWIKI_DROP_SOURCE_ROOTS` to override). Same `.pending-ingest` signal. |
+| `ingest(path, domain_hint="")`                                                           | Trigger headless ingestion of a file already in `raw/` (see tool description for the permission-mode opt-in).                                                                                                                                         |
 
 **Recommended pattern**: `list_domains` → `scan_domain` → `scan_<type>(query=...)` → `preview_page` → `read_page`. Measured: ~96% token reduction vs a flat dump on a 388-page domain.
 
@@ -215,7 +216,7 @@ The MCP server is registered at user scope with a stdio configuration **shared b
 
 ## Workflow loop
 
-1. Drop a source into `raw/` (note, transcript, PDF, repo doc snapshot).
+1. Drop a source into `raw/` (note, transcript, PDF, image, repo doc snapshot) — by hand, or through the MCP deposit tools from a client with no terminal (`drop_to_raw` for text, `drop_file_to_raw` for a binary). `.docx` / `.pptx` are supported too: `/ingest` converts them to a markdown twin via `scripts/convert-doc.sh` (requires [pandoc](https://pandoc.org/installing.html); pptx needs pandoc ≥ 3.0) and archives the binary original unchanged.
 2. Run `/ingest`. Main context proposes a domain expert; you confirm via `AskUserQuestion`. Agent writes `wiki/sources/`, `wiki/concepts/`, `wiki/entities/`, optionally cheatsheets / syntheses / diagrams. Open questions land in `wiki/radar.md`.
 3. Tomorrow morning, ask "show me the radar" — Claude reads `radar.md` and the accumulated `.suggestions.md` of each agent, proposes the day's priorities.
 4. After a few ingestions in a domain, run `/evolve-agent <domain>` to fold accumulated suggestions back into the expert's prompt.

@@ -5,6 +5,7 @@ Run: cd scripts/mcp && python3 -m unittest test_wiki_core
 Does NOT require fastmcp (the parity test self-skips if fastmcp is absent).
 """
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -407,11 +408,167 @@ class TestMcpParity(McpModuleTestBase):
         self.assertIn("path traversal detected", result)
         self.assertFalse((self.vault / "raw" / "evil").exists())
 
+    def test_drop_to_raw_rejects_sibling_directory_sharing_the_raw_prefix(self):
+        """"../rawbis" resolves to <vault>/rawbis — outside raw/, yet its string
+        does start with str(raw). A prefix-based guard let it through (#112)."""
+        result = self.m.drop_to_raw("../rawbis", "escaped.md", "nope")
+        self.assertIn("path traversal detected", result)
+        self.assertFalse((self.vault / "rawbis").exists())
+
     def _safe_md(self, fn):
         try:
             return str(fn())
         except wiki_core.WikiLookupError as e:
             return str(e)
+
+
+@unittest.skipUnless(_HAS_FASTMCP, "fastmcp not installed")
+class TestDropFileToRaw(McpModuleTestBase):
+    """Tests for drop_file_to_raw() — the binary deposit channel (#112).
+
+    The source root allowlist is pinned to a temp directory so the tests never
+    depend on the real $HOME."""
+
+    def setUp(self):
+        super().setUp()
+        self.src_root = Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.src_root, True)
+        self._prev_roots = os.environ.get("LLMWIKI_DROP_SOURCE_ROOTS")
+        os.environ["LLMWIKI_DROP_SOURCE_ROOTS"] = str(self.src_root)
+        self.addCleanup(self._restore_roots)
+
+    def _restore_roots(self):
+        if self._prev_roots is None:
+            os.environ.pop("LLMWIKI_DROP_SOURCE_ROOTS", None)
+        else:
+            os.environ["LLMWIKI_DROP_SOURCE_ROOTS"] = self._prev_roots
+
+    def _source(self, name="report.pdf", body=b"%PDF-1.4 fake\n"):
+        p = self.src_root / name
+        p.write_bytes(body)
+        return str(p)
+
+    def test_copies_binary_and_signals(self):
+        src = self._source()
+        result = self.m.drop_file_to_raw(src, "pdfs")
+        dest = self.vault / "raw" / "pdfs" / "report.pdf"
+        self.assertTrue(dest.exists())
+        self.assertEqual(dest.read_bytes(), b"%PDF-1.4 fake\n")
+        self.assertIn("raw/pdfs/report.pdf", result)
+        pending = (self.vault / "cache" / ".pending-ingest").read_text(encoding="utf-8")
+        self.assertIn("raw/pdfs/report.pdf", pending)
+
+    def test_original_is_left_in_place(self):
+        src = self._source()
+        self.m.drop_file_to_raw(src, "pdfs")
+        self.assertTrue(Path(src).exists())
+
+    def test_rejects_subfolder_traversal(self):
+        src = self._source()
+        result = self.m.drop_file_to_raw(src, "../evil")
+        self.assertIn("path traversal detected", result)
+        self.assertFalse((self.vault / "raw" / "evil").exists())
+        self.assertFalse((self.vault.parent / "evil").exists())
+
+    def test_rejects_sibling_directory_sharing_the_raw_prefix(self):
+        src = self._source()
+        result = self.m.drop_file_to_raw(src, "../rawbis")
+        self.assertIn("path traversal detected", result)
+        self.assertFalse((self.vault / "rawbis").exists())
+
+    def test_rejects_when_no_source_root_resolves(self):
+        os.environ["LLMWIKI_DROP_SOURCE_ROOTS"] = f"{os.pathsep}{os.pathsep}"
+        result = self.m.drop_file_to_raw("/tmp/whatever.pdf", "pdfs")
+        # An all-empty list falls back to $HOME rather than locking the tool out.
+        self.assertNotIn("no usable source root", result)
+
+    def test_rejects_source_outside_allowed_roots(self):
+        outside = Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, outside, True)
+        stray = outside / "secret.pdf"
+        stray.write_bytes(b"nope")
+        result = self.m.drop_file_to_raw(str(stray), "pdfs")
+        self.assertIn("outside the allowed source roots", result)
+        self.assertFalse((self.vault / "raw" / "pdfs" / "secret.pdf").exists())
+
+    def test_rejects_symlink_escaping_allowed_roots(self):
+        outside = Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, outside, True)
+        target = outside / "secret.pdf"
+        target.write_bytes(b"nope")
+        link = self.src_root / "innocent.pdf"
+        link.symlink_to(target)
+        result = self.m.drop_file_to_raw(str(link), "pdfs")
+        self.assertIn("outside the allowed source roots", result)
+        self.assertFalse((self.vault / "raw" / "pdfs" / "innocent.pdf").exists())
+
+    def test_rejects_unsupported_extension(self):
+        src = self._source("payload.exe", b"MZ")
+        result = self.m.drop_file_to_raw(src, "notes")
+        self.assertIn("unsupported file type", result)
+        self.assertFalse((self.vault / "raw" / "notes" / "payload.exe").exists())
+
+    def test_rejects_collision_without_overwriting(self):
+        src = self._source()
+        self.m.drop_file_to_raw(src, "pdfs")
+        Path(src).write_bytes(b"%PDF-1.4 second version\n")
+        result = self.m.drop_file_to_raw(src, "pdfs")
+        self.assertIn("already exists", result)
+        dest = self.vault / "raw" / "pdfs" / "report.pdf"
+        self.assertEqual(dest.read_bytes(), b"%PDF-1.4 fake\n")
+
+    def test_rejects_missing_source(self):
+        result = self.m.drop_file_to_raw(str(self.src_root / "ghost.pdf"), "pdfs")
+        self.assertIn("not found", result)
+
+    def test_rejects_directory_source(self):
+        d = self.src_root / "folder.pdf"
+        d.mkdir()
+        result = self.m.drop_file_to_raw(str(d), "pdfs")
+        self.assertIn("not a regular file", result)
+
+    def test_accepts_convertible_office_formats(self):
+        for ext in ("docx", "pptx"):
+            with self.subTest(ext=ext):
+                src = self._source(f"brief.{ext}", b"PK\x03\x04fake")
+                result = self.m.drop_file_to_raw(src, "documents")
+                self.assertIn(f"raw/documents/brief.{ext}", result)
+
+    def test_expands_user_home_in_source_path(self):
+        prev_home = os.environ.get("HOME")
+        os.environ["HOME"] = str(self.src_root)
+        try:
+            self._source("from-home.pdf")
+            result = self.m.drop_file_to_raw("~/from-home.pdf", "pdfs")
+        finally:
+            if prev_home is None:
+                os.environ.pop("HOME", None)
+            else:
+                os.environ["HOME"] = prev_home
+        self.assertIn("raw/pdfs/from-home.pdf", result)
+
+    def test_defaults_to_home_when_env_unset(self):
+        os.environ.pop("LLMWIKI_DROP_SOURCE_ROOTS", None)
+        prev_home = os.environ.get("HOME")
+        os.environ["HOME"] = str(self.src_root)
+        try:
+            src = self._source("default-root.pdf")
+            result = self.m.drop_file_to_raw(src, "pdfs")
+        finally:
+            if prev_home is None:
+                os.environ.pop("HOME", None)
+            else:
+                os.environ["HOME"] = prev_home
+        self.assertIn("raw/pdfs/default-root.pdf", result)
+
+    def test_accepts_several_roots_separated_by_colon(self):
+        second = Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, second, True)
+        os.environ["LLMWIKI_DROP_SOURCE_ROOTS"] = f"{self.src_root}:{second}"
+        stray = second / "from-second.pdf"
+        stray.write_bytes(b"ok")
+        result = self.m.drop_file_to_raw(str(stray), "pdfs")
+        self.assertIn("raw/pdfs/from-second.pdf", result)
 
 
 @unittest.skipUnless(_HAS_FASTMCP, "fastmcp not installed")

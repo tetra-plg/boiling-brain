@@ -94,9 +94,11 @@ Any new document that appears in a session — one the user attaches, one you pr
 keep — is a candidate for the brain. **Offer the deposit proactively**; never deposit
 silently, and never decide alone that something is not worth keeping.
 
-- Deposit through the MCP write tool (`drop_to_raw`) into the right `raw/` subfolder,
-  filename `YYYY-MM-DD-<slug>.<ext>`. Ingestion happens later, in batch — the deposit only
-  signals it.
+- Deposit through the MCP write tools into the right `raw/` subfolder: `drop_to_raw` for
+  text you compose, `drop_file_to_raw` for a file already on disk (PDF, image, docx, pptx,
+  audio, video) — the latter copies it server-side, so an attachment saved to the working
+  folder can be archived without a terminal. Ingestion happens later, in batch — the deposit
+  only signals it.
 - Deposited files may keep a copy under `<WORKING_FOLDER>/deposited/`. That copy is a
   convenience, purgeable at any time: `raw/` is the authoritative archive.
 - **A new version of a document is a new deposit**, never an overwrite. The hash index keeps

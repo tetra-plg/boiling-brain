@@ -22,7 +22,9 @@ raw/                 # IMMUTABLE raw sources — what the wiki references.
   transcripts/       # video/audio transcripts (YYYY-MM-DD-slug.md + timestamps)
   videos-meta/       # video pointers/metadata
   frames/            # frames effectively used by the wiki (promoted from cache)
-{{tracked_repos_arborescence}}  # + articles/, pdfs/, clippings/... as needed
+{{tracked_repos_arborescence}}  # + articles/, pdfs/, clippings/, documents/... as needed
+                     # docx/pptx: the binary stays here, /ingest writes a
+                     # markdown twin next to it (<file>.docx.md)
 
 cache/                 # TRANSIENT artifacts — never referenced by the wiki, purgeable at any time.
   videos/              # downloaded/dropped videos, removed after transcription
@@ -123,6 +125,6 @@ These checks are silent if the files are absent.
 
 - **One source = one file in `raw/`.** No ingestion from memory or conversation. To bring in a personal takeaway: drop it first as `raw/notes/YYYY-MM-DD-<topic>.md`, then ingest normally.
 - **Never reference `cache/` from the wiki.** Its contents may disappear at any time.
-- **Never modify files in `raw/`.** A source that evolves → new file, never overwrite.
+- **Never modify files in `raw/`.** A source that evolves → new file, never overwrite. The only writes into `raw/` come from scripts (frame promotion, `scripts/convert-doc.sh` twins) and from the MCP deposit tools (`drop_to_raw`, `drop_file_to_raw`) — never from an agent's `Write`.
 - **No page for every concept mentioned in passing**: threshold ≥ 2 sources OR judged structural by the user.
 - **No long introductions, no meta-commentary.**
