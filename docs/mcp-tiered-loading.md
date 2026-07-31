@@ -139,6 +139,7 @@ The hub page lookup uses `wiki/domains/<domain>.md` and reads its `summary_l1`. 
 - `scripts/mcp/wiki_core.py` — shared query layer used by both entry points.
 - `scripts/mcp/setup-mcp.sh` — installer + self-healing maintainer of `~/.claude/CLAUDE.md` block.
 - `scripts/mcp/smoke_test.py` — token-budget harness.
+- [docs/cowork-project-instructions.md](cowork-project-instructions.md) — project-instructions template for Claude Desktop / Cowork: makes a client with no hooks and no slash commands follow the tiered pattern above, cite its pages and grade its confidence per point.
 - `scripts/migrations/v1.1.0.md` — migration that installs the stack on a vault that never enabled it (runs once, like every other migration). Refreshing an already-installed stack is handled by `/update-vault` **step 7**, which detects propagated `scripts/mcp/**` changes and offers `setup-mcp.sh` only then, plus a reload signal when the server code changed (#90).
 
 ## CLI mode (no MCP client)
