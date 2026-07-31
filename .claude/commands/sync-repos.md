@@ -36,8 +36,8 @@ scripts/sync-repos.sh <name1> <name2>
 
 The script writes to stdout lines of three forms:
 
-- `CREATED <vault-relative-path>` — a new snapshot.
-- `SKIPPED <name> (sha <shortsha> already snapshotted)` — no upstream merge since the last sync.
+- `CREATED <vault-relative-path>` — a new snapshot. The path may point at a **perimeter revision** `<shortsha>-rN`: created when the manifest's `paths`/`exclude_paths` changed for an already-snapshotted SHA (#106). Chain `/ingest` on it like any snapshot — unchanged files are content-covered (#88), only newly captured paths come out `NEW`.
+- `SKIPPED <name> (sha <shortsha> already snapshotted)` — no upstream merge since the last sync **and** the manifest perimeter is unchanged. `note:` lines on stderr explain perimeter-related decisions.
 - `ERROR <name> <message>` — failure (clone, missing paths, repo unreachable).
 
 ### 4. Chaining /ingest

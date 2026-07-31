@@ -94,6 +94,10 @@ A tracked repo's HEAD SHA advances on **every** commit, so `/sync-repos` creates
 
 A `0 NEW` default run does **not** mean every snapshot file was declared: a single declared file also covers all its siblings through implicit directory inheritance (`dir-implicit`), by design — without it, every snapshot would flood `/ingest` with `NEW` lines. To see the real coverage deficit, run the opt-in audit `bash scripts/wiki-maint/scan-raw.sh --strict-coverage`: it appends `UNDECLARED <path>  (dir-covered-by: <slug>)` lines (and an `undeclared[]` array under `--format=json`) for snapshot files granted coverage only by directory inheritance — never declared via `source_path`/`covered_paths` and never read as byte-identical content under a covered lineage version. Default output is unchanged; the audit rejects `--force` and `--pending`.
 
+### Perimeter revisions
+
+Widening (or otherwise editing) a source's `paths:`/`exclude_paths:` used to have no effect until the upstream repo received an unrelated commit — the SHA had not moved, so the sync answered `SKIPPED` (#106). Every snapshot records its capture perimeter in `.sync-meta.json` (`paths`, `exclude_paths`); `/sync-repos` now compares the manifest against the **latest revision** of the current SHA (set-wise, order-insensitive) and, on any difference, captures a **perimeter revision** into `<dest>/<shortsha>-rN/` (N ≥ 2; the base snapshot is r1). The previous snapshot is never modified — immutability holds per directory. `/ingest` needs no special handling: files byte-identical to a covered earlier revision are content-covered (`SKIP (content)`), so a revision surfaces `NEW` only for the newly captured paths. Snapshots predating `.sync-meta.json` perimeters (hand-made) are never auto-revisioned: the sync keeps `SKIPPED` and prints a `note:` on stderr.
+
 ## Files shipped
 
 - [`tracked-repos.config.json`](../../tracked-repos.config.json) — manifest (empty by default at bootstrap, populate as you go).
