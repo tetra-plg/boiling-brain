@@ -8,6 +8,10 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 
 ## [v1.2.2] — unreleased
 
+### Added
+
+- **`scan-raw.sh --strict-coverage` audit**: implicit directory coverage (one declared file covers its siblings) keeps routine scans quiet by design, but it makes `0 NEW` read as "everything was declared", which it never meant. The new opt-in flag appends `UNDECLARED <path>  (dir-covered-by: <slug>)` lines (text) and an `undeclared[]` array + count (`--format=json`) for snapshot files covered only by directory inheritance — never declared via `source_path`/`covered_paths` and never read as byte-identical content under a covered lineage version (the content-coverage refinement of #88). Scope: snapshot directories (`.sync-meta.json`) only. Default output is byte-identical; the flag rejects `--force` (which rewrites verdict reasons) and `--pending` (a manifest scope, not an audit surface). Documented in `docs/tracked-repos-immutable-snapshots.md`. (#105)
+
 ### Fixed
 
 - **`README.md` tool-count disambiguation**: L144 attributed the read-subset count (12) to the MCP server as a whole, 47 lines before the correct server-surface count (14) at L191 — a leftover of the #91 resync, which corrected the canonical section only. The sentence now reads "12 read tools of the 14 exposed", so both counts appear where they are correct (14 = server surface, 12 = read subset / headless CLI). Historical occurrences (v1.1.0 migration file, v1.1.0-era CHANGELOG entries) are untouched: 12 was accurate before `list_domains()` and `ingest()` shipped in v1.1.1. Documentation-only. (#107)
