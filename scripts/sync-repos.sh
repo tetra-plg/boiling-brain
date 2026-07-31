@@ -5,7 +5,7 @@
 #
 # Pour chaque source :
 #   - récupère le SHA du HEAD de la branche via `gh api`
-#   - si <dest>/<shortsha>/ existe déjà → SKIPPED
+#   - si <dest>/<shortsha>/ existe déjà → SKIPPED, sauf périmètre modifié → <shortsha>-rN
 #   - sinon → clone --depth=1, copie les paths listés, écrit .sync-meta.json
 #
 # Sortie stdout (consommée par le slash command /sync-repos) :
@@ -73,11 +73,36 @@ while IFS=$'\t' read -r name repo branch dest paths_json excludes_json; do
     continue
   }
   shortsha="${sha:0:7}"
-  snapshot_dir="$VAULT_ROOT/$dest/$shortsha"
+  base_dir="$VAULT_ROOT/$dest/$shortsha"
+  snapshot_dir="$base_dir"
 
-  if [[ -d "$snapshot_dir" ]]; then
-    echo "SKIPPED $name (sha $shortsha already snapshotted)"
-    continue
+  # Perimeter revisions (#106): when this SHA is already snapshotted, compare
+  # the manifest perimeter (paths + exclude_paths, set-wise) with the latest
+  # revision's .sync-meta.json; a change re-snapshots into <shortsha>-rN.
+  if [[ -d "$base_dir" ]]; then
+    latest_dir="$base_dir"
+    latest_n=1
+    for d in "$base_dir"-r*/; do
+      [[ -d "$d" ]] || continue
+      n="${d%/}"; n="${n##*-r}"
+      [[ "$n" =~ ^[0-9]+$ ]] || continue
+      if (( 10#$n > 10#$latest_n )); then latest_n="$n"; latest_dir="${d%/}"; fi
+    done
+    stored_perim="$(jq -c 'if (.paths // null) == null then null else [(.paths | sort), ((.exclude_paths // []) | sort)] end' \
+      "$latest_dir/.sync-meta.json" 2>/dev/null || echo null)"
+    wanted_perim="$(jq -cn --argjson p "$paths_json" --argjson x "$excludes_json" '[($p | sort), ($x | sort)]')"
+    if [[ -z "$stored_perim" || "$stored_perim" == "null" ]]; then
+      echo "SKIPPED $name (sha $shortsha already snapshotted)"
+      echo "note: $name cannot compare perimeter (no paths in .sync-meta.json)" >&2
+      continue
+    fi
+    if [[ "$stored_perim" == "$wanted_perim" ]]; then
+      echo "SKIPPED $name (sha $shortsha already snapshotted)"
+      continue
+    fi
+    rev=$((10#$latest_n + 1))
+    snapshot_dir="$base_dir-r$rev"
+    echo "note: $name perimeter changed since $shortsha → revision r$rev" >&2
   fi
 
   clone_dir="$VAULT_ROOT/cache/sync-repos/$name"
@@ -136,7 +161,7 @@ while IFS=$'\t' read -r name repo branch dest paths_json excludes_json; do
 EOF
 
   rm -rf "$clone_dir"
-  echo "CREATED $dest/$shortsha"
+  echo "CREATED $dest/$(basename "$snapshot_dir")"
 done <<< "$SOURCES"
 
 # Cleanup cache dir si vide

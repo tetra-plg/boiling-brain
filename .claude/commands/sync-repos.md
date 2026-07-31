@@ -7,7 +7,7 @@ Run the SYNC-REPOS workflow from CLAUDE.md on: $ARGUMENTS
 
 The `tracked-repos.config.json` manifest (at the vault root) lists the repos to follow (`sources[]` field: `name`, `repo`, `branch`, `dest`, `paths`, `exclude_paths`). Each source declares its own `dest` — typically `raw/tracked-repos/<slug>`, but nothing prevents a different layout.
 
-**Immutability principle.** Each sync creates a **new snapshot** under `<dest>/<shortsha>/` (shortsha = first 7 chars of the HEAD SHA of `branch`). If the snapshot already exists → skip. No existing file in `raw/` is ever modified.
+**Immutability principle.** Each sync creates a **new snapshot** under `<dest>/<shortsha>/` (shortsha = first 7 chars of the HEAD SHA of `branch`). If the snapshot already exists → skip — unless the manifest's `paths`/`exclude_paths` changed for that SHA, in which case a perimeter revision `<shortsha>-rN` is created beside it (#106); no existing file in `raw/` is ever modified either way.
 
 ### 1. Pre-requisites
 
@@ -36,8 +36,8 @@ scripts/sync-repos.sh <name1> <name2>
 
 The script writes to stdout lines of three forms:
 
-- `CREATED <vault-relative-path>` — a new snapshot.
-- `SKIPPED <name> (sha <shortsha> already snapshotted)` — no upstream merge since the last sync.
+- `CREATED <vault-relative-path>` — a new snapshot. The path may point at a **perimeter revision** `<shortsha>-rN`: created when the manifest's `paths`/`exclude_paths` changed for an already-snapshotted SHA (#106). Chain `/ingest` on it like any snapshot — files byte-identical to a **declared** file of an earlier revision are content-covered (#88); dir-implicit-only files are not in the content index and may resurface as `NEW`.
+- `SKIPPED <name> (sha <shortsha> already snapshotted)` — no upstream merge since the last sync **and** the manifest perimeter is unchanged. `note:` lines on stderr explain perimeter-related decisions.
 - `ERROR <name> <message>` — failure (clone, missing paths, repo unreachable).
 
 ### 4. Chaining /ingest
@@ -57,6 +57,9 @@ Created:
 
 Unchanged:
 - <name> (sha <shortsha> already snapshotted)
+
+Notes:
+- <name>: cannot compare perimeter (no paths in .sync-meta.json) — pre-#106 or corrupted snapshot, manual look needed
 
 Errors:
 - <name>: clone failure
