@@ -378,6 +378,47 @@ class ClassifyTest(unittest.TestCase):
             self.assertEqual(sorted(idx.claims[key]), ["legacy-page", "modern-page"])
             v = scan_raw.classify("raw/notes/old.md", str(raw), idx, force=False)
             self.assertEqual(v.status, "SKIP")
+            self.assertEqual(v.covered_by, "modern-page")
+
+    def test_legacy_entries_feed_dir_and_meta_indexes(self):
+        # issue #103 caveat: legacy `sources:` entries still feed dir_to_slug
+        # and meta_to_slug indexes (implicit dir coverage, transcript meta maps);
+        # only orphan detection ignores them.
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            # Create the legacy-only page with transcript and deep dir entries
+            d = tmp / "wiki" / "sources"
+            d.mkdir(parents=True)
+            (d / "legacy-vid.md").write_text(
+                "---\nsources:\n"
+                '  - raw/transcripts/vid.md\n'
+                '  - raw/deep/a/b/c/anchor.md\n'
+                "---\n",
+                encoding="utf-8",
+            )
+            # Create actual files on disk so classify() can work
+            vid_file = tmp / "raw" / "transcripts" / "vid.md"
+            vid_file.parent.mkdir(parents=True, exist_ok=True)
+            vid_file.write_text("x\n", encoding="utf-8")
+            sibling_file = tmp / "raw" / "deep" / "a" / "b" / "c" / "sibling.md"
+            sibling_file.parent.mkdir(parents=True, exist_ok=True)
+            sibling_file.write_text("x\n", encoding="utf-8")
+
+            idx = scan_raw.build_index(str(d))
+
+            # Check meta_to_slug index: legacy transcript entries feed it
+            meta_key = scan_raw.normalize_path("raw/videos-meta/vid.meta.md")
+            self.assertEqual(idx.meta_to_slug[meta_key], "legacy-vid")
+
+            # Check dir_to_slug index: legacy deep-dir entries feed it
+            # (depth >= 4 slashes: raw/deep/a/b/c/ has 5 slashes)
+            dir_key = scan_raw.normalize_path("raw/deep/a/b/c/")
+            self.assertEqual(idx.dir_to_slug[dir_key], "legacy-vid")
+
+            # Sibling file under the dir should classify as SKIP via dir coverage
+            v = scan_raw.classify("raw/deep/a/b/c/sibling.md", str(sibling_file), idx, force=False)
+            self.assertEqual(v.status, "SKIP")
+            self.assertEqual(v.reason, "dir-implicit")
 
 
 class StrictFrontmatterDivergenceTest(unittest.TestCase):

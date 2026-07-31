@@ -234,7 +234,7 @@ def parse_args(argv):
     parser.add_argument("--force", action="store_true",
                         help="reclassify every SKIP as MODIFIED")
     parser.add_argument("--orphans", action="store_true",
-                        help="also list indexed paths whose raw file is gone")
+                        help="list paths declared via source_path/covered_paths whose raw file is gone")
     parser.add_argument("--pending", action="store_true",
                         help="scope = entries of cache/.pending-ingest (read-only)")
     parser.add_argument("--format", choices=("text", "json"), default="text",
