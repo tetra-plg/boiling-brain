@@ -486,7 +486,7 @@ def find_undeclared(results, vault_root, cache, snapshot_dirs, content_index):
             empty = os.path.getsize(abs_p) == 0
         except OSError:
             continue
-        if not empty and content_index.get((key[0], key[1], cache.get(abs_p))):
+        if not empty and content_index and content_index.get((key[0], key[1], cache.get(abs_p))):
             continue
         out.append((rel, v.covered_by))
     return sorted(out, key=lambda kv: kv[0].encode("utf-8"))
@@ -586,7 +586,7 @@ def build_json(files, results, idx, ns, vault_root, warnings, undeclared=None):
         orphans = [{"path": p, "covered_by": s} for p, s in find_orphans(vault_root, idx)]
         doc["orphans"] = orphans
         counts["orphans"] = len(orphans)
-    if getattr(ns, "strict_coverage", False):
+    if ns.strict_coverage:
         doc["undeclared"] = [{"path": p, "dir_covered_by": s} for p, s in (undeclared or [])]
         counts["undeclared"] = len(doc["undeclared"])
     return doc
@@ -656,10 +656,10 @@ def main(argv):
     # non-pending: reuse the index already built at the top of main()
     files, results, _ = run(vault_root, ns, idx, cache)
     apply_content_coverage(results, vault_root, cache, snapshot_dirs, content_index)
-    cache.save()
     orphan_pairs = find_orphans(vault_root, idx) if ns.orphans else []
     undeclared = (find_undeclared(results, vault_root, cache, snapshot_dirs, content_index)
                   if ns.strict_coverage else [])
+    cache.save()
     if ns.format == "json":
         doc = build_json(files, results, idx, ns, vault_root, warnings, undeclared=undeclared)
         print(json.dumps(doc, ensure_ascii=False, indent=2))
@@ -672,7 +672,7 @@ def main(argv):
     for path, slug in orphan_pairs:
         print(f"{'ORPHAN':<8} {path}  (covered-by: {slug})")
     for path, slug in undeclared:
-        print(f"{'UNDECLARED':<8} {path}  (dir-covered-by: {slug})")
+        print(f"UNDECLARED {path}  (dir-covered-by: {slug})")
     emit_summary(results, len(orphan_pairs), ns.orphans, len(undeclared), ns.strict_coverage)
     return 0
 

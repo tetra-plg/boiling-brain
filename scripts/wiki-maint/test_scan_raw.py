@@ -996,7 +996,7 @@ class StrictCoverageTest(unittest.TestCase):
             self.assertEqual(
                 strict.stdout,
                 base.stdout
-                + "UNDECLARED raw/repos/proj/abc1234/docs/b.md  (dir-covered-by: proj-doc)\n")
+                + "UNDECLARED raw/repos/proj/abc1234/docs/b.md  (dir-covered-by: proj-doc)\n")  # no padding on UNDECLARED
             self.assertIn("1 undeclared", strict.stderr)
             # JSON: key present only under the flag
             base_j = json.loads(subprocess.run(
@@ -1012,6 +1012,78 @@ class StrictCoverageTest(unittest.TestCase):
                              [{"path": "raw/repos/proj/abc1234/docs/b.md",
                                "dir_covered_by": "proj-doc"}])
             self.assertEqual(strict_j["counts"]["undeclared"], 1)
+
+    def test_orphans_and_undeclared_combined_and_path_scoped(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            sd = self._vault(tmp)
+            # Create an orphan: a declared file that no longer exists on disk
+            (sd / "orphan-doc.md").write_text(
+                "---\nsource_path: raw/repos/proj/abc1234/nonexistent.md\n---\n",
+                encoding="utf-8",
+            )
+            env = {**os.environ, "VAULT_ROOT": str(tmp)}
+            # Test combined --orphans --strict-coverage
+            r = subprocess.run(
+                ["python3", str(HERE / "scan-raw.py"), "--orphans", "--strict-coverage"],
+                capture_output=True, text=True, env=env)
+            self.assertEqual(r.returncode, 0)
+            # Verify output order: ORPHAN line followed by UNDECLARED line
+            lines = r.stdout.strip().split("\n")
+            orphan_lines = [l for l in lines if l.startswith("ORPHAN")]
+            undeclared_lines = [l for l in lines if l.startswith("UNDECLARED")]
+            self.assertEqual(len(orphan_lines), 1)
+            self.assertEqual(len(undeclared_lines), 1)
+            orphan_idx = lines.index(orphan_lines[0])
+            undeclared_idx = lines.index(undeclared_lines[0])
+            self.assertLess(orphan_idx, undeclared_idx, "ORPHAN should appear before UNDECLARED")
+            # Verify summary mentions both
+            self.assertIn("1 orphans", r.stderr)
+            self.assertIn("1 undeclared", r.stderr)
+            # Test path-scoped audit: --strict-coverage raw/repos/proj/abc1234/docs
+            r_scoped = subprocess.run(
+                ["python3", str(HERE / "scan-raw.py"), "--strict-coverage",
+                 "raw/repos/proj/abc1234/docs"],
+                capture_output=True, text=True, env=env)
+            self.assertEqual(r_scoped.returncode, 0)
+            # The UNDECLARED line should still appear (scoping preserves content_index)
+            self.assertIn("UNDECLARED raw/repos/proj/abc1234/docs/b.md", r_scoped.stdout)
+
+    def test_empty_undeclared_sibling_is_flagged(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            snap = tmp / "raw" / "repos" / "proj" / "abc1234"
+            (snap / "docs").mkdir(parents=True)
+            (snap / ".sync-meta.json").write_text("{}", encoding="utf-8")
+            # One declared non-empty file and one empty undeclared sibling
+            (snap / "docs" / "a.md").write_text("anchor\n", encoding="utf-8")
+            (snap / "docs" / "empty.txt").write_text("", encoding="utf-8")
+            # Create another snapshot with an identical empty file (declared)
+            old = tmp / "raw" / "repos" / "proj" / "0000000"
+            (old / "docs").mkdir(parents=True)
+            (old / ".sync-meta.json").write_text("{}", encoding="utf-8")
+            (old / "docs" / "empty.txt").write_text("", encoding="utf-8")
+            d = tmp / "wiki" / "sources"
+            d.mkdir(parents=True)
+            (d / "proj-doc.md").write_text(
+                "---\nsource_path: raw/repos/proj/abc1234/docs/a.md\n---\n",
+                encoding="utf-8",
+            )
+            (d / "proj-old.md").write_text(
+                "---\nsource_path: raw/repos/proj/0000000/docs/empty.txt\n---\n",
+                encoding="utf-8",
+            )
+            # Run audit
+            idx = scan_raw.build_index(str(d))
+            cache = scan_raw.HashCache(str(tmp))
+            snapshot_dirs = scan_raw.find_snapshot_dirs(str(tmp))
+            content_index = scan_raw.build_content_index(idx, str(tmp), cache, snapshot_dirs)
+            files, results, _ = scan_raw.run(str(tmp), _ns(), idx, cache)
+            scan_raw.apply_content_coverage(results, str(tmp), cache, snapshot_dirs, content_index)
+            undeclared = scan_raw.find_undeclared(results, str(tmp), cache, snapshot_dirs, content_index)
+            # The empty sibling should be flagged (content never covers empty files)
+            self.assertEqual(undeclared,
+                             [("raw/repos/proj/abc1234/docs/empty.txt", "proj-doc")])
 
 
 def _ns():
