@@ -506,6 +506,14 @@ class ValidateWikiTest(unittest.TestCase):
             r = run(tmp)
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
+    def test_shipped_decision_template_passes(self):
+        tpl = Path(__file__).resolve().parents[2] / "wiki" / "decisions" / "decision.md.tpl"
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            make_vault(tmp, {"decisions/adr.md": tpl.read_text(encoding="utf-8")})
+            r = run(tmp)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

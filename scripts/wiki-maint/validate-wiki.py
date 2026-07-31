@@ -324,6 +324,9 @@ def main():
     if args.warn_frontmatter_types:
         for d in type_defects:
             print(f"WARN: {d}", file=sys.stderr)
+        if type_defects:
+            print(f"note: {len(type_defects)} per-type frontmatter warning(s) downgraded by "
+                  f"--warn-frontmatter-types", file=sys.stderr)
     else:
         defects.extend(type_defects)
 
