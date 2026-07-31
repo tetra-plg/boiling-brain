@@ -6,7 +6,10 @@ Runs in CI (where raw/ is absent) and locally. For every wiki/**/*.md it checks:
   - [[wikilinks]] resolve to an existing wiki page (full path or bare slug);
     a [[raw/…]] wikilink is always flagged — the wiki must never link into raw/
   - internal relative markdown links / anchors resolve (non-raw, non-external)
-  - frontmatter conforms to the per-type schema (see SCHEMA below)
+  - frontmatter conforms to the common schema and per-type requirements (#104):
+    required fields per type (decision: status; source: source_path, source_sha256,
+    ingested), closed enums (status: pending|accepted; verdict: validated|
+    invalidated|partial), sha256 format validation, and verdict companions
   - frontmatter is valid YAML (yaml.safe_load), matching the MCP/index consumers
     — skipped with a stderr note if PyYAML is not installed
 Plus a repo-wide scan for leftover git conflict markers in any markdown
@@ -21,7 +24,9 @@ job covers them.
 Exit code: 0 if clean, 1 if any defect. Defects are printed as
 `relpath:line — message`, grouped, with a final count.
 
-Usage: validate-wiki.py [--root <repo-root>]   (default root: ../../ from this file)
+Usage: validate-wiki.py [--root <repo-root>] [--warn-frontmatter-types]
+  --warn-frontmatter-types: transitional flag (#104) that downgrades per-type
+    frontmatter defects to stderr warnings instead of failing CI
 """
 import argparse
 import re
@@ -62,6 +67,30 @@ def iter_prose_lines(text):
 
 
 REQUIRED_COMMON = ["type", "domains", "created", "summary_l0", "summary_l1"]
+
+REQUIRED_BY_TYPE = {
+    "decision": ["status"],
+    "source": ["source_path", "source_sha256", "ingested"],
+}
+ENUMS = {
+    "status": ("pending", "accepted"),
+    "verdict": ("validated", "invalidated", "partial"),
+}
+SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+YAML_NULLS = (None, "", "null", "~", "Null", "NULL")
+
+
+def _fm_value(fm, key):
+    """Frontmatter value for per-type checks: surrounding quotes honoured,
+    trailing YAML comment (` # ...`) dropped for unquoted values; None if absent."""
+    if key not in fm:
+        return None
+    raw = fm[key].strip()
+    if raw[:1] in ('"', "'"):
+        q = raw[0]
+        end = raw.find(q, 1)
+        return raw[1:end] if end != -1 else raw.strip(q)
+    return re.sub(r"\s+#.*$", "", raw).strip()
 
 
 def parse_frontmatter(text):
@@ -112,6 +141,39 @@ def check_frontmatter(relpath, text, defects):
         # present-but-empty block, or missing handled above
         if "summary_l1" in fm:
             defects.append(f"{relpath}:1 — frontmatter 'summary_l1' is empty")
+
+
+def check_frontmatter_by_type(relpath, text, out):
+    """Per-type frontmatter requirements (#104), from .claude/rules/frontmatter.md:
+    required fields per type, closed enums, sha256 format, verdict companions.
+    Unknown types have no per-type requirements. Appends messages to `out`
+    (the caller decides whether they are defects or transitional warnings)."""
+    fm, _ = parse_frontmatter(text)
+    if fm is None:
+        return  # missing frontmatter is check_frontmatter's defect
+    ptype = _fm_value(fm, "type") or ""
+    for field in REQUIRED_BY_TYPE.get(ptype, []):
+        if _fm_value(fm, field) in (None, ""):
+            out.append(f"{relpath}:1 — type '{ptype}' requires frontmatter field '{field}'")
+    if ptype == "decision":
+        status = _fm_value(fm, "status")
+        if status not in (None, "") and status not in ENUMS["status"]:
+            shown = "a block scalar" if status == "<block>" else f"'{status}'"
+            out.append(f"{relpath}:1 — 'status' must be one of pending|accepted (got {shown})")
+        verdict = _fm_value(fm, "verdict")
+        if verdict not in YAML_NULLS:
+            if verdict not in ENUMS["verdict"]:
+                shown = "a block scalar" if verdict == "<block>" else f"'{verdict}'"
+                out.append(f"{relpath}:1 — 'verdict' must be one of "
+                           f"validated|invalidated|partial (got {shown})")
+            for comp in ("verdict_date", "verdict_evidence"):
+                if _fm_value(fm, comp) in YAML_NULLS:
+                    out.append(f"{relpath}:1 — 'verdict' is set but '{comp}' is missing or null")
+    if ptype == "source":
+        sha = _fm_value(fm, "source_sha256")
+        if sha not in (None, "") and not SHA256_RE.match(sha):
+            out.append(f"{relpath}:1 — 'source_sha256' is not a 64-char lowercase "
+                       f"hex sha256 (got '{sha}')")
 
 
 def frontmatter_block(text):
@@ -231,6 +293,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=str(Path(__file__).resolve().parent.parent.parent),
                     help="repo root (contains wiki/)")
+    ap.add_argument("--warn-frontmatter-types", action="store_true",
+                    help="transitional (#104): report per-type frontmatter defects "
+                         "as warnings on stderr instead of failing")
     args = ap.parse_args()
     repo_root = Path(args.root)
     wiki_root = repo_root / "wiki"
@@ -244,15 +309,26 @@ def main():
 
     relpaths, bare = build_page_index(wiki_root)
     defects = []
+    type_defects = []
     for p in sorted(wiki_root.rglob("*.md")):
         rel = str(p.relative_to(repo_root)).replace("\\", "/")
         text = p.read_text(encoding="utf-8", errors="replace")
         check_frontmatter(rel, text, defects)
+        check_frontmatter_by_type(rel, text, type_defects)
         check_frontmatter_yaml(rel, text, defects)
         check_wikilinks(rel, text, relpaths, bare, defects)
         check_relative_links(rel, p, text, wiki_root, repo_root, defects)
 
     check_conflict_markers(repo_root, defects)
+
+    if args.warn_frontmatter_types:
+        for d in type_defects:
+            print(f"WARN: {d}", file=sys.stderr)
+        if type_defects:
+            print(f"note: {len(type_defects)} per-type frontmatter warning(s) downgraded by "
+                  f"--warn-frontmatter-types", file=sys.stderr)
+    else:
+        defects.extend(type_defects)
 
     if defects:
         print(f"✗ wiki integrity: {len(defects)} defect(s)\n")

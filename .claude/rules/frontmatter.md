@@ -41,6 +41,8 @@ covered_paths: # optional: if the page synthesizes multiple raws
   - "raw/<folder>/<file2>.md"
 ```
 
+These fields are **enforced by `validate-wiki.py` since v1.2.2 (#104)**: any source page missing `source_path`, `source_sha256`, or `ingested` will fail validation and CI.
+
 ### Hard rule `source_path` round-trip
 
 `source_path` **must round-trip byte-for-byte** to the on-disk filename. Do NOT normalise typographic characters (apostrophes `'` ↔ `’`, quotes, em/en dashes, etc.) when emitting `source_path`. `scripts/wiki-maint/scan-raw.sh` applies Unicode normalization symmetrically at match time (NFC + fold U+2019 → U+0027), but emitting a normalized `source_path` against a non-normalized filename creates ghost duplicate pages on every subsequent sweep.
@@ -86,6 +88,8 @@ verdict: null | validated | invalidated | partial # optional, null until reality
 verdict_date: null | YYYY-MM-DD # optional, must accompany verdict
 verdict_evidence: null | "short narrative" # optional, must accompany verdict
 ```
+
+The `status` field (closed enum: `pending` or `accepted`) is **enforced by `validate-wiki.py` since v1.2.2 (#104)**. A non-null `verdict` must be in the closed enum (`validated`, `invalidated`, or `partial`) and must be accompanied by both `verdict_date` and `verdict_evidence`.
 
 ADRs without `verdict` after **90 days** are flagged by `/lint` (forces L3 confrontation with reality).
 
