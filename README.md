@@ -207,6 +207,12 @@ Run `bash scripts/mcp/setup-mcp.sh` once after bootstrap to register the `boilin
 
 A standalone smoke test (`scripts/mcp/smoke_test.py`) asserts per-tool token budgets against any vault — run it after any non-trivial change to `mcp-wiki.py`.
 
+### Consuming the vault from Claude Desktop / Cowork
+
+The MCP server is registered at user scope with a stdio configuration **shared by Claude Desktop and Claude Cowork**: register it once, and both apps see the connector. What they do _not_ see is the framing Claude Code gets for free — the `protect-raw.sh` hook, the slash commands, the domain-expert agents. Without it, sessions drift towards untiered page dumps, uncited answers, and documents that never reach `raw/`.
+
+[docs/cowork-project-instructions.md](docs/cowork-project-instructions.md) is a ready-to-paste **project-instructions template** that restores that framing client-side, in five blocks: where knowledge lives (the brain, never the instructions), the tiered reading ritual with per-point confidence grading, the production ritual, the deposit ritual, and calibrated confidentiality for web research on private material. Replace the placeholders, paste into the project's custom instructions, adapt per vault.
+
 ## Workflow loop
 
 1. Drop a source into `raw/` (note, transcript, PDF, repo doc snapshot).
