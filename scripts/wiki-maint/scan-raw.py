@@ -140,7 +140,8 @@ def parse_source_page(text: str) -> dict:
                 if mode == "sp" and first_sp is None:
                     first_sp = item
 
-    # pass 2: legacy `sources:`
+    # pass 2: legacy `sources:` (wiki-to-wiki refs or pre-covered_paths raw
+    # paths — indexed for coverage/claims, excluded from orphan detection)
     in_sources = False
     for line in fm:
         if line.startswith("sources:"):
@@ -152,11 +153,11 @@ def parse_source_page(text: str) -> dict:
                 continue
             item = _strip_item(line)
             if item:
-                indexed.append(item)
                 legacy.append(item)
 
     return {
         "indexed_paths": indexed,
+        "legacy_paths": legacy,
         "first_source_path": first_sp,
         "source_sha256": sha,
         "source_sha256_composite": composite,
@@ -187,13 +188,15 @@ def build_index(sources_dir: str) -> Index:
             continue
         meta = parse_source_page(text)
 
-        for raw_path in meta["indexed_paths"]:
+        pass1 = meta["indexed_paths"]
+        for i, raw_path in enumerate(pass1 + meta["legacy_paths"]):
             key = normalize_path(raw_path)
             idx.path_to_slug[key] = slug
             idx.claims.setdefault(key, [])
             if slug not in idx.claims[key]:
                 idx.claims[key].append(slug)
-            idx.all_indexed.append((key, slug))
+            if i < len(pass1):
+                idx.all_indexed.append((key, slug))
 
             # implicit-dir index (parent dir, depth >= 4 slashes)
             idir = raw_path.rsplit("/", 1)[0] + "/" if "/" in raw_path else ""
