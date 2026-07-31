@@ -141,7 +141,7 @@ Every wiki page carries two extra frontmatter fields:
 - `summary_l0` — single line, ≤140 chars. Telegraphic. Used as a TOC entry when an agent scans a list of pages.
 - `summary_l1` — 2-5 sentences (~50-150 words). Used when the agent decides whether to load the full body.
 
-This lets agents (and you, via `/query`) navigate the wiki without paying the full body cost on every page they consider. Starting in v1.1.0, the MCP server pushes this further by exposing a **hierarchical orient → drill → preview → read** pattern across 12 tools (~96% token reduction vs flat dumps on large domains). See [docs/mcp-tiered-loading.md](docs/mcp-tiered-loading.md) for the full pattern.
+This lets agents (and you, via `/query`) navigate the wiki without paying the full body cost on every page they consider. Starting in v1.1.0, the MCP server pushes this further by exposing a **hierarchical orient → drill → preview → read** pattern across **12 read tools of the 14 exposed** (~96% token reduction vs flat dumps on large domains). See [docs/mcp-tiered-loading.md](docs/mcp-tiered-loading.md) for the full pattern.
 
 ## Scripts layout
 
