@@ -237,6 +237,10 @@ def parse_args(argv):
                         help="list paths declared via source_path/covered_paths whose raw file is gone")
     parser.add_argument("--pending", action="store_true",
                         help="scope = entries of cache/.pending-ingest (read-only)")
+    parser.add_argument("--strict-coverage", action="store_true",
+                        help="audit: list snapshot files covered only by "
+                             "implicit directory inheritance (never declared, "
+                             "never content-read); incompatible with --force/--pending")
     parser.add_argument("--format", choices=("text", "json"), default="text",
                         help="output format (default: text)")
     parser.add_argument("paths", nargs="*", help="files or folders (default: all of raw/)")
@@ -465,6 +469,29 @@ def apply_content_coverage(results, vault_root, cache, snapshot_dirs, content_in
             results[i] = (rel, Verdict("SKIP", slug, "content"))
 
 
+def find_undeclared(results, vault_root, cache, snapshot_dirs, content_index):
+    """--strict-coverage audit: snapshot files whose only coverage is
+    implicit-dir inheritance — never declared via source_path/covered_paths
+    and never read as byte-identical content under a covered lineage
+    version. Empty files are always flagged (content never covers them)."""
+    out = []
+    for rel, v in results:
+        if v.reason != "dir-implicit":
+            continue
+        key = lineage_key(rel, snapshot_dirs)
+        if key is None:
+            continue
+        abs_p = os.path.join(vault_root, rel)
+        try:
+            empty = os.path.getsize(abs_p) == 0
+        except OSError:
+            continue
+        if not empty and content_index and content_index.get((key[0], key[1], cache.get(abs_p))):
+            continue
+        out.append((rel, v.covered_by))
+    return sorted(out, key=lambda kv: kv[0].encode("utf-8"))
+
+
 def run(vault_root: str, ns, idx=None, cache=None):
     files, warnings = collect_files(vault_root, ns.paths)
     for w in warnings:
@@ -525,17 +552,19 @@ def emit_stderr_warnings(warnings):
             print(f"WARN: composite-mismatch {w['slug']}", file=sys.stderr)
 
 
-def emit_summary(results, orphan_count, show_orphans):
+def emit_summary(results, orphan_count, show_orphans, undeclared_count=0, show_undeclared=False):
     n = sum(v.status == "NEW" for _, v in results)
     m = sum(v.status == "MODIFIED" for _, v in results)
     k = sum(v.status == "SKIP" for _, v in results)
     line = f"{n} new · {m} modified · {k} skipped"
     if show_orphans:
         line += f" · {orphan_count} orphans"
+    if show_undeclared:
+        line += f" · {undeclared_count} undeclared"
     print(line, file=sys.stderr)
 
 
-def build_json(files, results, idx, ns, vault_root, warnings):
+def build_json(files, results, idx, ns, vault_root, warnings, undeclared=None):
     file_entries = []
     counts = {"new": 0, "modified": 0, "skipped": 0, "orphans": 0}
     for rel, v in results:
@@ -557,6 +586,9 @@ def build_json(files, results, idx, ns, vault_root, warnings):
         orphans = [{"path": p, "covered_by": s} for p, s in find_orphans(vault_root, idx)]
         doc["orphans"] = orphans
         counts["orphans"] = len(orphans)
+    if ns.strict_coverage:
+        doc["undeclared"] = [{"path": p, "dir_covered_by": s} for p, s in (undeclared or [])]
+        counts["undeclared"] = len(doc["undeclared"])
     return doc
 
 
@@ -587,6 +619,10 @@ def main(argv):
     ns = parse_args(argv)
     if ns.pending and ns.paths:
         print("usage: --pending takes no positional path", file=sys.stderr)
+        return 2
+    if ns.strict_coverage and (ns.force or ns.pending):
+        print("usage: --strict-coverage cannot be combined with --force or --pending",
+              file=sys.stderr)
         return 2
     vault_root = os.environ.get("VAULT_ROOT") or str(Path(__file__).resolve().parents[2])
     cache = HashCache(vault_root)
@@ -620,10 +656,12 @@ def main(argv):
     # non-pending: reuse the index already built at the top of main()
     files, results, _ = run(vault_root, ns, idx, cache)
     apply_content_coverage(results, vault_root, cache, snapshot_dirs, content_index)
-    cache.save()
     orphan_pairs = find_orphans(vault_root, idx) if ns.orphans else []
+    undeclared = (find_undeclared(results, vault_root, cache, snapshot_dirs, content_index)
+                  if ns.strict_coverage else [])
+    cache.save()
     if ns.format == "json":
-        doc = build_json(files, results, idx, ns, vault_root, warnings)
+        doc = build_json(files, results, idx, ns, vault_root, warnings, undeclared=undeclared)
         print(json.dumps(doc, ensure_ascii=False, indent=2))
         return 0
     if not files:
@@ -633,7 +671,9 @@ def main(argv):
         print(format_text_line(v, rel))
     for path, slug in orphan_pairs:
         print(f"{'ORPHAN':<8} {path}  (covered-by: {slug})")
-    emit_summary(results, len(orphan_pairs), ns.orphans)
+    for path, slug in undeclared:
+        print(f"UNDECLARED {path}  (dir-covered-by: {slug})")
+    emit_summary(results, len(orphan_pairs), ns.orphans, len(undeclared), ns.strict_coverage)
     return 0
 
 

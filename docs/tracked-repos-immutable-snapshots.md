@@ -92,6 +92,8 @@ Each source declares its own `dest`. If you track several categories of repos (e
 
 A tracked repo's HEAD SHA advances on **every** commit, so `/sync-repos` creates a new `<dest>/<shortsha>/` even when the documented `paths:` did not change. `scan-raw` covers those files **by content** (sha256), scoped to the same `(dest, relative-path)` lineage via each snapshot's `.sync-meta.json`. Consequence: a full `/ingest` sweep after a no-op or partial re-snapshot reports `NEW` only for files whose **content** actually changed — realising the "no noise if nothing moved" principle above. Hashes are cached (`cache/.hash-cache.json`, keyed by mtime+size) so immutable snapshots are hashed once. Disk duplication of identical snapshots remains (a future purge could consolidate them); it no longer costs anything at scan time.
 
+A `0 NEW` default run does **not** mean every snapshot file was declared: a single declared file also covers all its siblings through implicit directory inheritance (`dir-implicit`), by design — without it, every snapshot would flood `/ingest` with `NEW` lines. To see the real coverage deficit, run the opt-in audit `bash scripts/wiki-maint/scan-raw.sh --strict-coverage`: it appends `UNDECLARED <path>  (dir-covered-by: <slug>)` lines (and an `undeclared[]` array under `--format=json`) for snapshot files granted coverage only by directory inheritance — never declared via `source_path`/`covered_paths` and never read as byte-identical content under a covered lineage version. Default output is unchanged; the audit rejects `--force` and `--pending`.
+
 ## Files shipped
 
 - [`tracked-repos.config.json`](../../tracked-repos.config.json) — manifest (empty by default at bootstrap, populate as you go).
