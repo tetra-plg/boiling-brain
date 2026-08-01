@@ -167,19 +167,23 @@ The \`boiling-brain-wiki\` MCP exposes the user's personal knowledge wiki (conce
 **Cross-domain**: \`search_wiki(query, limit=10)\` — full-text cross-type/cross-domain, when you don't know which domain to look in.
 
 **Writing**: \`drop_to_raw(subfolder, filename, content)\` — drops a text file into raw/ for ingest (clean bypass of the protect-raw.sh hook). \`drop_file_to_raw(source_path, subfolder)\` — same, for a binary already on disk (PDF, image, docx/pptx, audio/video): the server copies it server-side. Source must sit under an allowed root (\$HOME by default, LLMWIKI_DROP_SOURCE_ROOTS to override).
+
+**Async ingestion**: \`ingest_start(path, domain_hint=\"\")\` → job id (non-blocking — survives MCP client tool-call timeouts), then \`ingest_status(job_id)\` to poll (returns the final ingest report), \`ingest_cancel(job_id)\` to abort. One job at a time; the sync \`ingest(path)\` remains for short runs.
 $MARKER"
 
 if [[ -f "$CLAUDE_MD" ]] && grep -qF "$MARKER" "$CLAUDE_MD"; then
   # Marker present — check if the existing block is the current version by
   # looking for a distinctive string of the *newest* content. The probe must
   # move with every content revision: probing for an older marker string
-  # (e.g. "list_domains", present since v1.2.1) makes every already-updated
-  # vault look current and silently freezes the block. (#112)
-  if grep -qF "drop_file_to_raw" "$CLAUDE_MD"; then
+  # (e.g. "list_domains" since v1.2.1, "drop_file_to_raw" since v1.3.0)
+  # makes every already-updated vault look current and silently freezes the
+  # block. (#112)
+  if grep -qF "ingest_start" "$CLAUDE_MD"; then
     echo "✅ $CLAUDE_MD already configured (marker present, content up to date)."
   else
     # Outdated block (pre-#47 5-tool version, 12-tool version without
-    # list_domains-first, or 14-tool version without drop_file_to_raw).
+    # list_domains-first, 14-tool version without drop_file_to_raw, or
+    # 15-tool version without the async ingestion tools).
     # Replace in place.
     CLAUDE_MD="$CLAUDE_MD" python3 - <<PYEOF
 import os, re, pathlib
