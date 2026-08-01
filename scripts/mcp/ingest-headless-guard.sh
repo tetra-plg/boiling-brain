@@ -5,7 +5,7 @@
 # performs, so an unattended session (no human to approve tool calls) can't
 # be steered outside its intended lane even if manipulated by adversarial
 # raw/ content. Applies to both the main context and any spawned subagent
-# (Task-tool tool calls share the same hook configuration).
+# (Task/Agent-tool tool calls share the same hook configuration).
 #
 # Exit 0 = allow. Exit 2 + message on stderr = deny (same convention as
 # .claude/hooks/protect-raw.sh).
@@ -49,6 +49,9 @@ except Exception:
       wiki/*.md)
         exit 0 ;;
       .claude/agents/*-expert.suggestions.md)
+        exit 0 ;;
+      .claude/agent-memory/*)
+        # Expert agents accumulate memory on headless runs too (#125).
         exit 0 ;;
       *)
         deny "write outside the allowed scope: $rel" ;;
@@ -136,10 +139,13 @@ except Exception:
     fi
     deny "Bash command not in allowlist: $command"
     ;;
-  Read|Glob|Grep|Task|TodoWrite)
+  Read|Glob|Grep|Task|Agent|ToolSearch|TodoWrite)
     exit 0
     ;;
   *)
-    deny "tool not explicitly allowed during a headless run: $tool_name"
+    # Loud-fail (#125): an upstream tool rename (Task -> Agent happened once)
+    # lands here and silently degrades the run — the model reading this
+    # message is the only reliable reporting channel, so instruct it.
+    deny "tool not explicitly allowed during a headless run: $tool_name. If this tool is structurally required by the workflow (e.g. subagent spawn), the run is DEGRADED — state it explicitly in your final report and in the wiki/log.md entry."
     ;;
 esac
