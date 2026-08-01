@@ -13,7 +13,8 @@ If empty: full wiki sweep (expensive — reserve for monthly reviews).
 Mechanical, decidable without domain knowledge:
 
 - **Orphan pages** — see criterion below.
-- **Stale raw sources** — for every page, each path listed in `sources:` (and `covered_paths:`) must exist on disk under `raw/`. A missing source means the page references content that was deleted or moved — flag it. (This is the local counterpart of the CI, which cannot see `raw/`.)
+- **Stale raw sources** — for every page, each path listed in `source_path:` and `covered_paths:` must exist on disk under `raw/`. A missing source means the page references content that was deleted or moved — flag it. (This is the local counterpart of the CI, which cannot see `raw/`.)
+- **Legacy `sources:` cross-references** — `sources:` entries are wiki-to-wiki wikilinks (`- "[[sources/<slug>]]"`, see `.claude/rules/frontmatter.md`), never disk paths: check that each one resolves to an existing wiki page (`wiki/sources/<slug>.md`). Never check them against `raw/` — that is the false-positive class removed from `scan-raw.py --orphans` by #103.
 - **Broken wikilinks** — a `[[target]]` with no matching page.
 - **L3 readiness** (date-based):
   - ADRs (`wiki/decisions/*.md`) older than 90 days without `verdict` (status confirmation overdue).
