@@ -163,6 +163,7 @@ The CI (`.github/workflows/lint.yml`) blocks only on **repairable, meaningful** 
 - **`format-check`** — Prettier, Obsidian-safe (via `scripts/wiki-maint/format-md.py`): markdown stays clean by construction without breaking `[[wikilink|alias]]` or code-span pipes in tables.
 - **`markdownlint`** — semantic rules only (MD056, MD042, MD051, MD024); cosmetic rules delegated to Prettier.
 - **`wiki-integrity`** — `scripts/wiki-maint/validate-wiki.py`: broken `[[wikilinks]]`, internal links, frontmatter conformance, and leftover git conflict markers. Skips `raw/`.
+- **`unittests`** — the Python test suites under `scripts/wiki-maint/` and `scripts/mcp/` (`unittest discover`; `fastmcp` installed so the MCP server tests run for real, not as skips).
 - **`link-check-report`** — weekly, **non-blocking** (lychee): external links surfaced as a report, never failing the push.
 
 Run `/format` to normalise a pre-formatter vault; generation commands (`/ingest`, `/save`, `/evolve-agent`) format their output automatically.
