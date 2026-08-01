@@ -135,5 +135,30 @@ class TestStatus(IngestJobsBase):
         self.assertIsNotNone(proc.poll())
 
 
+class TestCancel(IngestJobsBase):
+    def test_cancel_running_job(self):
+        report = ingest_jobs.start(["sleep", "30"], "raw/notes/a.md")
+        job_id = self.job_id_of(report)
+        out = ingest_jobs.cancel(job_id)
+        self.assertIn("cancelled", out)
+        proc = ingest_jobs._PROCS[job_id]
+        proc.wait(timeout=5)
+        self.assertIsNotNone(proc.poll())
+        self.assertIn("cancelled", ingest_jobs.status(job_id))
+        # Slot freed: a new job can start.
+        self.assertIn("started", ingest_jobs.start(["sleep", "30"], "raw/notes/a.md"))
+
+    def test_cancel_finished_job_is_idempotent(self):
+        report = ingest_jobs.start(["/bin/sh", "-c", "true"], "raw/notes/a.md")
+        job_id = self.job_id_of(report)
+        self.poll_until_final(job_id)
+        out = ingest_jobs.cancel(job_id)
+        self.assertIn("already finished", out)
+        self.assertIn("done", out)
+
+    def test_cancel_unknown_job_id(self):
+        self.assertIn("unknown job_id", ingest_jobs.cancel("deadbeef0000"))
+
+
 if __name__ == "__main__":
     unittest.main()

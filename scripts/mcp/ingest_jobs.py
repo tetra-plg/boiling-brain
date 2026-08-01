@@ -212,3 +212,18 @@ def status(job_id: str) -> str:
         else:
             _finalize(job, proc)
     return _final_report(job)
+
+
+def cancel(job_id: str) -> str:
+    job = _read_job(job_id)
+    if job is None:
+        return f"Error: unknown job_id: {job_id}."
+    if job["state"] != "running":
+        return f"Job {job_id} already finished ({job['state']}); nothing to cancel."
+    proc = _PROCS.get(job_id)
+    alive = proc.poll() is None if proc is not None else _pid_alive(job["pid"])
+    if alive:
+        _kill_child(job, proc)
+    job["state"] = "cancelled"
+    _write_job(job)
+    return f"Job {job_id} cancelled ({job['path']})."
