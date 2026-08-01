@@ -135,7 +135,55 @@ class TestStatus(IngestJobsBase):
         self.assertIsNotNone(proc.poll())
 
 
+class TestCorruptState(IngestJobsBase):
+    def test_corrupt_state_file_is_skipped(self):
+        jobs_dir = wiki_core.CACHE_DIR / "ingest-jobs"
+        jobs_dir.mkdir(parents=True, exist_ok=True)
+        (jobs_dir / "deadbeef0001.json").write_text("not json", encoding="utf-8")
+        report = ingest_jobs.start(["sleep", "30"], "raw/notes/a.md")
+        self.assertIn("started for raw/notes/a.md", report)
+        self.assertIn("unknown job_id", ingest_jobs.status("deadbeef0001"))
+
+
+class TestRestartOrphan(IngestJobsBase):
+    def test_status_reports_restart_orphan_and_frees_slot(self):
+        report = ingest_jobs.start(["sleep", "30"], "raw/notes/a.md")
+        job_id = self.job_id_of(report)
+        proc = ingest_jobs._PROCS.pop(job_id)
+        try:
+            out = ingest_jobs.status(job_id)
+            self.assertIn("server restarted", out)
+            # Slot freed: a new job can start.
+            self.assertIn("started", ingest_jobs.start(["sleep", "30"], "raw/notes/a.md"))
+        finally:
+            proc.kill()
+            proc.wait()
+
+    def test_cancel_restart_orphan_does_not_signal(self):
+        report = ingest_jobs.start(["sleep", "30"], "raw/notes/a.md")
+        job_id = self.job_id_of(report)
+        proc = ingest_jobs._PROCS.pop(job_id)
+        try:
+            out = ingest_jobs.cancel(job_id)
+            self.assertIn("nothing to cancel", out)
+            # Never signaled: the leaked process is still alive.
+            self.assertIsNone(proc.poll())
+        finally:
+            proc.kill()
+            proc.wait()
+
+
 class TestCancel(IngestJobsBase):
+    def test_cancel_after_exit_not_finalized_keeps_report(self):
+        report = ingest_jobs.start(
+            ["/bin/sh", "-c", "printf '## Pages\\n'"], "raw/notes/a.md")
+        job_id = self.job_id_of(report)
+        proc = ingest_jobs._PROCS[job_id]
+        proc.wait(timeout=5)
+        out = ingest_jobs.cancel(job_id)
+        self.assertIn("already finished (done)", out)
+        self.assertIn("## Pages", ingest_jobs.status(job_id))
+
     def test_cancel_running_job(self):
         report = ingest_jobs.start(["sleep", "30"], "raw/notes/a.md")
         job_id = self.job_id_of(report)

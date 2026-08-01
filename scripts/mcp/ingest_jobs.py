@@ -8,17 +8,17 @@ ingest() unchanged. Design constraints:
 - One job at a time: a headless run owns wiki/log.md, the radar and the index;
   two concurrent runs would interleave their journaling writes.
 - State survives across tool calls in cache/ingest-jobs/<job_id>.json; the
-  in-process _PROCS registry is the primary handle (exit codes, clean reaping)
-  and the persisted pid is the fallback after an MCP server restart, where the
-  exit code is unrecoverable — such a job is reported as an error with an
-  explicit "check wiki/log.md" note rather than guessed at.
+  in-process _PROCS registry is the only liveness signal. A "running" job
+  whose job_id is missing from _PROCS (MCP server restart) is a restart
+  orphan: its exit code is unrecoverable and its persisted pid may already
+  have been recycled by an unrelated process, so it is never signaled — it
+  is finalized as an error with an explicit "check wiki/log.md" note instead.
 - Child stdout/stderr go to <job_id>.out / <job_id>.err files (no PIPE: nobody
   drains it, a chatty child would deadlock on a full pipe buffer).
 """
 import json
 import os
 import re
-import signal
 import subprocess
 import sys
 import time
@@ -73,26 +73,29 @@ def _job_file(job_id: str) -> Path:
     return jobs_dir() / f"{job_id}.json"
 
 
+def _load_job_file(f: Path):
+    """Read+parse a state file, tolerating a partial write or corruption from
+    a concurrent MCP server process. Returns None on any failure."""
+    try:
+        return json.loads(f.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
 def _read_job(job_id: str):
     if not _JOB_ID_RE.match(job_id):
         return None
     f = _job_file(job_id)
     if not f.exists():
         return None
-    return json.loads(f.read_text(encoding="utf-8"))
+    return _load_job_file(f)
 
 
 def _write_job(job: dict):
-    _job_file(job["job_id"]).write_text(
-        json.dumps(job, indent=2) + "\n", encoding="utf-8")
-
-
-def _pid_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except (ProcessLookupError, PermissionError):
-        return False
-    return True
+    final = _job_file(job["job_id"])
+    tmp = final.parent / f"{final.name}.tmp"
+    tmp.write_text(json.dumps(job, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, final)
 
 
 def _running_job():
@@ -100,12 +103,17 @@ def _running_job():
     if not jobs_dir().is_dir():
         return None
     for f in sorted(jobs_dir().glob("*.json")):
-        job = json.loads(f.read_text(encoding="utf-8"))
-        if job.get("state") != "running":
+        job = _load_job_file(f)
+        if job is None or job.get("state") != "running":
             continue
         proc = _PROCS.get(job["job_id"])
-        alive = proc.poll() is None if proc is not None else _pid_alive(job["pid"])
-        if alive:
+        if proc is None:
+            # Restart orphan: no in-process handle to trust, and the
+            # persisted pid may already be a recycled, unrelated process —
+            # never signal it. Finalize as error and free the slot.
+            _finalize(job, None)
+            continue
+        if proc.poll() is None:
             return job
         _finalize(job, proc)
     return None
@@ -137,20 +145,16 @@ def _finalize(job: dict, proc):
 
 
 def _kill_child(job: dict, proc):
-    """SIGTERM, 5s grace, SIGKILL. Tolerates an already-gone child."""
+    """SIGTERM, 5s grace, SIGKILL. Tolerates an already-gone child.
+    proc is always a real Popen handle of this server process's own spawn —
+    restart orphans (no _PROCS entry) are never signaled, see _running_job."""
     try:
-        if proc is not None:
-            proc.terminate()
-            try:
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait(timeout=5)
-        else:
-            os.kill(job["pid"], signal.SIGTERM)
-            time.sleep(0.2)
-            if _pid_alive(job["pid"]):
-                os.kill(job["pid"], signal.SIGKILL)
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=5)
     except (ProcessLookupError, PermissionError):
         pass
 
@@ -199,8 +203,10 @@ def status(job_id: str) -> str:
         return f"Error: unknown job_id: {job_id}."
     if job["state"] == "running":
         proc = _PROCS.get(job_id)
-        alive = proc.poll() is None if proc is not None else _pid_alive(job["pid"])
-        if alive:
+        if proc is None:
+            # Restart orphan: never signaled, see _running_job / module docstring.
+            _finalize(job, None)
+        elif proc.poll() is None:
             elapsed = time.time() - job["started_at"]
             if elapsed > TIMEOUT_S:
                 _kill_child(job, proc)
@@ -221,9 +227,16 @@ def cancel(job_id: str) -> str:
     if job["state"] != "running":
         return f"Job {job_id} already finished ({job['state']}); nothing to cancel."
     proc = _PROCS.get(job_id)
-    alive = proc.poll() is None if proc is not None else _pid_alive(job["pid"])
-    if alive:
-        _kill_child(job, proc)
+    if proc is None:
+        # Restart orphan: never signaled, see _running_job / module docstring.
+        _finalize(job, None)
+        return f"Job {job_id} already finished ({job['state']}); nothing to cancel."
+    if proc.poll() is not None:
+        # Exited but never polled via status(): finalize instead of
+        # discarding a completed report under a "cancelled" stamp.
+        _finalize(job, proc)
+        return f"Job {job_id} already finished ({job['state']}); nothing to cancel."
+    _kill_child(job, proc)
     job["state"] = "cancelled"
     _write_job(job)
     return f"Job {job_id} cancelled ({job['path']})."

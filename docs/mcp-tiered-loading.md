@@ -64,8 +64,8 @@ A flat `scan_domain("ia")` on a 388-page domain returns ~23k tokens — too much
 │  ingest_status(job_id) · ingest_cancel(job_id)                     │
 │    Async variant of ingest() for MCP clients whose tool-call       │
 │    timeout kills long sync runs (#124). One job at a time; same    │
-│    validation, guard and 600s watchdog; status returns the same    │
-│    final report as ingest().                                       │
+│    validation and guard; the 600s watchdog is enforced when polled;│
+│    status returns the same final report as ingest().               │
 └────────────────────────────────────────────────────────────────────┘
 ```
 

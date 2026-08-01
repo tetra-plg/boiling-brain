@@ -436,7 +436,8 @@ def ingest_start(path: str, domain_hint: str = "") -> str:
         "'running' with elapsed seconds, the same final report sync ingest() "
         "produces (with its machine-parseable '## Pages' block) once done, an "
         "error with a stderr excerpt on failure, or a timeout notice (the job "
-        "is bounded by the same 600s watchdog as sync ingest())."
+        "is bounded by the same 600s watchdog as sync ingest(), enforced "
+        "when polled)."
     )
 )
 def ingest_status(job_id: str) -> str:
