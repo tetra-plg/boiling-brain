@@ -1,12 +1,12 @@
 # MCP tiered-loading layer
 
-> **TL;DR:** reference for the `boiling-brain-wiki` MCP server's 15 tools and the tiered-loading pattern they implement (orient → drill → preview → read). Added in v1.1.0 (refactor #41). Measured ~96% token reduction vs the pre-v1.1.0 flat dump on a 388-page domain.
+> **TL;DR:** reference for the `boiling-brain-wiki` MCP server's 18 tools and the tiered-loading pattern they implement (orient → drill → preview → read). Added in v1.1.0 (refactor #41). Measured ~96% token reduction vs the pre-v1.1.0 flat dump on a 388-page domain.
 
 ## Why tiered loading
 
 A flat `scan_domain("ia")` on a 388-page domain returns ~23k tokens — too much for context-constrained backends (e.g. a Realtime voice agent against a 40k TPM org limit, or smaller models with tight context budgets). The MCP server now exposes a **hierarchical descent**: orient first, then drill into the right type, then read the matching pages. Measured reduction on the same query path: **~96%** (23k → ~900 tokens for the orientation step).
 
-## The 15 tools
+## The 18 tools
 
 ```
 ┌─ Orientation ──────────────────────────────────────────────────────┐
@@ -60,6 +60,12 @@ A flat `scan_domain("ia")` on a 388-page domain returns ~23k tokens — too much
 │  ingest(path, domain_hint="")                                      │
 │    Headless ingestion of a file already in raw/ via a domain-expert│
 │    agent run. See the tool description for the permission opt-in.  │
+│  ingest_start(path, domain_hint="") → job_id                       │
+│  ingest_status(job_id) · ingest_cancel(job_id)                     │
+│    Async variant of ingest() for MCP clients whose tool-call       │
+│    timeout kills long sync runs (#124). One job at a time; same    │
+│    validation, guard and 600s watchdog; status returns the same    │
+│    final report as ingest().                                       │
 └────────────────────────────────────────────────────────────────────┘
 ```
 

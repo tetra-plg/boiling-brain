@@ -21,12 +21,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import wiki_core  # noqa: E402
+import ingest_jobs  # noqa: E402
 
 from fastmcp import FastMCP  # noqa: E402
 
 mcp = FastMCP("boiling-brain-wiki")
 
-INGEST_TIMEOUT_S = 600
+INGEST_TIMEOUT_S = ingest_jobs.TIMEOUT_S  # single source of truth (#124)
 INGEST_PERMISSION_MODE = os.environ.get("MCP_INGEST_PERMISSION_MODE", "")
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
@@ -371,27 +372,9 @@ def drop_file_to_raw(source_path: str, subfolder: str) -> str:
     )
 )
 def ingest(path: str, domain_hint: str = "") -> str:
-    if domain_hint and not _SLUG_RE.match(domain_hint):
-        return (f"Error: invalid domain_hint: \"{domain_hint}\" — expected a slug "
-                 f"(lowercase, digits, hyphens). See list_domains() for valid values.")
-
-    if any(c.isspace() for c in path) or any(part.startswith("-") for part in path.split("/")):
-        return (f"Error: invalid path: \"{path}\" — must not contain a space or a "
-                 f"segment starting with \"-\" (flag-injection risk in the built command).")
-
-    try:
-        target = (wiki_core.WIKI_PATH / path).resolve()
-        if not str(target).startswith(str(wiki_core.RAW_DIR.resolve())):
-            return "Error: invalid path (path traversal detected)."
-    except Exception as e:
-        return f"Path validation error: {e}"
-
-    if not target.exists():
-        return f"Error: file not found: {path}."
-
-    prompt = f"/ingest {path} --headless"
-    if domain_hint:
-        prompt += f" --domain-hint={domain_hint}"
+    prompt, err = ingest_jobs.validate_request(path, domain_hint)
+    if err:
+        return err
 
     # Resolve the CLI with shutil.which before building the command. On Windows
     # the CLI ships as a claude.CMD shim; subprocess.run(shell=False) uses
@@ -423,6 +406,55 @@ def ingest(path: str, domain_hint: str = "") -> str:
         return f"Error: ingestion of {path} failed ({detail})"
 
     return result.stdout
+
+
+@mcp.tool(
+    description=(
+        "Start a HEADLESS ingestion as a background job and return immediately "
+        "with a job id — use this instead of ingest() when the run may exceed "
+        "your client's tool-call timeout (real runs routinely take minutes). "
+        "Same validation and guardrails as ingest() (path must live under raw/, "
+        "PreToolUse allowlist hook always active, MCP_INGEST_PERMISSION_MODE "
+        "opt-in). One job at a time: starting while a job is running returns an "
+        "error naming the running job. Poll ingest_status(job_id) for the report."
+    )
+)
+def ingest_start(path: str, domain_hint: str = "") -> str:
+    prompt, err = ingest_jobs.validate_request(path, domain_hint)
+    if err:
+        return err
+    claude_exe = shutil.which("claude")
+    if claude_exe is None:
+        return "Error: `claude` CLI not found in the MCP server environment."
+    cmd = [claude_exe, "-p", prompt, "--settings", _ingest_settings_json()]
+    if INGEST_PERMISSION_MODE:
+        cmd += ["--permission-mode", INGEST_PERMISSION_MODE]
+    return ingest_jobs.start(cmd, path)
+
+
+@mcp.tool(
+    description=(
+        "Poll a background ingestion started with ingest_start(). Returns "
+        "'running' with elapsed seconds, the same final report sync ingest() "
+        "produces (with its machine-parseable '## Pages' block) once done, an "
+        "error with a stderr excerpt on failure, or a timeout notice (the job "
+        "is bounded by the same 600s watchdog as sync ingest())."
+    )
+)
+def ingest_status(job_id: str) -> str:
+    return ingest_jobs.status(job_id)
+
+
+@mcp.tool(
+    description=(
+        "Cancel a background ingestion started with ingest_start(): terminates "
+        "the child run (SIGTERM, then SIGKILL after 5s) and frees the "
+        "single-job slot. Idempotent on an already-finished job (returns its "
+        "final state instead of failing)."
+    )
+)
+def ingest_cancel(job_id: str) -> str:
+    return ingest_jobs.cancel(job_id)
 
 
 if __name__ == "__main__":
