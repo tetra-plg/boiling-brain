@@ -99,5 +99,41 @@ class TestStart(IngestJobsBase):
         self.assertIn(self.job_id_of(first), second)
 
 
+class TestStatus(IngestJobsBase):
+    def test_unknown_and_malformed_job_id(self):
+        self.assertIn("unknown job_id", ingest_jobs.status("deadbeef0000"))
+        self.assertIn("unknown job_id", ingest_jobs.status("../../etc"))
+
+    def test_running_then_done_returns_report(self):
+        report = ingest_jobs.start(
+            ["/bin/sh", "-c", "sleep 0.2; printf '## Pages\\n- wiki/x.md\\n'"],
+            "raw/notes/a.md")
+        job_id = self.job_id_of(report)
+        self.assertIn("running", ingest_jobs.status(job_id))
+        final = self.poll_until_final(job_id)
+        self.assertIn("## Pages", final)
+        # A later poll returns the same report (state persisted).
+        self.assertIn("## Pages", ingest_jobs.status(job_id))
+
+    def test_child_failure_surfaces_stderr(self):
+        report = ingest_jobs.start(
+            ["/bin/sh", "-c", "echo boom >&2; exit 3"], "raw/notes/a.md")
+        final = self.poll_until_final(self.job_id_of(report))
+        self.assertIn("failed", final)
+        self.assertIn("boom", final)
+        self.assertIn("exit code 3", final)
+
+    def test_timeout_kills_and_reports(self):
+        ingest_jobs.TIMEOUT_S = 0.1
+        report = ingest_jobs.start(["sleep", "30"], "raw/notes/a.md")
+        job_id = self.job_id_of(report)
+        time.sleep(0.2)
+        final = ingest_jobs.status(job_id)
+        self.assertIn("timeout", final)
+        proc = ingest_jobs._PROCS[job_id]
+        proc.wait(timeout=5)
+        self.assertIsNotNone(proc.poll())
+
+
 if __name__ == "__main__":
     unittest.main()

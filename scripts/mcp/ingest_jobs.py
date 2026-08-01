@@ -191,3 +191,24 @@ def start(cmd, path: str) -> str:
     _write_job({"job_id": job_id, "path": path, "pid": proc.pid,
                 "started_at": time.time(), "state": "running"})
     return f"Job {job_id} started for {path}. Poll ingest_status(\"{job_id}\")."
+
+
+def status(job_id: str) -> str:
+    job = _read_job(job_id)
+    if job is None:
+        return f"Error: unknown job_id: {job_id}."
+    if job["state"] == "running":
+        proc = _PROCS.get(job_id)
+        alive = proc.poll() is None if proc is not None else _pid_alive(job["pid"])
+        if alive:
+            elapsed = time.time() - job["started_at"]
+            if elapsed > TIMEOUT_S:
+                _kill_child(job, proc)
+                job["state"] = "timeout"
+                _write_job(job)
+            else:
+                return (f"Job {job_id} running "
+                        f"({int(elapsed)}s elapsed, {job['path']}).")
+        else:
+            _finalize(job, proc)
+    return _final_report(job)
