@@ -175,8 +175,9 @@ if [[ -f "$CLAUDE_MD" ]] && grep -qF "$MARKER" "$CLAUDE_MD"; then
   # Marker present — check if the existing block is the current version by
   # looking for a distinctive string of the *newest* content. The probe must
   # move with every content revision: probing for an older marker string
-  # (e.g. "list_domains" since v1.2.1, "drop_file_to_raw" since v1.3.0) makes every already-updated
-  # vault look current and silently freezes the block. (#112)
+  # (e.g. "list_domains" since v1.2.1, "drop_file_to_raw" since v1.3.0)
+  # makes every already-updated vault look current and silently freezes the
+  # block. (#112)
   if grep -qF "ingest_start" "$CLAUDE_MD"; then
     echo "✅ $CLAUDE_MD already configured (marker present, content up to date)."
   else

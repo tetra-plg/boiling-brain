@@ -13,7 +13,6 @@ Usage:
 """
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -29,7 +28,6 @@ mcp = FastMCP("boiling-brain-wiki")
 
 INGEST_TIMEOUT_S = ingest_jobs.TIMEOUT_S  # single source of truth (#124)
 INGEST_PERMISSION_MODE = os.environ.get("MCP_INGEST_PERMISSION_MODE", "")
-_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
 # Formats the ingestion engine can consume: markdown/text and PDF natively,
 # png/jpg images natively, audio/video through /ingest-video, docx/pptx through
