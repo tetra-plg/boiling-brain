@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Usage:
-#   scripts/sync-repos.sh                 # toutes les sources du manifest
-#   scripts/sync-repos.sh name1 name2     # seulement ces sources
+#   scripts/sync-repos.sh                 # all sources from the manifest
+#   scripts/sync-repos.sh name1 name2     # only these sources
 #
-# Pour chaque source :
-#   - récupère le SHA du HEAD de la branche via `gh api`
-#   - si <dest>/<shortsha>/ existe déjà → SKIPPED, sauf périmètre modifié → <shortsha>-rN
-#   - sinon → clone --depth=1, copie les paths listés, écrit .sync-meta.json
+# For each source:
+#   - fetch the branch HEAD SHA via `gh api`
+#   - if <dest>/<shortsha>/ already exists → SKIPPED, unless the perimeter changed → <shortsha>-rN
+#   - otherwise → clone --depth=1, copy the listed paths, write .sync-meta.json
 #
-# Sortie stdout (consommée par le slash command /sync-repos) :
+# stdout output (consumed by the /sync-repos slash command):
 #   CREATED <abs-path>
 #   SKIPPED <name> (sha <shortsha> already snapshotted)
 #   ERROR <name> <message>
@@ -19,21 +19,21 @@ VAULT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$VAULT_ROOT"
 
 MANIFEST="$VAULT_ROOT/tracked-repos.config.json"
-[[ -f "$MANIFEST" ]] || { echo "ERROR _manifest tracked-repos.config.json introuvable" >&2; exit 1; }
-command -v jq >/dev/null || { echo "ERROR _prereq jq non installé (brew install jq)" >&2; exit 1; }
-command -v gh >/dev/null || { echo "ERROR _prereq gh CLI non installé" >&2; exit 1; }
-gh auth status >/dev/null 2>&1 || { echo "ERROR _prereq gh non authentifié (gh auth login)" >&2; exit 1; }
+[[ -f "$MANIFEST" ]] || { echo "ERROR _manifest tracked-repos.config.json not found" >&2; exit 1; }
+command -v jq >/dev/null || { echo "ERROR _prereq jq not installed (brew install jq)" >&2; exit 1; }
+command -v gh >/dev/null || { echo "ERROR _prereq gh CLI not installed" >&2; exit 1; }
+gh auth status >/dev/null 2>&1 || { echo "ERROR _prereq gh not authenticated (gh auth login)" >&2; exit 1; }
 
 # --- Parse args ---
 NAMES=()
 for arg in "$@"; do
   case "$arg" in
-    --*)      echo "ERROR _args flag inconnu: $arg" >&2; exit 1 ;;
+    --*)      echo "ERROR _args unknown flag: $arg" >&2; exit 1 ;;
     *)        NAMES+=("$arg") ;;
   esac
 done
 
-# --- Résolution des sources à traiter ---
+# --- Resolve the sources to process ---
 DEFAULT_PATHS_JSON="$(jq -c '.default_paths // ["docs/","README.md","CHANGELOG.md"]' "$MANIFEST")"
 DEFAULT_EXCLUDES_JSON="$(jq -c '.default_exclude_paths // []' "$MANIFEST")"
 
@@ -52,24 +52,24 @@ if [[ ${#NAMES[@]} -gt 0 ]]; then
   FILTERED=""
   for name in "${NAMES[@]}"; do
     line="$(echo "$SOURCES" | awk -F'\t' -v n="$name" '$1 == n')"
-    [[ -z "$line" ]] && { echo "ERROR $name introuvable dans le manifest" >&2; exit 1; }
+    [[ -z "$line" ]] && { echo "ERROR $name not found in the manifest" >&2; exit 1; }
     FILTERED+="$line"$'\n'
   done
   SOURCES="${FILTERED%$'\n'}"
 fi
 
-[[ -z "$SOURCES" ]] && { echo "ERROR _selection aucune source sélectionnée" >&2; exit 1; }
+[[ -z "$SOURCES" ]] && { echo "ERROR _selection no source selected" >&2; exit 1; }
 
 mkdir -p "$VAULT_ROOT/cache/sync-repos"
 
-# --- Traitement ---
+# --- Processing ---
 SYNCED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 while IFS=$'\t' read -r name repo branch dest paths_json excludes_json; do
   [[ -z "$name" ]] && continue
 
   sha="$(gh api "repos/$repo/commits/$branch" --jq '.sha' 2>/dev/null)" || {
-    echo "ERROR $name échec gh api (repo inaccessible ?)"
+    echo "ERROR $name gh api failed (repo unreachable?)"
     continue
   }
   shortsha="${sha:0:7}"
@@ -109,19 +109,19 @@ while IFS=$'\t' read -r name repo branch dest paths_json excludes_json; do
   rm -rf "$clone_dir"
 
   if ! gh repo clone "$repo" "$clone_dir" -- --depth=1 --branch "$branch" --quiet 2>/dev/null; then
-    echo "ERROR $name échec clone"
+    echo "ERROR $name clone failed"
     continue
   fi
 
   mkdir -p "$snapshot_dir"
 
-  # Copier chaque path listé (préserve l'arborescence relative)
+  # Copy each listed path (preserves the relative tree)
   copied_any=0
   while IFS= read -r p; do
     [[ -z "$p" ]] && continue
     src="$clone_dir/$p"
     if [[ -e "$src" ]]; then
-      # strip trailing slash, recréer le parent côté snapshot
+      # strip trailing slash, recreate the parent on the snapshot side
       p_clean="${p%/}"
       parent_dir="$snapshot_dir/$(dirname "$p_clean")"
       mkdir -p "$parent_dir"
@@ -133,20 +133,20 @@ while IFS=$'\t' read -r name repo branch dest paths_json excludes_json; do
   if [[ "$copied_any" -eq 0 ]]; then
     rm -rf "$snapshot_dir"
     rm -rf "$clone_dir"
-    echo "ERROR $name aucun des paths listés n'existe dans le repo"
+    echo "ERROR $name none of the listed paths exist in the repo"
     continue
   fi
 
-  # Exclusions : supprimer du snapshot chaque chemin listé dans exclude_paths (relatif au repo)
+  # Exclusions: remove from the snapshot every path listed in exclude_paths (repo-relative)
   while IFS= read -r ex; do
     [[ -z "$ex" ]] && continue
     ex_clean="${ex%/}"
-    # garde-fou : refuser chemins absolus ou remontée par ..
-    [[ "$ex_clean" = /* || "$ex_clean" == *..* ]] && { echo "ERROR $name exclude_path invalide: $ex" >&2; continue; }
+    # guardrail: reject absolute paths or .. traversal
+    [[ "$ex_clean" = /* || "$ex_clean" == *..* ]] && { echo "ERROR $name invalid exclude_path: $ex" >&2; continue; }
     rm -rf "$snapshot_dir/$ex_clean"
   done < <(echo "$excludes_json" | jq -r '.[]')
 
-  # Metadata du snapshot
+  # Snapshot metadata
   cat > "$snapshot_dir/.sync-meta.json" <<EOF
 {
   "name": "$name",
@@ -164,5 +164,5 @@ EOF
   echo "CREATED $dest/$(basename "$snapshot_dir")"
 done <<< "$SOURCES"
 
-# Cleanup cache dir si vide
+# Clean up cache dir if empty
 rmdir "$VAULT_ROOT/cache/sync-repos" 2>/dev/null || true
