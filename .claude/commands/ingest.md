@@ -150,7 +150,7 @@ Followed by:
 
 **`--headless` mode additions** (cf. `docs/superpowers/specs/2026-07-02-mcp-headless-ingest-design.md` §4.2, §5.1):
 
-- If the file was deferred (step 2, branch 4c): add a `needs-human-triage` section listing the file's path, the candidate expert agents considered, and why none was auto-selected. No pages were written for this file.
+- If the file was deferred (step 2, branch 4c): add a `needs-human-triage` section listing the file's path, the candidate expert agents considered, and why none was auto-selected — then end the section with an explicit fix line: `Fix: retry with ingest_start(path, domain_hint=<slug>) — valid slugs via list_domains().` No pages were written for this file; without the fix line, the deferral reads as a silent no-op to a headless caller (#135).
 - Always end the report with a `## Pages` heading — **exactly two `#` characters, a level-2 heading, never `###` or any other level** — followed by one line per page created or updated by this run, in the form `- <path> (<type>, new|updated)`. Empty (just the `## Pages` heading, no lines) if the file was deferred to `needs-human-triage`. This block is specific to `--headless` — the interactive report format above is unchanged.
 
 ## Notes
