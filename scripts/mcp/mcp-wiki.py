@@ -285,9 +285,13 @@ def drop_to_raw(subfolder: str, filename: str, content: str) -> str:
         "Copy an existing local file into raw/ and signal it for ingestion. "
         "The binary counterpart of drop_to_raw: use it for PDFs, images, "
         "docx/pptx documents, audio and video — anything drop_to_raw's text-only "
-        "content parameter cannot carry. Essential from MCP clients without a "
-        "terminal (Claude Desktop, Claude Cowork): the server runs on the vault "
-        "machine, so it copies the file server-side. "
+        "content parameter cannot carry. The server runs on the vault machine "
+        "and copies the file server-side. DESKTOP clients (files already on "
+        "the vault machine): a direct call on the local path is the nominal "
+        "path. CLOUD sessions (Claude Cowork in the cloud): an attachment "
+        "lives in the session container, NOT on the vault machine — this tool "
+        "cannot see it; first commit/save it into the project working folder "
+        "on the vault machine, then call this tool with that path. "
         "source_path: absolute (or ~-prefixed) path of the file to deposit; it "
         "must sit under an allowed source root ($HOME by default, override with "
         "the LLMWIKI_DROP_SOURCE_ROOTS env var) and carry an extension the "
@@ -314,13 +318,20 @@ def drop_file_to_raw(source_path: str, subfolder: str) -> str:
                 "no resolvable directory.")
     if not any(_within(src, r) for r in roots):
         return (f"Error: source path outside the allowed source roots "
-                f"({os.pathsep.join(str(r) for r in roots)}). Set "
-                f"LLMWIKI_DROP_SOURCE_ROOTS to widen them.")
+                f"({os.pathsep.join(str(r) for r in roots)}). If this file is "
+                f"an attachment in a CLOUD session, it lives in the session "
+                f"container, not on the vault machine — first commit/save it "
+                f"into the project working folder on the vault machine, then "
+                f"retry with that path. For a genuinely local file, set "
+                f"LLMWIKI_DROP_SOURCE_ROOTS to widen the roots.")
 
     if _within(src, wiki_core.RAW_DIR.resolve()):
         return "Error: source is already inside raw/ — nothing to deposit."
     if not src.exists():
-        return f"Error: file not found: {source_path}."
+        return (f"Error: file not found: {source_path}. If this is a "
+                f"cloud-session attachment path, the file lives in the session "
+                f"container — first commit/save it into the project working "
+                f"folder on the vault machine, then retry with that path.")
     if not src.is_file():
         return f"Error: not a regular file: {source_path}."
     if src.suffix.lower() not in INGESTIBLE_EXT:
@@ -352,9 +363,10 @@ def drop_file_to_raw(source_path: str, subfolder: str) -> str:
         "drop_to_raw) into the wiki, via a headless domain-expert agent run. Blocks "
         "until the run completes (can take minutes for cross-domain sources). "
         "path: relative path from vault root, e.g. 'raw/notes/2026-07-02-my-note.md'. "
-        "domain_hint: optional domain slug (see list_domains()) to skip expert-agent "
-        "disambiguation. If omitted and the source is ambiguous or low-confidence, the "
-        "file is left pending for a future interactive /ingest session instead of "
+        "domain_hint: domain slug (see list_domains()) — strongly recommended. "
+        "Without it an ambiguous or cross-domain source is deferred to "
+        "needs-human-triage and produces NO pages (the report says so and "
+        "names the fix); the file stays pending for a future run instead of "
         "being guessed at. "
         "By default this session runs with the caller's normal (unescalated) "
         "permission mode, so headless journaling writes (wiki/log.md, "
@@ -413,8 +425,11 @@ def ingest(path: str, domain_hint: str = "") -> str:
         "your client's tool-call timeout (real runs routinely take minutes). "
         "Same validation and guardrails as ingest() (path must live under raw/, "
         "PreToolUse allowlist hook always active, MCP_INGEST_PERMISSION_MODE "
-        "opt-in). One job at a time: starting while a job is running returns an "
-        "error naming the running job. Poll ingest_status(job_id) for the report."
+        "opt-in). Pass a domain_hint from list_domains() — without it an "
+        "ambiguous source is deferred to needs-human-triage and the run "
+        "produces no pages. One job at a time: starting while a job is running "
+        "returns an error naming the running job. Poll ingest_status(job_id) "
+        "for the report."
     )
 )
 def ingest_start(path: str, domain_hint: str = "") -> str:
