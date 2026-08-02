@@ -489,7 +489,16 @@ class TestDropFileToRaw(McpModuleTestBase):
         stray.write_bytes(b"nope")
         result = self.m.drop_file_to_raw(str(stray), "pdfs")
         self.assertIn("outside the allowed source roots", result)
+        # #135: the refusal must name the cloud -> working-folder bridge.
+        self.assertIn("commit/save it into the project working folder", result)
         self.assertFalse((self.vault / "raw" / "pdfs" / "secret.pdf").exists())
+
+    def test_missing_file_error_names_cloud_bridge(self):
+        result = self.m.drop_file_to_raw(str(self.src_root / "ghost.pdf"), "pdfs")
+        self.assertIn("file not found", result)
+        # #135: a container-side path can plausibly resolve under an allowed
+        # root without existing on the vault machine — same actionable hint.
+        self.assertIn("commit/save it into the project working folder", result)
 
     def test_rejects_symlink_escaping_allowed_roots(self):
         outside = Path(tempfile.mkdtemp()).resolve()

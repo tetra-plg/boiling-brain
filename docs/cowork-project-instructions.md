@@ -91,16 +91,35 @@ its wording.
 ## 4. Deposit ritual
 
 Any new document that appears in a session — one the user attaches, one you produce and they
-keep — is a candidate for the brain. **Offer the deposit proactively**; never deposit
-silently, and never decide alone that something is not worth keeping.
+keep — is a candidate for the brain. **The arrival of the document is itself the trigger**:
+in your **first reply after it appears**, offer the deposit as a visible, actionable item —
+name the tool, the target `raw/` subfolder and the `domain_hint` you would use — never as a
+closing aside several turns later. Never deposit silently, and never decide alone that
+something is not worth keeping.
 
+- **Ordering**: the primary source (the attachment the work is based on) is deposited first;
+  documents derived from it follow once they are stable. A document still being iterated on
+  waits — `raw/` is immutable, and a premature deposit freezes a draft.
 - Deposit through the MCP write tools into the right `raw/` subfolder: `drop_to_raw` for
-  text you compose, `drop_file_to_raw` for a file already on disk (PDF, image, docx, pptx,
-  audio, video) — the latter copies it server-side, so an attachment saved to the working
-  folder can be archived without a terminal. Ingestion happens later, in batch — the deposit
-  only signals it.
-- Deposited files may keep a copy under `<WORKING_FOLDER>/deposited/`. That copy is a
-  convenience, purgeable at any time: `raw/` is the authoritative archive.
+  text you compose, `drop_file_to_raw` for a file already on the **vault machine** (PDF,
+  image, docx, pptx, audio, video) — it copies server-side.
+- **Cloud session? Bridge first.** An attachment in a cloud session lives in the session
+  container, not on the vault machine — `drop_file_to_raw` cannot see it, and its error
+  says so. The mandatory sequence: (1) commit/save the attachment into the project
+  **working folder** on the vault machine, using the client's file-saving capability (as
+  of 2026-08 the tool names are `SendUserFile` then `device_commit_files` — a dated
+  example, not a contract); (2) `drop_file_to_raw(source_path=<working-folder path>,
+subfolder=…)`; (3) ingest — next bullet. From a **desktop** client whose files already
+  live on the vault machine, none of this applies: a direct `drop_file_to_raw` on the
+  local path remains the nominal path.
+- **Ingest right away, async**: after the drop, run `ingest_start(path, domain_hint=…)`
+  and poll `ingest_status(job_id)` for the report (one job at a time). The `domain_hint`
+  is effectively mandatory — without it an ambiguous or cross-domain source is deferred
+  to `needs-human-triage` and produces **no pages**; pick the slug via `list_domains()`.
+- Deposited files may keep a copy under `<WORKING_FOLDER>/deposited/`. For a document
+  produced locally that copy is a convenience, purgeable at any time; for a cloud
+  attachment it is the **bridge** that made the deposit possible. Either way, `raw/` is
+  the authoritative archive.
 - **A new version of a document is a new deposit**, never an overwrite. The hash index keeps
   the version history; overwriting destroys it.
 
