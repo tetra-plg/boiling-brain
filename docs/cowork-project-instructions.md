@@ -15,7 +15,7 @@ The block below closes that gap the way `CLAUDE.md.tpl` frames a Claude Code ses
 
 ## Setup
 
-1. Register the MCP server once (`bash scripts/mcp/setup-mcp.sh`). Claude Desktop and Claude Cowork share the same stdio configuration, so a server registered for one is visible from the other.
+1. Register the MCP server once (`bash scripts/mcp/setup-mcp.sh`). One run registers it for Claude Code **and** merges the same entry into `claude_desktop_config.json` — the single configuration Claude Desktop and Claude Cowork share — then restart the app so the connector appears. If the script prints that the Claude app was not detected, install or open it once, then re-run the script.
 2. Create a **project** in the client app. Give it a **working folder** that is **not** the vault directory — a plain folder for produced documents (see the deposit ritual below).
 3. Paste the template into the project's custom instructions, replacing every placeholder.
 
@@ -130,4 +130,4 @@ into a web search, and do not summarise a private document into a query.
 
 - [docs/mcp-tiered-loading.md](mcp-tiered-loading.md) — the tool reference behind the reading ritual, with the measured token budgets.
 - `CLAUDE.md.tpl` — the equivalent framing for a Claude Code session inside the vault.
-- `scripts/mcp/setup-mcp.sh` — registers the MCP server (user scope, shared by Desktop and Cowork).
+- `scripts/mcp/setup-mcp.sh` — registers the MCP server for Claude Code (user scope) and for Desktop/Cowork (`claude_desktop_config.json`).

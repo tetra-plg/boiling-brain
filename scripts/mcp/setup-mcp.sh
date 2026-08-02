@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # setup-mcp.sh — Configure the boiling-brain-wiki MCP server and the Claude Code hooks.
 #   - Registers the MCP server via `claude mcp add -s user` (user scope, visible cross-project)
+#   - Merges the same server entry into Claude Desktop / Cowork's
+#     claude_desktop_config.json when the app is installed (#133)
 #   - Adds the Stop hook (check-session-activity.sh) to ~/.claude/settings.json
 #   - Adds the invocation instructions to ~/.claude/CLAUDE.md
 #
@@ -103,6 +105,34 @@ else
     -e "WIKI_PATH=$VAULT_PATH" \
     -- "$MCP_PYTHON" "$MCP_SCRIPT"
   echo "✅ MCP server '$SERVER_NAME' registered (user scope, interpreter $MCP_PYTHON)."
+fi
+
+# --- Desktop / Cowork registration: claude_desktop_config.json (#133) ---
+# Claude Desktop and Claude Cowork read claude_desktop_config.json — never
+# ~/.claude.json (Claude Code CLI) — so the registration above is invisible
+# to them. Merge the same server entry (same interpreter, script, WIKI_PATH)
+# into their shared config. Skip cleanly when the app is not installed (its
+# config directory is absent) — we never create the directory ourselves.
+# CLAUDE_DESKTOP_DIR overrides the detected location (tests, portable installs).
+case "$(uname -s)" in
+  Darwin)               DESKTOP_DIR_DEFAULT="$HOME/Library/Application Support/Claude" ;;
+  MINGW*|MSYS*|CYGWIN*) DESKTOP_DIR_DEFAULT="${APPDATA:-$HOME/AppData/Roaming}/Claude" ;;
+  *)                    DESKTOP_DIR_DEFAULT="${XDG_CONFIG_HOME:-$HOME/.config}/Claude" ;;
+esac
+CLAUDE_DESKTOP_DIR="${CLAUDE_DESKTOP_DIR:-$DESKTOP_DIR_DEFAULT}"
+if [ -d "$CLAUDE_DESKTOP_DIR" ]; then
+  if python3 "$SCRIPT_DIR/register-desktop-config.py" \
+    --config-path "$CLAUDE_DESKTOP_DIR/claude_desktop_config.json" \
+    --server-name "$SERVER_NAME" \
+    --command "$MCP_PYTHON" \
+    --script "$MCP_SCRIPT" \
+    --wiki-path "$VAULT_PATH"; then
+    echo "ℹ️  Restart Claude Desktop / Cowork so the connector appears."
+  else
+    echo "⚠️  Desktop/Cowork config not updated (see the message above) — the Claude Code registration is unaffected and the rest of the setup continues." >&2
+  fi
+else
+  echo "ℹ️  Claude Desktop/Cowork not detected ($CLAUDE_DESKTOP_DIR absent) — skipped; the Claude Code registration above is unaffected. Install/open the app once and re-run to register it there too."
 fi
 
 # --- Stop hook in ~/.claude/settings.json ---
