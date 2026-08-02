@@ -121,13 +121,16 @@ case "$(uname -s)" in
 esac
 CLAUDE_DESKTOP_DIR="${CLAUDE_DESKTOP_DIR:-$DESKTOP_DIR_DEFAULT}"
 if [ -d "$CLAUDE_DESKTOP_DIR" ]; then
-  python3 "$SCRIPT_DIR/register-desktop-config.py" \
+  if python3 "$SCRIPT_DIR/register-desktop-config.py" \
     --config-path "$CLAUDE_DESKTOP_DIR/claude_desktop_config.json" \
     --server-name "$SERVER_NAME" \
     --command "$MCP_PYTHON" \
     --script "$MCP_SCRIPT" \
-    --wiki-path "$VAULT_PATH"
-  echo "ℹ️  Restart Claude Desktop / Cowork so the connector appears."
+    --wiki-path "$VAULT_PATH"; then
+    echo "ℹ️  Restart Claude Desktop / Cowork so the connector appears."
+  else
+    echo "⚠️  Desktop/Cowork config not updated (see the message above) — the Claude Code registration is unaffected and the rest of the setup continues." >&2
+  fi
 else
   echo "ℹ️  Claude Desktop/Cowork not detected ($CLAUDE_DESKTOP_DIR absent) — skipped; the Claude Code registration above is unaffected. Install/open the app once and re-run to register it there too."
 fi
