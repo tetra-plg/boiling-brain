@@ -32,7 +32,7 @@ Two regimes coexist, increased complexity for `/ingest` and `/lint`. And above a
 ### Mechanics
 
 1. Manifest [`tracked-repos.config.json`](../../tracked-repos.config.json) at the vault root — list of tracked repos, their `branch`, `paths` (doc files/folders to extract), `exclude_paths` (paths removed from the snapshot after copy), `dest` (target path — typically `raw/tracked-repos/<slug>`, but free).
-2. `scripts/sync-repos.sh`: for each source, `gh api repos/<repo>/commits/<branch>` → HEAD SHA. If `<dest>/<shortsha>/` exists → **skip** (the source is identical to a known snapshot). Otherwise `gh repo clone --depth=1`, copy listed `paths`, write `.sync-meta.json`, purge the clone in `cache/sync-repos/`.
+2. `scripts/sync-repos.sh`: for each source, `gh api repos/<repo>/commits/<branch>` → HEAD SHA. If `<dest>/<shortsha>/` exists → **skip** (the source is identical to a known snapshot; unless the perimeter changed — see [Perimeter revisions](#perimeter-revisions) below). Otherwise `gh repo clone --depth=1`, copy listed `paths`, write `.sync-meta.json`, purge the clone in `cache/sync-repos/`.
 3. `.claude/commands/sync-repos.md`: resolves `$ARGUMENTS` (explicit names or interactive multiSelect if empty), invokes the script, then chains `/ingest <snapshot>` on each `CREATED`.
 
 ### Why this setup is faithful to Karpathy
@@ -91,6 +91,12 @@ Each source declares its own `dest`. If you track several categories of repos (e
 ## Idempotent re-snapshots (content coverage)
 
 A tracked repo's HEAD SHA advances on **every** commit, so `/sync-repos` creates a new `<dest>/<shortsha>/` even when the documented `paths:` did not change. `scan-raw` covers those files **by content** (sha256), scoped to the same `(dest, relative-path)` lineage via each snapshot's `.sync-meta.json`. Consequence: a full `/ingest` sweep after a no-op or partial re-snapshot reports `NEW` only for files whose **content** actually changed — realising the "no noise if nothing moved" principle above. Hashes are cached (`cache/.hash-cache.json`, keyed by mtime+size) so immutable snapshots are hashed once. Disk duplication of identical snapshots remains (a future purge could consolidate them); it no longer costs anything at scan time.
+
+A `0 NEW` default run does **not** mean every snapshot file was declared: a single declared file also covers all its siblings through implicit directory inheritance (`dir-implicit`), by design — without it, every snapshot would flood `/ingest` with `NEW` lines. To see the real coverage deficit, run the opt-in audit `bash scripts/wiki-maint/scan-raw.sh --strict-coverage`: it appends `UNDECLARED <path>  (dir-covered-by: <slug>)` lines (and an `undeclared[]` array under `--format=json`) for snapshot files granted coverage only by directory inheritance — never declared via `source_path`/`covered_paths` and never read as byte-identical content under a covered lineage version. Default output is unchanged; the audit rejects `--force` and `--pending`.
+
+### Perimeter revisions
+
+Widening (or otherwise editing) a source's `paths:`/`exclude_paths:` used to have no effect until the upstream repo received an unrelated commit — the SHA had not moved, so the sync answered `SKIPPED` (#106). Every snapshot records its capture perimeter in `.sync-meta.json` (`paths`, `exclude_paths`); `/sync-repos` now compares the manifest against the **latest revision** of the current SHA (set-wise, order-insensitive) and, on any difference, captures a **perimeter revision** into `<dest>/<shortsha>-rN/` (N ≥ 2; the base snapshot is r1). The previous snapshot is never modified — immutability holds per directory. `/ingest` needs no special handling: files byte-identical to a **declared** file of an earlier revision are content-covered (`SKIP (content)`) — dir-implicit-only files are not in the content index and may resurface as `NEW`. Snapshots predating `.sync-meta.json` perimeters (hand-made) are never auto-revisioned: the sync keeps `SKIPPED` and prints a `note:` on stderr.
 
 ## Files shipped
 

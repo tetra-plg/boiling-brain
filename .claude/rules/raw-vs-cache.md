@@ -16,7 +16,8 @@ Hard rules:
 - **Never modify an existing file in `raw/`.** If a source evolves (e.g. doc updated), create a **new file** with a new SHA, never overwrite the old one.
 - **Never move a file out of `raw/`** once it is referenced by a wiki page: you would break `source_path` and `source_sha256`.
 - **SHA-keyed snapshots** for evolving sources (cf. [template doc — tracked-repos-immutable-snapshots](https://github.com/tetra-plg/boiling-brain/blob/main/docs/tracked-repos-immutable-snapshots.md)): each version → a new dedicated folder, never overwrite.
-- **No expert agent writes to `raw/`.** Agents read `raw/` and write to `wiki/`. The only exception is frame promotion (`cache/frames/` → `raw/frames/`) handled by `/ingest-video`.
+- **No expert agent writes to `raw/`.** Agents read `raw/` and write to `wiki/`. Two exceptions, both performed by a **script**, never by an agent: frame promotion (`cache/frames/` → `raw/frames/`) handled by `/ingest-video`, and the **markdown twin** of an office document (`scripts/convert-doc.sh` writes `<file>.docx.md` next to `<file>.docx`). Neither touches an existing file: the twin is written once and never overwritten, so immutability holds.
+- **A twin is a rendition, not a source.** The binary original remains the archived, hash-indexed source of truth; the `wiki/sources/` page declares it as `source_path` and lists the twin in `covered_paths`.
 
 ## cache/ — transient
 

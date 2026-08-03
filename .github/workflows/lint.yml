@@ -58,6 +58,22 @@ jobs:
       - run: python3 -m pip install --quiet pyyaml
       - run: python3 scripts/wiki-maint/validate-wiki.py
 
+  unittests:
+    name: unittests
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      # fastmcp so the MCP server suite runs for real (27 skips otherwise);
+      # pyyaml mirrors the wiki-integrity job. jq (test_sync_repos.py) ships
+      # on ubuntu-latest runners.
+      - run: python3 -m pip install --quiet pyyaml fastmcp
+      - run: python3 -m unittest discover -s scripts/wiki-maint -p "test_*.py"
+      - run: python3 -m unittest discover -s scripts/mcp -p "test_*.py"
+
   link-check-report:
     name: link-check-report
     if: github.event_name == 'schedule'

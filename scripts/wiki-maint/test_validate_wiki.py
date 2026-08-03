@@ -27,6 +27,36 @@ GOOD_FM = textwrap.dedent("""\
     # Title
     """)
 
+DECISION_FM = textwrap.dedent("""\
+    ---
+    type: decision
+    domains: [poker]
+    created: 2026-05-01
+    status: accepted
+    summary_l0: "Short line"
+    summary_l1: |
+      Two sentences of description here.
+    ---
+
+    # ADR
+    """)
+
+SOURCE_FM = textwrap.dedent("""\
+    ---
+    type: source
+    domains: [poker]
+    created: 2026-05-01
+    source_path: "raw/notes/a.md"
+    source_sha256: "%s"
+    ingested: 2026-05-01
+    summary_l0: "Short line"
+    summary_l1: |
+      Two sentences of description here.
+    ---
+
+    # Source
+    """) % ("a" * 64)
+
 
 def make_vault(tmp: Path, pages: dict):
     """pages: {relpath_under_wiki: file_body}. Creates wiki/ tree."""
@@ -159,28 +189,15 @@ class ValidateWikiTest(unittest.TestCase):
             r = run(tmp)
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
-    def test_decision_status_not_constrained(self):
+    def test_decision_status_outside_enum_fails(self):
         with tempfile.TemporaryDirectory() as d:
             tmp = Path(d)
-            body = GOOD_FM.replace("type: concept", "type: decision") + "status: redirect\n"
-            # note: status line is in body here, but even a decision with an
-            # arbitrary status in frontmatter must be accepted — build it properly:
-            body = textwrap.dedent("""\
-                ---
-                type: decision
-                domains: [poker]
-                created: 2026-05-01
-                status: redirect
-                summary_l0: "Short line"
-                summary_l1: |
-                  Two sentences of description here.
-                ---
-
-                # ADR
-                """)
+            body = DECISION_FM.replace("status: accepted", "status: redirect")
             make_vault(tmp, {"decisions/adr.md": body})
             r = run(tmp)
-            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("pending|accepted", r.stdout)
+            self.assertIn("redirect", r.stdout)
 
     def test_wikilink_inside_fenced_code_is_ignored(self):
         with tempfile.TemporaryDirectory() as d:
@@ -197,6 +214,100 @@ class ValidateWikiTest(unittest.TestCase):
             make_vault(tmp, {"concepts/foo.md": body})
             r = run(tmp)
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_decision_missing_status_fails(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            body = DECISION_FM.replace("status: accepted\n", "")
+            make_vault(tmp, {"decisions/adr.md": body})
+            r = run(tmp)
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("requires frontmatter field 'status'", r.stdout)
+
+    def test_valid_decision_and_source_pass(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            make_vault(tmp, {"decisions/adr.md": DECISION_FM,
+                             "sources/src.md": SOURCE_FM})
+            r = run(tmp)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_source_missing_sha_fails(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            body = SOURCE_FM.replace('source_sha256: "%s"\n' % ("a" * 64), "")
+            make_vault(tmp, {"sources/src.md": body})
+            r = run(tmp)
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("requires frontmatter field 'source_sha256'", r.stdout)
+
+    def test_source_sha_placeholder_fails(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            body = SOURCE_FM.replace("a" * 64, "TODO")
+            make_vault(tmp, {"sources/src.md": body})
+            r = run(tmp)
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("source_sha256", r.stdout)
+            self.assertIn("64-char", r.stdout)
+
+    def test_verdict_without_companions_fails(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            body = DECISION_FM.replace(
+                "status: accepted",
+                "status: accepted\nverdict: validated")
+            make_vault(tmp, {"decisions/adr.md": body})
+            r = run(tmp)
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("verdict_date", r.stdout)
+            self.assertIn("verdict_evidence", r.stdout)
+
+    def test_null_verdict_passes(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            body = DECISION_FM.replace(
+                "status: accepted",
+                "status: accepted\nverdict: null\nverdict_date: null\nverdict_evidence: null")
+            make_vault(tmp, {"decisions/adr.md": body})
+            r = run(tmp)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_verdict_outside_enum_fails(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            body = DECISION_FM.replace(
+                "status: accepted",
+                "status: accepted\nverdict: confirmed\nverdict_date: 2026-06-01\nverdict_evidence: \"it shipped\"")
+            make_vault(tmp, {"decisions/adr.md": body})
+            r = run(tmp)
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("validated|invalidated|partial", r.stdout)
+
+    def test_warn_flag_downgrades_type_defects(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            body = DECISION_FM.replace("status: accepted\n", "")
+            make_vault(tmp, {"decisions/adr.md": body})
+            r = subprocess.run(
+                [sys.executable, str(SCRIPT), "--root", str(tmp),
+                 "--warn-frontmatter-types"],
+                capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("WARN:", r.stderr)
+            self.assertIn("status", r.stderr)
+
+    def test_warn_flag_does_not_mask_other_defects(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            body = DECISION_FM.replace("status: accepted\n", "") + "\nSee [[nope]].\n"
+            make_vault(tmp, {"decisions/adr.md": body})
+            r = subprocess.run(
+                [sys.executable, str(SCRIPT), "--root", str(tmp),
+                 "--warn-frontmatter-types"],
+                capture_output=True, text=True)
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("broken wikilink", r.stdout)
 
     def test_relative_link_inside_fenced_code_is_ignored(self):
         with tempfile.TemporaryDirectory() as d:
@@ -302,6 +413,9 @@ class ValidateWikiTest(unittest.TestCase):
                 type: source
                 domains: [poker]
                 created: 2026-05-01
+                source_path: "raw/notes/a.md"
+                source_sha256: "%s"
+                ingested: 2026-05-01
                 summary_l0: "Short line"
                 summary_l1: |
                   Two sentences of description.
@@ -311,7 +425,7 @@ class ValidateWikiTest(unittest.TestCase):
                 ---
 
                 # Title
-                """)
+                """) % ("a" * 64)
             make_vault(tmp, {"sources/s.md": body})
             r = run(tmp)
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
@@ -348,6 +462,57 @@ class ValidateWikiTest(unittest.TestCase):
             # consumers), but the skip is announced on stderr — not silent.
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             self.assertIn("PyYAML", r.stderr)
+
+    def test_decision_template_shape_passes(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            # A decision page using the shipped template's exact value shapes with
+            # trailing YAML comments — must pass (comments are stripped for enum check).
+            body = textwrap.dedent("""\
+                ---
+                type: decision
+                domains: [poker]
+                created: 2026-05-01
+                status: pending              # pending | accepted
+                verdict: null            # null | validated | invalidated | partial — fill after T+30/60/90d
+                verdict_date: null
+                verdict_evidence: null
+                summary_l0: "Short line"
+                summary_l1: |
+                  Two sentences of description here.
+                ---
+
+                # ADR
+                """)
+            make_vault(tmp, {"decisions/adr.md": body})
+            r = run(tmp)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_quoted_status_passes(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            body = DECISION_FM.replace("status: accepted", 'status: "accepted"')
+            make_vault(tmp, {"decisions/adr.md": body})
+            r = run(tmp)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_sha_with_trailing_comment_passes(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            body = SOURCE_FM.replace(
+                'source_sha256: "%s"' % ("a" * 64),
+                'source_sha256: "%s"  # computed at ingest' % ("a" * 64))
+            make_vault(tmp, {"sources/src.md": body})
+            r = run(tmp)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_shipped_decision_template_passes(self):
+        tpl = Path(__file__).resolve().parents[2] / "wiki" / "decisions" / "decision.md.tpl"
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            make_vault(tmp, {"decisions/adr.md": tpl.read_text(encoding="utf-8")})
+            r = run(tmp)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
 
 if __name__ == "__main__":

@@ -805,7 +805,7 @@ Sync the docs of external GitHub repos (frameworks, tools, projects you follow) 
 
 Manifest-level defaults: `default_paths` and `default_exclude_paths`. These defaults apply to any source that doesn't override them.
 
-**SHA-keyed snapshot principle.** Each sync creates `<dest>/<shortsha>/` (shortsha = first 7 chars of the HEAD SHA of `branch`). If that folder already exists → skip. A merge into `main` upstream = a new SHA = a new snapshot beside the old. Old snapshots are **never** modified or deleted.
+**SHA-keyed snapshot principle.** Each sync creates `<dest>/<shortsha>/` (shortsha = first 7 chars of the HEAD SHA of `branch`). If that folder already exists → skip, unless the manifest's `paths`/`exclude_paths` changed for that SHA, in which case a perimeter revision `<shortsha>-rN` is created beside it (#106). A merge into `main` upstream = a new SHA = a new snapshot beside the old. Old snapshots are **never** modified or deleted.
 
 **Target resolution** (main context):
 
@@ -815,7 +815,7 @@ Manifest-level defaults: `default_paths` and `default_exclude_paths`. These defa
 **Mechanics** (`scripts/sync-repos.sh`):
 
 1. `gh api repos/<repo>/commits/<branch>` → HEAD SHA.
-2. If `<dest>/<shortsha>/` exists → `SKIPPED`.
+2. If `<dest>/<shortsha>/` exists → `SKIPPED`, unless `paths`/`exclude_paths` changed for that SHA, in which case a `<shortsha>-rN` revision is created (#106).
 3. Otherwise: `gh repo clone --depth=1 -b <branch>` into `cache/sync-repos/<name>/`, copy listed `paths` to `<dest>/<shortsha>/`, write `.sync-meta.json` (repo, branch, sha, synced_at, paths), clean up the clone.
 
 **Chaining `/ingest`.** For each `CREATED <path>` line surfaced by the script: chain `/ingest <path>` sequentially.

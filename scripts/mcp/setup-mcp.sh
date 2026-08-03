@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # setup-mcp.sh — Configure the boiling-brain-wiki MCP server and the Claude Code hooks.
 #   - Registers the MCP server via `claude mcp add -s user` (user scope, visible cross-project)
+#   - Merges the same server entry into Claude Desktop / Cowork's
+#     claude_desktop_config.json when the app is installed (#133)
 #   - Adds the Stop hook (check-session-activity.sh) to ~/.claude/settings.json
 #   - Adds the invocation instructions to ~/.claude/CLAUDE.md
 #
@@ -105,6 +107,34 @@ else
   echo "✅ MCP server '$SERVER_NAME' registered (user scope, interpreter $MCP_PYTHON)."
 fi
 
+# --- Desktop / Cowork registration: claude_desktop_config.json (#133) ---
+# Claude Desktop and Claude Cowork read claude_desktop_config.json — never
+# ~/.claude.json (Claude Code CLI) — so the registration above is invisible
+# to them. Merge the same server entry (same interpreter, script, WIKI_PATH)
+# into their shared config. Skip cleanly when the app is not installed (its
+# config directory is absent) — we never create the directory ourselves.
+# CLAUDE_DESKTOP_DIR overrides the detected location (tests, portable installs).
+case "$(uname -s)" in
+  Darwin)               DESKTOP_DIR_DEFAULT="$HOME/Library/Application Support/Claude" ;;
+  MINGW*|MSYS*|CYGWIN*) DESKTOP_DIR_DEFAULT="${APPDATA:-$HOME/AppData/Roaming}/Claude" ;;
+  *)                    DESKTOP_DIR_DEFAULT="${XDG_CONFIG_HOME:-$HOME/.config}/Claude" ;;
+esac
+CLAUDE_DESKTOP_DIR="${CLAUDE_DESKTOP_DIR:-$DESKTOP_DIR_DEFAULT}"
+if [ -d "$CLAUDE_DESKTOP_DIR" ]; then
+  if python3 "$SCRIPT_DIR/register-desktop-config.py" \
+    --config-path "$CLAUDE_DESKTOP_DIR/claude_desktop_config.json" \
+    --server-name "$SERVER_NAME" \
+    --command "$MCP_PYTHON" \
+    --script "$MCP_SCRIPT" \
+    --wiki-path "$VAULT_PATH"; then
+    echo "ℹ️  Restart Claude Desktop / Cowork so the connector appears."
+  else
+    echo "⚠️  Desktop/Cowork config not updated (see the message above) — the Claude Code registration is unaffected and the rest of the setup continues." >&2
+  fi
+else
+  echo "ℹ️  Claude Desktop/Cowork not detected ($CLAUDE_DESKTOP_DIR absent) — skipped; the Claude Code registration above is unaffected. Install/open the app once and re-run to register it there too."
+fi
+
 # --- Stop hook in ~/.claude/settings.json ---
 CLAUDE_SETTINGS="$CLAUDE_SETTINGS" VAULT_PATH="$VAULT_PATH" python3 - <<'PYEOF'
 import json
@@ -166,17 +196,25 @@ The \`boiling-brain-wiki\` MCP exposes the user's personal knowledge wiki (conce
 
 **Cross-domain**: \`search_wiki(query, limit=10)\` — full-text cross-type/cross-domain, when you don't know which domain to look in.
 
-**Writing**: \`drop_to_raw(subfolder, filename, content)\` — drops a file into raw/ for ingest (clean bypass of the protect-raw.sh hook).
+**Writing**: \`drop_to_raw(subfolder, filename, content)\` — drops a text file into raw/ for ingest (clean bypass of the protect-raw.sh hook). \`drop_file_to_raw(source_path, subfolder)\` — same, for a binary already on disk (PDF, image, docx/pptx, audio/video): the server copies it server-side. Source must sit under an allowed root (\$HOME by default, LLMWIKI_DROP_SOURCE_ROOTS to override).
+
+**Async ingestion**: \`ingest_start(path, domain_hint=\"\")\` → job id (non-blocking — survives MCP client tool-call timeouts), then \`ingest_status(job_id)\` to poll (returns the final ingest report), \`ingest_cancel(job_id)\` to abort. One job at a time; the sync \`ingest(path)\` remains for short runs.
 $MARKER"
 
 if [[ -f "$CLAUDE_MD" ]] && grep -qF "$MARKER" "$CLAUDE_MD"; then
-  # Marker present — check if the existing block is the current (list_domains-first)
-  # version by looking for a distinctive string of the new content.
-  if grep -qF "list_domains" "$CLAUDE_MD"; then
+  # Marker present — check if the existing block is the current version by
+  # looking for a distinctive string of the *newest* content. The probe must
+  # move with every content revision: probing for an older marker string
+  # (e.g. "list_domains" since v1.2.1, "drop_file_to_raw" since v1.3.0)
+  # makes every already-updated vault look current and silently freezes the
+  # block. (#112)
+  if grep -qF "ingest_start" "$CLAUDE_MD"; then
     echo "✅ $CLAUDE_MD already configured (marker present, content up to date)."
   else
-    # Outdated block (pre-#47 5-tool version, or 12-tool version without
-    # list_domains-first). Replace in place.
+    # Outdated block (pre-#47 5-tool version, 12-tool version without
+    # list_domains-first, 14-tool version without drop_file_to_raw, or
+    # 15-tool version without the async ingestion tools).
+    # Replace in place.
     CLAUDE_MD="$CLAUDE_MD" python3 - <<PYEOF
 import os, re, pathlib
 p = pathlib.Path(os.environ["CLAUDE_MD"])

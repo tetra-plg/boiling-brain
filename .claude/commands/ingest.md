@@ -45,6 +45,14 @@ Arbitration:
 
 If video/audio/URL not transcribed → chain `scripts/video/transcribe.sh` first.
 
+**Office documents (`.docx`, `.pptx`)**: no LLM reads them natively. For every in-scope `NEW`/`MODIFIED` file with one of these extensions, chain first:
+
+```bash
+bash scripts/convert-doc.sh raw/<subfolder>/<file>.docx
+```
+
+It writes a **markdown twin** next to the original (`<file>.docx.md`), never overwrites an existing one (`raw/` is immutable — a second run is a no-op that still prints the path), and prints the twin's vault-relative path on stdout. **Ingest the twin, not the binary**: the original stays in `raw/`, archived and hash-indexed, and step 3 makes the source page declare both. Exit codes: `0` twin available, `1` bad argument, `2` pandoc missing or too old (→ report it in the final report and leave the file in `cache/.pending-ingest`; never substitute a manual extraction), `3` conversion failed.
+
 ### 2. Expert-agent proposal (user validation) — or automatic resolution in `--headless` mode
 
 **Ingest is delegated to a domain-expert agent.** The main context doesn't write pages — it dispatches.
@@ -73,6 +81,7 @@ For each validated agent, launch an `Agent` call with:
   - A fresh domain snapshot: run `bash scripts/mcp/wiki-cli.sh scan-domain <d>` and paste its output verbatim under a `## Domain snapshot` heading. Regenerate it for every spawn (never once per batch) so intra-batch pages created by earlier sources are visible. If the command fails (or is denied in `--headless` mode), omit the snapshot — the agent produces its own via its Domain orientation reflex.
   - Path of `wiki/domains/<d>.md`.
   - The full content of `.claude/agent-output-contract.md`.
+  - **If the source is a converted twin** (step 1, `.docx`/`.pptx`): instruct the agent to declare, on the `wiki/sources/` page, `source_path:` = the **original binary** with its `source_sha256:` (`shasum -a 256 raw/<subfolder>/<file>.docx`), and `covered_paths:` listing the twin as well. The archived original stays the traceable source of truth; the twin is only the readable rendition. No `source_sha256_composite` is needed here.
   - Instruction: execute the ingest end-to-end, then return the three blocks (`## Ingest summary`, `## Radar items`, `## Evolution suggestions`) per the contract. The agent **does not write** to `wiki/log.md`, `wiki/radar.md`, or `.claude/agents/*.suggestions.md` — the main context handles propagation.
 
 The main context no longer builds a flat page-title list — the snapshot (counts + centrality + summaries) is both cheaper and richer, and the agent drills down on demand with the same CLI.
@@ -141,7 +150,7 @@ Followed by:
 
 **`--headless` mode additions** (cf. `docs/superpowers/specs/2026-07-02-mcp-headless-ingest-design.md` §4.2, §5.1):
 
-- If the file was deferred (step 2, branch 4c): add a `needs-human-triage` section listing the file's path, the candidate expert agents considered, and why none was auto-selected. No pages were written for this file.
+- If the file was deferred (step 2, branch 4c): add a `needs-human-triage` section listing the file's path, the candidate expert agents considered, and why none was auto-selected — then end the section with an explicit fix line: `Fix: retry with ingest_start(path, domain_hint=<slug>) — valid slugs via list_domains().` No pages were written for this file; without the fix line, the deferral reads as a silent no-op to a headless caller (#135).
 - Always end the report with a `## Pages` heading — **exactly two `#` characters, a level-2 heading, never `###` or any other level** — followed by one line per page created or updated by this run, in the form `- <path> (<type>, new|updated)`. Empty (just the `## Pages` heading, no lines) if the file was deferred to `needs-human-triage`. This block is specific to `--headless` — the interactive report format above is unchanged.
 
 ## Notes

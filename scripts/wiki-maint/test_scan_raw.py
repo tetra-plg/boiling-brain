@@ -246,8 +246,8 @@ class FrontmatterTest(unittest.TestCase):
                 "source_sha256: abc123\n"
                 "---\n")
         meta = scan_raw.parse_source_page(text)
-        self.assertEqual(meta["indexed_paths"],
-                         ["raw/a.md", "raw/b.md", "raw/c.md", "raw/legacy.md"])
+        self.assertEqual(meta["indexed_paths"], ["raw/a.md", "raw/b.md", "raw/c.md"])
+        self.assertEqual(meta["legacy_paths"], ["raw/legacy.md"])
         self.assertEqual(meta["first_source_path"], "raw/a.md")
         self.assertEqual(meta["source_sha256"], "abc123")
         self.assertEqual(meta["covered_paths"], ["raw/c.md"])
@@ -255,6 +255,7 @@ class FrontmatterTest(unittest.TestCase):
     def test_no_frontmatter_yields_nothing(self):
         meta = scan_raw.parse_source_page("no fm here\nsource_path: raw/x.md\n")
         self.assertEqual(meta["indexed_paths"], [])
+        self.assertEqual(meta["legacy_paths"], [])
 
 
 class BuildIndexTest(unittest.TestCase):
@@ -360,6 +361,65 @@ class ClassifyTest(unittest.TestCase):
         self.assertEqual(scan_raw.format_text_line(V("MODIFIED", "s", "forced"), "raw/a.md"),
                          "MODIFIED raw/a.md  (covered-by: s, forced)")
 
+    def test_legacy_only_coverage_and_claims_preserved(self):
+        # issue #103 caveat: legacy `sources:` entries stay in path_to_slug
+        # (coverage) and claims (double-coverage lint); only orphan
+        # detection ignores them.
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            raw = tmp / "raw" / "notes" / "old.md"
+            raw.parent.mkdir(parents=True, exist_ok=True)
+            raw.write_text("x\n", encoding="utf-8")
+            idx = self._idx(tmp, {
+                "legacy-page": "---\nsources:\n  - raw/notes/old.md\n---\n",
+                "modern-page": "---\ncovered_paths:\n  - raw/notes/old.md\n---\n",
+            })
+            key = scan_raw.normalize_path("raw/notes/old.md")
+            self.assertEqual(sorted(idx.claims[key]), ["legacy-page", "modern-page"])
+            v = scan_raw.classify("raw/notes/old.md", str(raw), idx, force=False)
+            self.assertEqual(v.status, "SKIP")
+            self.assertEqual(v.covered_by, "modern-page")
+
+    def test_legacy_entries_feed_dir_and_meta_indexes(self):
+        # issue #103 caveat: legacy `sources:` entries still feed dir_to_slug
+        # and meta_to_slug indexes (implicit dir coverage, transcript meta maps);
+        # only orphan detection ignores them.
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            # Create the legacy-only page with transcript and deep dir entries
+            d = tmp / "wiki" / "sources"
+            d.mkdir(parents=True)
+            (d / "legacy-vid.md").write_text(
+                "---\nsources:\n"
+                '  - raw/transcripts/vid.md\n'
+                '  - raw/deep/a/b/c/anchor.md\n'
+                "---\n",
+                encoding="utf-8",
+            )
+            # Create actual files on disk so classify() can work
+            vid_file = tmp / "raw" / "transcripts" / "vid.md"
+            vid_file.parent.mkdir(parents=True, exist_ok=True)
+            vid_file.write_text("x\n", encoding="utf-8")
+            sibling_file = tmp / "raw" / "deep" / "a" / "b" / "c" / "sibling.md"
+            sibling_file.parent.mkdir(parents=True, exist_ok=True)
+            sibling_file.write_text("x\n", encoding="utf-8")
+
+            idx = scan_raw.build_index(str(d))
+
+            # Check meta_to_slug index: legacy transcript entries feed it
+            meta_key = scan_raw.normalize_path("raw/videos-meta/vid.meta.md")
+            self.assertEqual(idx.meta_to_slug[meta_key], "legacy-vid")
+
+            # Check dir_to_slug index: legacy deep-dir entries feed it
+            # (depth >= 4 slashes: raw/deep/a/b/c/ has 5 slashes)
+            dir_key = scan_raw.normalize_path("raw/deep/a/b/c/")
+            self.assertEqual(idx.dir_to_slug[dir_key], "legacy-vid")
+
+            # Sibling file under the dir should classify as SKIP via dir coverage
+            v = scan_raw.classify("raw/deep/a/b/c/sibling.md", str(sibling_file), idx, force=False)
+            self.assertEqual(v.status, "SKIP")
+            self.assertEqual(v.reason, "dir-implicit")
+
 
 class StrictFrontmatterDivergenceTest(unittest.TestCase):
     """The one intentional default-verdict divergence (spec §5.2): a source_path
@@ -410,6 +470,47 @@ class OrphansTest(unittest.TestCase):
                                capture_output=True, text=True,
                                env=dict(os.environ, VAULT_ROOT=str(tmp)))
             self.assertIn("ORPHAN   raw/gone.md  (covered-by: gone)", r.stdout)
+
+    def test_legacy_sources_wikilinks_are_not_orphans(self):
+        # issue #103: [[wikilink]] entries in legacy `sources:` are wiki refs,
+        # never disk paths — they must not be reported as missing raw files.
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            d = tmp / "wiki" / "sources"
+            d.mkdir(parents=True)
+            (d / "page.md").write_text(
+                "---\n"
+                "source_path: raw/notes/real.md\n"
+                "sources:\n"
+                '  - "[[sources/some-source]]"\n'
+                "  - https://example.com/article\n"
+                "---\n",
+                encoding="utf-8",
+            )
+            (tmp / "raw" / "notes").mkdir(parents=True)
+            (tmp / "raw" / "notes" / "real.md").write_text("x\n", encoding="utf-8")
+            idx = scan_raw.build_index(str(d))
+            self.assertEqual(scan_raw.find_orphans(str(tmp), idx), [])
+
+    def test_deleted_pass1_path_still_reported_even_if_also_legacy(self):
+        # A genuinely deleted raw file declared via covered_paths must stay
+        # reported, even when the same path also appears in legacy `sources:`.
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            d = tmp / "wiki" / "sources"
+            d.mkdir(parents=True)
+            (d / "dual.md").write_text(
+                "---\n"
+                "covered_paths:\n"
+                "  - raw/gone/deleted.md\n"
+                "sources:\n"
+                "  - raw/gone/deleted.md\n"
+                "---\n",
+                encoding="utf-8",
+            )
+            idx = scan_raw.build_index(str(d))
+            self.assertEqual(scan_raw.find_orphans(str(tmp), idx),
+                             [("raw/gone/deleted.md", "dual")])
 
 
 class JsonFormatTest(unittest.TestCase):
@@ -783,6 +884,217 @@ class ContentCoverageTest(unittest.TestCase):
             vr = self._vault_two_snapshots(d, {"README.md": "readme v1\n", "empty.txt": ""})
             st = self._scan(vr)
             self.assertEqual(st["raw/tracked-repos/next/def5678/empty.txt"], "NEW")
+
+
+class StrictCoverageTest(unittest.TestCase):
+    """--strict-coverage audit (issue #105): list snapshot files covered
+    only by implicit-dir inheritance, never declared, never content-read."""
+
+    def _vault(self, tmp):
+        """Snapshot raw/repos/proj/abc1234/ with one declared anchor
+        (docs/a.md) and one undeclared sibling (docs/b.md)."""
+        snap = tmp / "raw" / "repos" / "proj" / "abc1234"
+        (snap / "docs").mkdir(parents=True)
+        (snap / ".sync-meta.json").write_text("{}", encoding="utf-8")
+        (snap / "docs" / "a.md").write_text("anchor\n", encoding="utf-8")
+        (snap / "docs" / "b.md").write_text("sibling\n", encoding="utf-8")
+        d = tmp / "wiki" / "sources"
+        d.mkdir(parents=True)
+        (d / "proj-doc.md").write_text(
+            "---\nsource_path: raw/repos/proj/abc1234/docs/a.md\n---\n",
+            encoding="utf-8",
+        )
+        return d
+
+    def _audit(self, tmp, sources_dir):
+        idx = scan_raw.build_index(str(sources_dir))
+        cache = scan_raw.HashCache(str(tmp))
+        snapshot_dirs = scan_raw.find_snapshot_dirs(str(tmp))
+        content_index = scan_raw.build_content_index(idx, str(tmp), cache, snapshot_dirs)
+        files, results, _ = scan_raw.run(str(tmp), _ns(), idx, cache)
+        scan_raw.apply_content_coverage(results, str(tmp), cache, snapshot_dirs, content_index)
+        return scan_raw.find_undeclared(results, str(tmp), cache, snapshot_dirs, content_index)
+
+    def test_dir_implicit_sibling_is_undeclared(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            sd = self._vault(tmp)
+            self.assertEqual(self._audit(tmp, sd),
+                             [("raw/repos/proj/abc1234/docs/b.md", "proj-doc")])
+
+    def test_fully_declared_snapshot_reports_nothing(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            sd = self._vault(tmp)
+            (sd / "proj-doc.md").write_text(
+                "---\nsource_path:\n"
+                "  - raw/repos/proj/abc1234/docs/a.md\n"
+                "  - raw/repos/proj/abc1234/docs/b.md\n---\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(self._audit(tmp, sd), [])
+
+    def test_dir_implicit_outside_snapshot_not_listed(self):
+        # No .sync-meta.json anywhere: out of the audit's scope.
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            deep = tmp / "raw" / "notes" / "a" / "b" / "c"
+            deep.mkdir(parents=True)
+            (deep / "anchor.md").write_text("x\n", encoding="utf-8")
+            (deep / "sibling.md").write_text("y\n", encoding="utf-8")
+            d = tmp / "wiki" / "sources"
+            d.mkdir(parents=True)
+            (d / "s.md").write_text(
+                "---\nsource_path: raw/notes/a/b/c/anchor.md\n---\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(self._audit(tmp, d), [])
+
+    def test_content_covered_sibling_not_listed(self):
+        # The sibling's bytes were read under a previously covered snapshot
+        # of the same dest: not a coverage deficit (deviation from the
+        # issue's letter, aligned with its spirit + #88).
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            sd = self._vault(tmp)
+            old = tmp / "raw" / "repos" / "proj" / "0000000"
+            (old / "docs").mkdir(parents=True)
+            (old / ".sync-meta.json").write_text("{}", encoding="utf-8")
+            (old / "docs" / "b.md").write_text("sibling\n", encoding="utf-8")
+            (sd / "proj-old.md").write_text(
+                "---\nsource_path: raw/repos/proj/0000000/docs/b.md\n---\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(self._audit(tmp, sd), [])
+
+    def test_flag_combinations_rejected(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            self._vault(tmp)
+            env = {**os.environ, "VAULT_ROOT": str(tmp)}
+            for combo in (["--strict-coverage", "--force"],
+                          ["--strict-coverage", "--pending"]):
+                r = subprocess.run(
+                    ["python3", str(HERE / "scan-raw.py"), *combo],
+                    capture_output=True, text=True, env=env)
+                self.assertEqual(r.returncode, 2, combo)
+                self.assertIn("--strict-coverage", r.stderr)
+
+    def test_text_and_json_output_and_default_byte_identical(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            self._vault(tmp)
+            env = {**os.environ, "VAULT_ROOT": str(tmp)}
+            base = subprocess.run(["python3", str(HERE / "scan-raw.py")],
+                                  capture_output=True, text=True, env=env)
+            strict = subprocess.run(
+                ["python3", str(HERE / "scan-raw.py"), "--strict-coverage"],
+                capture_output=True, text=True, env=env)
+            # default output: no UNDECLARED anywhere
+            self.assertNotIn("UNDECLARED", base.stdout + base.stderr)
+            # strict: same verdict lines, plus the appended audit line
+            self.assertEqual(
+                strict.stdout,
+                base.stdout
+                + "UNDECLARED raw/repos/proj/abc1234/docs/b.md  (dir-covered-by: proj-doc)\n")  # no padding on UNDECLARED
+            self.assertIn("1 undeclared", strict.stderr)
+            # JSON: key present only under the flag
+            base_j = json.loads(subprocess.run(
+                ["python3", str(HERE / "scan-raw.py"), "--format=json"],
+                capture_output=True, text=True, env=env).stdout)
+            strict_j = json.loads(subprocess.run(
+                ["python3", str(HERE / "scan-raw.py"), "--strict-coverage",
+                 "--format=json"],
+                capture_output=True, text=True, env=env).stdout)
+            self.assertNotIn("undeclared", base_j)
+            self.assertNotIn("undeclared", base_j["counts"])
+            self.assertEqual(strict_j["undeclared"],
+                             [{"path": "raw/repos/proj/abc1234/docs/b.md",
+                               "dir_covered_by": "proj-doc"}])
+            self.assertEqual(strict_j["counts"]["undeclared"], 1)
+
+    def test_orphans_and_undeclared_combined_and_path_scoped(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            sd = self._vault(tmp)
+            # Create an orphan: a declared file that no longer exists on disk
+            (sd / "orphan-doc.md").write_text(
+                "---\nsource_path: raw/repos/proj/abc1234/nonexistent.md\n---\n",
+                encoding="utf-8",
+            )
+            env = {**os.environ, "VAULT_ROOT": str(tmp)}
+            # Test combined --orphans --strict-coverage
+            r = subprocess.run(
+                ["python3", str(HERE / "scan-raw.py"), "--orphans", "--strict-coverage"],
+                capture_output=True, text=True, env=env)
+            self.assertEqual(r.returncode, 0)
+            # Verify output order: ORPHAN line followed by UNDECLARED line
+            lines = r.stdout.strip().split("\n")
+            orphan_lines = [l for l in lines if l.startswith("ORPHAN")]
+            undeclared_lines = [l for l in lines if l.startswith("UNDECLARED")]
+            self.assertEqual(len(orphan_lines), 1)
+            self.assertEqual(len(undeclared_lines), 1)
+            orphan_idx = lines.index(orphan_lines[0])
+            undeclared_idx = lines.index(undeclared_lines[0])
+            self.assertLess(orphan_idx, undeclared_idx, "ORPHAN should appear before UNDECLARED")
+            # Verify summary mentions both
+            self.assertIn("1 orphans", r.stderr)
+            self.assertIn("1 undeclared", r.stderr)
+            # Test path-scoped audit: --strict-coverage raw/repos/proj/abc1234/docs
+            r_scoped = subprocess.run(
+                ["python3", str(HERE / "scan-raw.py"), "--strict-coverage",
+                 "raw/repos/proj/abc1234/docs"],
+                capture_output=True, text=True, env=env)
+            self.assertEqual(r_scoped.returncode, 0)
+            # The UNDECLARED line should still appear (scoping preserves content_index)
+            self.assertIn("UNDECLARED raw/repos/proj/abc1234/docs/b.md", r_scoped.stdout)
+
+    def test_empty_undeclared_sibling_is_flagged(self):
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = Path(dd)
+            snap = tmp / "raw" / "repos" / "proj" / "abc1234"
+            (snap / "docs").mkdir(parents=True)
+            (snap / ".sync-meta.json").write_text("{}", encoding="utf-8")
+            # One declared non-empty file and one empty undeclared sibling
+            (snap / "docs" / "a.md").write_text("anchor\n", encoding="utf-8")
+            (snap / "docs" / "empty.txt").write_text("", encoding="utf-8")
+            # Create another snapshot with an identical empty file (declared)
+            old = tmp / "raw" / "repos" / "proj" / "0000000"
+            (old / "docs").mkdir(parents=True)
+            (old / ".sync-meta.json").write_text("{}", encoding="utf-8")
+            (old / "docs" / "empty.txt").write_text("", encoding="utf-8")
+            d = tmp / "wiki" / "sources"
+            d.mkdir(parents=True)
+            (d / "proj-doc.md").write_text(
+                "---\nsource_path: raw/repos/proj/abc1234/docs/a.md\n---\n",
+                encoding="utf-8",
+            )
+            (d / "proj-old.md").write_text(
+                "---\nsource_path: raw/repos/proj/0000000/docs/empty.txt\n---\n",
+                encoding="utf-8",
+            )
+            # Run audit
+            idx = scan_raw.build_index(str(d))
+            cache = scan_raw.HashCache(str(tmp))
+            snapshot_dirs = scan_raw.find_snapshot_dirs(str(tmp))
+            content_index = scan_raw.build_content_index(idx, str(tmp), cache, snapshot_dirs)
+            files, results, _ = scan_raw.run(str(tmp), _ns(), idx, cache)
+            scan_raw.apply_content_coverage(results, str(tmp), cache, snapshot_dirs, content_index)
+            undeclared = scan_raw.find_undeclared(results, str(tmp), cache, snapshot_dirs, content_index)
+            # The empty sibling should be flagged (content never covers empty files)
+            self.assertEqual(undeclared,
+                             [("raw/repos/proj/abc1234/docs/empty.txt", "proj-doc")])
+
+
+def _ns():
+    """Namespace for tests."""
+    class NS:
+        force = False
+        orphans = False
+        pending = False
+        paths = []
+        format = "text"
+    return NS()
 
 
 if __name__ == "__main__":

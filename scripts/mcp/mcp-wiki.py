@@ -13,7 +13,6 @@ Usage:
 """
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -21,14 +20,89 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import wiki_core  # noqa: E402
+import ingest_jobs  # noqa: E402
 
 from fastmcp import FastMCP  # noqa: E402
 
 mcp = FastMCP("boiling-brain-wiki")
 
-INGEST_TIMEOUT_S = 600
+INGEST_TIMEOUT_S = ingest_jobs.TIMEOUT_S  # single source of truth (#124)
 INGEST_PERMISSION_MODE = os.environ.get("MCP_INGEST_PERMISSION_MODE", "")
-_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+
+# Formats the ingestion engine can consume: markdown/text and PDF natively,
+# png/jpg images natively, audio/video through /ingest-video, docx/pptx through
+# the markdown-twin conversion of /ingest (scripts/convert-doc.sh). The deposit
+# channel must offer the same surface — any asymmetry between the two is a
+# design bug (#112).
+INGESTIBLE_EXT = (
+    ".md", ".txt", ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp",
+    ".docx", ".pptx", ".m4a", ".mp4", ".wav",
+)
+
+
+def _allowed_source_roots():
+    """Directories drop_file_to_raw is allowed to read from.
+
+    Defaults to the vault owner's home — wide enough for Downloads and for a
+    client app's working folder, narrow enough that the tool never becomes an
+    arbitrary file reader for any MCP client. Override with
+    LLMWIKI_DROP_SOURCE_ROOTS (os.pathsep-separated list of directories).
+    Read at call time, so retargeting it doesn't require a server restart."""
+    raw = os.environ.get("LLMWIKI_DROP_SOURCE_ROOTS", "")
+    parts = [p for p in raw.split(os.pathsep) if p.strip()] or [str(Path.home())]
+    roots = []
+    for p in parts:
+        try:
+            roots.append(Path(p).expanduser().resolve())
+        except Exception:
+            continue
+    return roots
+
+
+def _vault_rel(p: Path) -> str:
+    """Vault-relative form of an absolute path, tolerant of an unresolved
+    WIKI_PATH (symlinked temp roots on macOS: /var -> /private/var)."""
+    try:
+        return str(p.relative_to(wiki_core.WIKI_PATH.resolve()))
+    except ValueError:
+        return str(p)
+
+
+def _within(child: Path, parent: Path) -> bool:
+    """True when child is parent itself or sits under it.
+
+    Compared component-wise, never as a string prefix: `str.startswith` lets a
+    sibling directory whose name extends the parent's slip through — subfolder
+    "../rawbis" resolves to <vault>/rawbis, whose string does start with
+    <vault>/raw, and the write lands outside raw/."""
+    return child == parent or parent in child.parents
+
+
+def _resolve_raw_dest(subfolder: str, filename: str):
+    """Resolve raw/<subfolder>/<filename>, guarding both segments against path
+    traversal. Returns ((dest_dir, dest_file), None) or (None, error message)."""
+    try:
+        raw_root = wiki_core.RAW_DIR.resolve()
+        dest_dir = (wiki_core.RAW_DIR / subfolder).resolve()
+        if not _within(dest_dir, raw_root):
+            return None, "Error: invalid subfolder (path traversal detected)."
+        dest_file = (dest_dir / filename).resolve()
+        if not _within(dest_file, dest_dir):
+            return None, "Error: invalid filename (path traversal detected)."
+    except Exception as e:
+        return None, f"Path validation error: {e}"
+    return (dest_dir, dest_file), None
+
+
+def _signal_pending(dest_file: Path) -> str:
+    """Append the deposited path to cache/.pending-ingest (SessionStart signal)
+    and return its vault-relative form."""
+    wiki_core.CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    pending = wiki_core.CACHE_DIR / ".pending-ingest"
+    rel_path = _vault_rel(dest_file)
+    with open(pending, "a", encoding="utf-8") as f:
+        f.write(rel_path + "\n")
+    return rel_path
 
 
 def _ingest_settings_json():
@@ -191,31 +265,96 @@ def list_domains() -> str:
     )
 )
 def drop_to_raw(subfolder: str, filename: str, content: str) -> str:
-    # Path traversal protection
-    try:
-        dest_dir = (wiki_core.RAW_DIR / subfolder).resolve()
-        if not str(dest_dir).startswith(str(wiki_core.RAW_DIR.resolve())):
-            return "Error: invalid subfolder (path traversal detected)."
-        dest_file = (dest_dir / filename).resolve()
-        if not str(dest_file).startswith(str(dest_dir)):
-            return "Error: invalid filename (path traversal detected)."
-    except Exception as e:
-        return f"Path validation error: {e}"
+    resolved, err = _resolve_raw_dest(subfolder, filename)
+    if err:
+        return err
+    dest_dir, dest_file = resolved
 
     if dest_file.exists():
-        return f"File already exists: {dest_file.relative_to(wiki_core.WIKI_PATH)}. Use another name."
+        return f"File already exists: {_vault_rel(dest_file)}. Use another name."
 
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_file.write_text(content, encoding="utf-8")
 
-    # Signal for SessionStart hook
-    wiki_core.CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    pending = wiki_core.CACHE_DIR / ".pending-ingest"
-    rel_path = str(dest_file.relative_to(wiki_core.WIKI_PATH))
-    with open(pending, "a", encoding="utf-8") as f:
-        f.write(rel_path + "\n")
-
+    rel_path = _signal_pending(dest_file)
     return f"File created: {rel_path}\n.pending-ingest signal updated."
+
+
+@mcp.tool(
+    description=(
+        "Copy an existing local file into raw/ and signal it for ingestion. "
+        "The binary counterpart of drop_to_raw: use it for PDFs, images, "
+        "docx/pptx documents, audio and video — anything drop_to_raw's text-only "
+        "content parameter cannot carry. The server runs on the vault machine "
+        "and copies the file server-side. DESKTOP clients (files already on "
+        "the vault machine): a direct call on the local path is the nominal "
+        "path. CLOUD sessions (Claude Cowork in the cloud): an attachment "
+        "lives in the session container, NOT on the vault machine — this tool "
+        "cannot see it; first commit/save it into the project working folder "
+        "on the vault machine, then call this tool with that path. "
+        "source_path: absolute (or ~-prefixed) path of the file to deposit; it "
+        "must sit under an allowed source root ($HOME by default, override with "
+        "the LLMWIKI_DROP_SOURCE_ROOTS env var) and carry an extension the "
+        "ingestion engine consumes. "
+        "subfolder: subpath under raw/ (e.g. 'pdfs', 'documents', 'clippings'). "
+        "The original is left in place (a copy, not a move) and the target "
+        "filename is taken from the source — an existing file is never "
+        "overwritten, raw/ being immutable. Creates cache/.pending-ingest with "
+        "the new file path; run /ingest (or the ingest() tool) to actually "
+        "ingest it. See tetra-plg/boiling-brain#112."
+    )
+)
+def drop_file_to_raw(source_path: str, subfolder: str) -> str:
+    try:
+        src = Path(source_path).expanduser().resolve()
+    except Exception as e:
+        return f"Path validation error: {e}"
+
+    # Source allowlist, checked on the symlink-resolved path so a link planted
+    # inside an allowed root can't smuggle a file out of it.
+    roots = _allowed_source_roots()
+    if not roots:
+        return ("Error: no usable source root — LLMWIKI_DROP_SOURCE_ROOTS lists "
+                "no resolvable directory.")
+    if not any(_within(src, r) for r in roots):
+        return (f"Error: source path outside the allowed source roots "
+                f"({os.pathsep.join(str(r) for r in roots)}). If this file is "
+                f"an attachment in a CLOUD session, it lives in the session "
+                f"container, not on the vault machine — first commit/save it "
+                f"into the project working folder on the vault machine, then "
+                f"retry with that path. For a genuinely local file, set "
+                f"LLMWIKI_DROP_SOURCE_ROOTS to widen the roots.")
+
+    if _within(src, wiki_core.RAW_DIR.resolve()):
+        return "Error: source is already inside raw/ — nothing to deposit."
+    if not src.exists():
+        return (f"Error: file not found: {source_path}. If this is a "
+                f"cloud-session attachment path, the file lives in the session "
+                f"container — first commit/save it into the project working "
+                f"folder on the vault machine, then retry with that path.")
+    if not src.is_file():
+        return f"Error: not a regular file: {source_path}."
+    if src.suffix.lower() not in INGESTIBLE_EXT:
+        return (f"Error: unsupported file type \"{src.suffix}\" — the ingestion "
+                f"engine consumes {', '.join(INGESTIBLE_EXT)}.")
+
+    resolved, err = _resolve_raw_dest(subfolder, src.name)
+    if err:
+        return err
+    dest_dir, dest_file = resolved
+
+    if dest_file.exists():
+        return (f"File already exists: {_vault_rel(dest_file)}. raw/ is immutable — "
+                f"deposit the new version under another name.")
+
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        shutil.copy2(src, dest_file)
+    except OSError as e:
+        return f"Error: could not copy {source_path} ({e})."
+
+    rel_path = _signal_pending(dest_file)
+    return f"File copied: {rel_path}\n.pending-ingest signal updated."
 
 
 @mcp.tool(
@@ -224,9 +363,10 @@ def drop_to_raw(subfolder: str, filename: str, content: str) -> str:
         "drop_to_raw) into the wiki, via a headless domain-expert agent run. Blocks "
         "until the run completes (can take minutes for cross-domain sources). "
         "path: relative path from vault root, e.g. 'raw/notes/2026-07-02-my-note.md'. "
-        "domain_hint: optional domain slug (see list_domains()) to skip expert-agent "
-        "disambiguation. If omitted and the source is ambiguous or low-confidence, the "
-        "file is left pending for a future interactive /ingest session instead of "
+        "domain_hint: domain slug (see list_domains()) — strongly recommended. "
+        "Without it an ambiguous or cross-domain source is deferred to "
+        "needs-human-triage and produces NO pages (the report says so and "
+        "names the fix); the file stays pending for a future run instead of "
         "being guessed at. "
         "By default this session runs with the caller's normal (unescalated) "
         "permission mode, so headless journaling writes (wiki/log.md, "
@@ -242,27 +382,9 @@ def drop_to_raw(subfolder: str, filename: str, content: str) -> str:
     )
 )
 def ingest(path: str, domain_hint: str = "") -> str:
-    if domain_hint and not _SLUG_RE.match(domain_hint):
-        return (f"Error: invalid domain_hint: \"{domain_hint}\" — expected a slug "
-                 f"(lowercase, digits, hyphens). See list_domains() for valid values.")
-
-    if any(c.isspace() for c in path) or any(part.startswith("-") for part in path.split("/")):
-        return (f"Error: invalid path: \"{path}\" — must not contain a space or a "
-                 f"segment starting with \"-\" (flag-injection risk in the built command).")
-
-    try:
-        target = (wiki_core.WIKI_PATH / path).resolve()
-        if not str(target).startswith(str(wiki_core.RAW_DIR.resolve())):
-            return "Error: invalid path (path traversal detected)."
-    except Exception as e:
-        return f"Path validation error: {e}"
-
-    if not target.exists():
-        return f"Error: file not found: {path}."
-
-    prompt = f"/ingest {path} --headless"
-    if domain_hint:
-        prompt += f" --domain-hint={domain_hint}"
+    prompt, err = ingest_jobs.validate_request(path, domain_hint)
+    if err:
+        return err
 
     # Resolve the CLI with shutil.which before building the command. On Windows
     # the CLI ships as a claude.CMD shim; subprocess.run(shell=False) uses
@@ -294,6 +416,59 @@ def ingest(path: str, domain_hint: str = "") -> str:
         return f"Error: ingestion of {path} failed ({detail})"
 
     return result.stdout
+
+
+@mcp.tool(
+    description=(
+        "Start a HEADLESS ingestion as a background job and return immediately "
+        "with a job id — use this instead of ingest() when the run may exceed "
+        "your client's tool-call timeout (real runs routinely take minutes). "
+        "Same validation and guardrails as ingest() (path must live under raw/, "
+        "PreToolUse allowlist hook always active, MCP_INGEST_PERMISSION_MODE "
+        "opt-in). Pass a domain_hint from list_domains() — without it an "
+        "ambiguous source is deferred to needs-human-triage and the run "
+        "produces no pages. One job at a time: starting while a job is running "
+        "returns an error naming the running job. Poll ingest_status(job_id) "
+        "for the report."
+    )
+)
+def ingest_start(path: str, domain_hint: str = "") -> str:
+    prompt, err = ingest_jobs.validate_request(path, domain_hint)
+    if err:
+        return err
+    claude_exe = shutil.which("claude")
+    if claude_exe is None:
+        return "Error: `claude` CLI not found in the MCP server environment."
+    cmd = [claude_exe, "-p", prompt, "--settings", _ingest_settings_json()]
+    if INGEST_PERMISSION_MODE:
+        cmd += ["--permission-mode", INGEST_PERMISSION_MODE]
+    return ingest_jobs.start(cmd, path)
+
+
+@mcp.tool(
+    description=(
+        "Poll a background ingestion started with ingest_start(). Returns "
+        "'running' with elapsed seconds, the same final report sync ingest() "
+        "produces (with its machine-parseable '## Pages' block) once done, an "
+        "error with a stderr excerpt on failure, or a timeout notice (the job "
+        "is bounded by the same 600s watchdog as sync ingest(), enforced "
+        "when polled)."
+    )
+)
+def ingest_status(job_id: str) -> str:
+    return ingest_jobs.status(job_id)
+
+
+@mcp.tool(
+    description=(
+        "Cancel a background ingestion started with ingest_start(): terminates "
+        "the child run (SIGTERM, then SIGKILL after 5s) and frees the "
+        "single-job slot. Idempotent on an already-finished job (returns its "
+        "final state instead of failing)."
+    )
+)
+def ingest_cancel(job_id: str) -> str:
+    return ingest_jobs.cancel(job_id)
 
 
 if __name__ == "__main__":
