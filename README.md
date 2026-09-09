@@ -8,7 +8,7 @@
 
 ## Status
 
-v1.1.0 — major release: an MCP server for cross-project wiki access (tiered loading, ~96% token reduction), a session lifecycle (Stop/SessionStart hooks + `/compress-bb`), `/domain` lifecycle commands, L3 readiness (ADR verdict tracking), and a CI revamp for living vaults (Obsidian-safe Prettier formatter, semantic-only linting, deterministic wiki validation). The template works end-to-end and has scaffolded real vaults. See [CHANGELOG.md](./CHANGELOG.md) for the full milestone list. Bug reports and generic-improvement PRs welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md).
+v1.3.0 — the template now behaves like a living system: read-side delegation to the domain experts (`/radar` and per-domain triage, agent memory), a deposit channel at format parity with the ingestion engine (`drop_file_to_raw` for binaries, pandoc-backed `.docx` / `.pptx` twins), async ingestion for third-party MCP clients (`ingest_start` / `ingest_status` / `ingest_cancel`), per-type frontmatter actually enforced by `validate-wiki.py` instead of documented only, a paste-ready project-instructions template for Claude Desktop / Cowork, and a CI that runs the whole Python suite on every push. Earlier milestones still stand: the MCP server for cross-project wiki access (tiered loading, ~96% token reduction), the session lifecycle (Stop/SessionStart hooks + `/compress-bb`), `/domain` lifecycle commands, L3 readiness (ADR verdict tracking) and the Obsidian-safe formatter. The template works end-to-end and has scaffolded real vaults. See [CHANGELOG.md](./CHANGELOG.md) for the full milestone list. Bug reports and generic-improvement PRs welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## What is an LLM Wiki?
 
@@ -43,6 +43,7 @@ Said otherwise: Karpathy says "let LLMs maintain a wiki." BoilingBrain says "_he
 - **[Claude Code](https://claude.com/claude-code)** — the CLI agent that drives the interview and the wiki workflows. The template is built around its slash-commands and `AskUserQuestion` tool.
 - **[Obsidian](https://obsidian.md/)** — the markdown editor where your vault lives day-to-day. Wiki pages use `[[wikilinks]]` and the bootstrap generates an `.obsidian/` config (graph filter + per-domain colors) so the graph view shows your `wiki/` clean of `raw/` and `cache/` noise.
 - **`gh` CLI** (optional) — only needed if you want to clone via `gh repo clone` and create a remote vault repo automatically at the end of the interview.
+- **[pandoc](https://pandoc.org/installing.html)** (optional) — only needed to ingest `.docx` / `.pptx` sources: `/ingest` converts them to a markdown twin via `scripts/convert-doc.sh` (pptx needs pandoc ≥ 3.0, docx works on 2.x).
 
 After bootstrap, **open the cloned folder in Obsidian** ("Open folder as vault") and switch to the **graph view** (icon in the left ribbon, or `Ctrl/Cmd+G`). You'll see your domains laid out by color — that's the auto-generated `.obsidian/graph.json` doing its job.
 
@@ -70,8 +71,8 @@ Detailed flow → [How to bootstrap](#how-to-bootstrap) below.
 
 This repo is the **scaffolding**, not a usable instance. It contains:
 
-- Generic slash commands (`/ingest`, `/ingest-video`, `/query`, `/save`, `/lint`, `/evolve-agent`, optional `/sync-repos`).
-- Generic scripts (`scan-raw.sh`, `transcribe.sh`, `sample-frames.sh`, `diff-frames.py`, `extract-frames.sh`, `backfill-summaries.py`, `enrich-hub.py`, optional `sync-repos.sh`).
+- Generic slash commands (`/ingest`, `/ingest-video`, `/query`, `/save`, `/lint`, `/radar`, `/evolve-agent`, optional `/sync-repos`).
+- Generic scripts: wiki maintenance (`scan-raw.py`, `validate-wiki.py`, `format-md.py`, `archive-radar.py`, `backfill-summaries.py`, `enrich-hub.py`), the video pipeline (`transcribe.sh`, `sample-frames.sh`, `diff-frames.py`, `extract-frames.sh`), document conversion (`convert-doc.sh`, pandoc-backed), and optional repo syncing (`sync-repos.sh`).
 - Templated files (`*.tpl`) with `{{placeholder}}` markers that need to be filled with **your** name, role, domains, and projects.
 - A unified `domain-expert.md.tpl` that gets instantiated **once per domain** you declare at bootstrap time, with domain-specific deliverables, observation triggers and frame-visual formats.
 
@@ -126,11 +127,12 @@ tracked-repos.config.json  # OPTIONAL: list of GitHub repos to snapshot via /syn
 
 Conventions that apply across the wiki (frontmatter format, slug rules, raw immutability) live in `.claude/rules/*.md`. Each rule has a `paths:` field in its frontmatter — Claude Code auto-loads the rule when the current working file matches one of those paths. This mirrors the [Anthropic-recommended pattern](https://www.anthropic.com/) (Boris Cherny, "CLAUDE.md best practices", 24 March 2026).
 
-Three rules ship by default:
+Four rules ship by default:
 
-- `frontmatter.md` (paths: `wiki/sources/**`, `wiki/concepts/**`, `wiki/syntheses/**`, `wiki/decisions/**`, `wiki/entities/**`, `wiki/cheatsheets/**`, `wiki/diagrams/**`, `wiki/domains/**`) — frontmatter YAML rules, including the hard rule that `source_sha256` must always be computed via `shasum -a 256 <file>` (never a placeholder).
+- `frontmatter.md` (paths: `wiki/sources/**`, `wiki/concepts/**`, `wiki/syntheses/**`, `wiki/decisions/**`, `wiki/entities/**`, `wiki/cheatsheets/**`, `wiki/diagrams/**`, `wiki/domains/**`) — frontmatter YAML rules, including the hard rule that `source_sha256` must always be computed via `shasum -a 256 <file>` (never a placeholder). Since v1.3.0 this rule is no longer documentation-only: `validate-wiki.py` enforces the per-type contract in CI.
 - `pages-wiki.md` (paths: `wiki/**`) — kebab-case slugs, `[[wikilinks]]`, `[!warning]` / `[!question]` callouts, page sizing.
 - `raw-vs-cache.md` (paths: `raw/**`, `cache/**`) — strict immutability of `raw/`, transient nature of `cache/`.
+- `sanitization-issues.md` (paths: `.claude/commands/create-issue.md`, `scripts/migrations/*-create-issue*.md`) — what must be stripped, transformed or flagged before `/create-issue` files an issue on the upstream template repo (domain slugs, proper nouns, private paths).
 
 `.claude/rules/` is **upstream-tracked** — `/update-vault` propagates new and updated rules to existing vaults automatically.
 
@@ -148,11 +150,11 @@ This lets agents (and you, via `/query`) navigate the wiki without paying the fu
 The `scripts/` directory is organised by feature, not by verb. The convention is:
 
 - `scripts/video/` — video and frame extraction pipeline (`extract-frames.sh`, `sample-frames.sh`, `diff-frames.py`, `transcribe.sh`).
-- `scripts/wiki-maint/` — wiki maintenance utilities (`backfill-summaries.py`, `enrich-hub.py`, `scan-raw.sh`, `scan-domain-refs.sh`).
-- `scripts/mcp/` — MCP server and its installer (`mcp-wiki.py`, `setup-mcp.sh`).
+- `scripts/wiki-maint/` — wiki maintenance utilities (`scan-raw.py` and its portable `scan-raw.sh` wrapper, `validate-wiki.py`, `format-md.py`, `archive-radar.py`, `backfill-summaries.py`, `enrich-hub.py`, `scan-domain-refs.sh`, `detect-vault-version.sh`, `propagate-templates.sh`).
+- `scripts/mcp/` — MCP server, its read-side CLI and its installer (`mcp-wiki.py`, `wiki_core.py`, `wiki-cli.py` + `wiki-cli.sh`, `ingest_jobs.py`, `ingest-headless-guard.sh`, `setup-mcp.sh`, `register-desktop-config.py`).
 - `scripts/hooks/` — Claude Code hooks (e.g. `check-session-activity.sh`).
 - `scripts/migrations/` — versioned migration slash-commands invoked by `/update-vault`.
-- `scripts/sync-repos.sh` — standalone CLI tool, kept at the root.
+- `scripts/sync-repos.sh` and `scripts/convert-doc.sh` — standalone CLI tools, kept at the root.
 
 New scripts should be placed in the existing feature directory that best fits their role, or at the root only if they are standalone tools with no family. Avoid adding flat scripts at the root.
 
@@ -162,7 +164,7 @@ The CI (`.github/workflows/lint.yml`) blocks only on **repairable, meaningful** 
 
 - **`format-check`** — Prettier, Obsidian-safe (via `scripts/wiki-maint/format-md.py`): markdown stays clean by construction without breaking `[[wikilink|alias]]` or code-span pipes in tables.
 - **`markdownlint`** — semantic rules only (MD056, MD042, MD051, MD024); cosmetic rules delegated to Prettier.
-- **`wiki-integrity`** — `scripts/wiki-maint/validate-wiki.py`: broken `[[wikilinks]]`, internal links, frontmatter conformance, and leftover git conflict markers. Skips `raw/`.
+- **`wiki-integrity`** — `scripts/wiki-maint/validate-wiki.py`: broken `[[wikilinks]]`, internal links, leftover git conflict markers, and (since v1.3.0) the per-type frontmatter contract of `.claude/rules/frontmatter.md` — closed `status` / `verdict` enums, 64-hex `source_sha256` on sources. A vault that still needs a backfill pass can triage with `--warn-frontmatter-types` before making it blocking. Skips `raw/`.
 - **`unittests`** — the Python test suites under `scripts/wiki-maint/` and `scripts/mcp/` (`unittest discover`; `fastmcp` installed so the MCP server tests run for real, not as skips).
 - **`link-check-report`** — weekly, **non-blocking** (lychee): external links surfaced as a report, never failing the push.
 
@@ -177,6 +179,7 @@ Run `/format` to normalise a pre-formatter vault; generation commands (`/ingest`
 | `/query <question>`                    | Answer from indexed pages with citations; optionally archive the synthesis.                                                                                                                                                    |
 | `/save <slug>`                         | Archive the current synthesis into `wiki/syntheses/<slug>.md`.                                                                                                                                                                 |
 | `/lint [domain]`                       | Detect contradictions, orphans, missing cross-references, gaps.                                                                                                                                                                |
+| `/radar [domain]`                      | Show `wiki/radar.md` and, above threshold (a domain with at least 3 open entries and an expert) or on explicit request, delegate per-domain triage to the domain experts.                                                      |
 | `/evolve-agent <domain>`               | Curated update to a domain expert's prompt, fed by accumulated `.suggestions.md`.                                                                                                                                              |
 | `/domain <add\|rename\|remove> <slug>` | Manage a domain's lifecycle post-bootstrap. Scans the vault, presents impact by bucket (canonical / frontmatter / wikilink / alias / composed / prose / log-tag / historical / drift), validates ambiguous cases case-by-case. |
 | `/sync-repos [names]` _(optional)_     | Snapshot GitHub repos by SHA into `raw/tracked-repos/` (or any `dest` declared per source).                                                                                                                                    |
