@@ -135,6 +135,52 @@ class TestStatus(IngestJobsBase):
         self.assertIsNotNone(proc.poll())
 
 
+class TestJournalCheck(IngestJobsBase):
+    """#145: a successful run whose ## Pages lists pages but which left no
+    wiki/log.md entry for its source is stamped DEGRADED."""
+
+    PAGES = "printf 'done\\n\\n## Pages\\n- wiki/sources/a.md (source, new)\\n'"
+
+    def setUp(self):
+        super().setUp()
+        (wiki_core.WIKI_PATH / "wiki").mkdir()
+        (wiki_core.WIKI_PATH / "wiki" / "log.md").write_text(
+            "# Log\n\n## [2026-10-01] ingest | Older (agent: x)\n\n"
+            "- Source: `raw/notes/b.md`\n", encoding="utf-8")
+
+    def run_job(self, script):
+        report = ingest_jobs.start(["/bin/sh", "-c", script], "raw/notes/a.md")
+        return self.poll_until_final(self.job_id_of(report))
+
+    def test_pages_without_journal_entry_is_degraded(self):
+        final = self.run_job(self.PAGES)
+        self.assertTrue(final.startswith("DEGRADED — journal entry missing"), final)
+        self.assertIn("raw/notes/a.md", final.splitlines()[0])
+        self.assertIn("journal-ingest.py", final)
+        # The original report follows, so ## Pages stays parseable at the end.
+        self.assertTrue(final.rstrip().endswith("- wiki/sources/a.md (source, new)"))
+
+    def test_pages_with_journal_entry_is_clean(self):
+        final = self.run_job(
+            "printf '\\n## [2026-10-08] ingest | A (agent: x)\\n\\n"
+            "- Source: `raw/notes/a.md`\\n' >> wiki/log.md; " + self.PAGES)
+        self.assertNotIn("DEGRADED", final)
+        self.assertIn("## Pages", final)
+
+    def test_empty_pages_is_not_degraded(self):
+        final = self.run_job("printf 'needs-human-triage\\n\\n## Pages\\n'")
+        self.assertNotIn("DEGRADED", final)
+
+    def test_journal_helpers(self):
+        self.assertEqual(ingest_jobs.journal_mentions("raw/notes/b.md"), 1)
+        self.assertEqual(ingest_jobs.journal_mentions("raw/notes/a.md"), 0)
+        self.assertIsNone(ingest_jobs.journal_gap("raw/notes/a.md", 0, "## Pages\n"))
+        self.assertIsNotNone(ingest_jobs.journal_gap(
+            "raw/notes/a.md", 0, "## Pages\n- wiki/x.md (concept, new)\n"))
+        (wiki_core.WIKI_PATH / "wiki" / "log.md").unlink()
+        self.assertEqual(ingest_jobs.journal_mentions("raw/notes/b.md"), 0)
+
+
 class TestCorruptState(IngestJobsBase):
     def test_corrupt_state_file_is_skipped(self):
         jobs_dir = wiki_core.CACHE_DIR / "ingest-jobs"

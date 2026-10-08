@@ -25,8 +25,15 @@ Exit code: 0 if clean, 1 if any defect. Defects are printed as
 `relpath:line — message`, grouped, with a final count.
 
 Usage: validate-wiki.py [--root <repo-root>] [--warn-frontmatter-types]
+                        [--journal-coverage]
   --warn-frontmatter-types: transitional flag (#104) that downgrades per-type
     frontmatter defects to stderr warnings instead of failing CI
+  --journal-coverage: opt-in standalone mode (#145, used by /lint, not by CI):
+    runs ONLY the journal coverage check — one
+    `JOURNAL-MISSING wiki/sources/<x>.md (ingested: <date>)` line per
+    `type: source` page with no `## [<ingested>] ingest |` (or `ingest-<x> |`)
+    entry in wiki/log.md whose block mentions its source_path or links the
+    page, or whose header holds its H1 title. Exit 1 if any, 0 otherwise.
 """
 import argparse
 import re
@@ -289,6 +296,52 @@ def check_conflict_markers(repo_root, defects):
                 defects.append(f"{rel}:{n} — git conflict marker ({line[:7]})")
 
 
+LOG_INGEST_RE = re.compile(r"^## \[(\d{4}-\d{2}-\d{2})\] ingest(?:-[a-z]+)? \|")
+
+
+def ingest_log_entries(log_text):
+    """{date: [(header, block_text)]} for every `## [date] ingest |` entry."""
+    entries = {}
+    current = None
+    for line in log_text.splitlines():
+        if line.startswith("## "):
+            m = LOG_INGEST_RE.match(line)
+            current = [line, []] if m else None
+            if m:
+                entries.setdefault(m.group(1), []).append(current)
+        elif current is not None:
+            current[1].append(line)
+    return {d: [(h, "\n".join(b)) for h, b in items] for d, items in entries.items()}
+
+
+def check_journal_coverage(repo_root, wiki_root):
+    """JOURNAL-MISSING lines for source pages whose ingestion left no log entry."""
+    log = wiki_root / "log.md"
+    log_text = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
+    entries = ingest_log_entries(log_text)
+    missing = []
+    for p in sorted(wiki_root.rglob("*.md")):
+        text = p.read_text(encoding="utf-8", errors="replace")
+        fm, body_start = parse_frontmatter(text)
+        if fm is None or _fm_value(fm, "type") != "source":
+            continue
+        ingested = _fm_value(fm, "ingested")
+        if not ingested:
+            continue  # per-type frontmatter check already reports it
+        source_path = _fm_value(fm, "source_path") or ""
+        title = next((l[2:].strip() for l in text.splitlines()[body_start:]
+                      if l.startswith("# ")), "")
+        page_link = re.compile(r"sources/" + re.escape(p.stem) + r"(?:\.md)?[\]|#]")
+        covered = any(
+            (source_path and source_path in block) or (title and title in header)
+            or page_link.search(block)
+            for header, block in entries.get(ingested, []))
+        if not covered:
+            rel = str(p.relative_to(repo_root)).replace("\\", "/")
+            missing.append(f"JOURNAL-MISSING {rel} (ingested: {ingested})")
+    return missing
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=str(Path(__file__).resolve().parent.parent.parent),
@@ -296,12 +349,22 @@ def main():
     ap.add_argument("--warn-frontmatter-types", action="store_true",
                     help="transitional (#104): report per-type frontmatter defects "
                          "as warnings on stderr instead of failing")
+    ap.add_argument("--journal-coverage", action="store_true",
+                    help="opt-in (#145): only report source pages with no matching "
+                         "ingest entry in wiki/log.md")
     args = ap.parse_args()
     repo_root = Path(args.root)
     wiki_root = repo_root / "wiki"
     if not wiki_root.is_dir():
         print(f"error: no wiki/ under {repo_root}", file=sys.stderr)
         return 2
+
+    if args.journal_coverage:
+        missing = check_journal_coverage(repo_root, wiki_root)
+        for line in missing:
+            print(line)
+        print(f"journal coverage: {len(missing)} source page(s) without a log entry")
+        return 1 if missing else 0
 
     if yaml is None:
         print("note: PyYAML not available — skipping the frontmatter "

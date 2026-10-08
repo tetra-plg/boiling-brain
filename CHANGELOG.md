@@ -6,6 +6,12 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 
 ---
 
+## [v1.3.1] — 2026-10-08
+
+### Fixed
+
+- **Headless `/ingest` could complete without journaling**: step 4 asked the main context to edit `wiki/log.md` and `wiki/radar.md` by hand, and a headless run (`ingest` / `ingest_start` MCP tools, or any wrapper around `claude -p "/ingest … --headless"`) skipped it on some runs while still returning a clean report with a populated `## Pages` block — the vault silently diverged from its own journal and the run's radar items were lost. Journaling is now a deterministic step, its omission is visible, and the backlog is findable. (1) New stdlib-only **`scripts/wiki-maint/journal-ingest.py`**: `/ingest` writes an ingest report to `cache/ingest-reports/<date>-<slug>.md` (frontmatter `source`/`title`/`agent`/`mode`/`hint`/`date` + the agent's blocks verbatim) and calls the script, which appends the canonical `wiki/log.md` entry (headless variant `(agent: …, mode: headless, hint: …)`, `- Source:` line, summary bullets) and routes radar items by an optional leading tag (`[verify]`, `[research]`, `[decide]`, `[improve]`, `[watch]`, documented in `.claude/agent-output-contract.md`) or into a `## Triage` section at the top of the radar; idempotent per source and date, machine-parseable stdout (`log=appended|skipped`, `radar=`, `triage=`), exit 2 with nothing written on a malformed report. One call per source, interactive and headless alike; the headless report must say so when the step fails (`## Pages` alone is not a complete run). (2) The headless guard allowlists the report write and exactly that script call (charset-anchored). (3) `ingest()` and `ingest_status()` stamp a run `DEGRADED — journal entry missing: …` (report unchanged below it, `## Pages` still parseable at the end) when its `## Pages` block lists pages but `wiki/log.md` gained no mention of the source during the run; an empty `## Pages` (deferral to `needs-human-triage`) expects no entry. (4) New opt-in `validate-wiki.py --journal-coverage` (run by `/lint` Pass 1, not by CI) prints `JOURNAL-MISSING wiki/sources/<x>.md (ingested: <date>)` for every source page with no ingest entry on its `ingested:` date. Migration note `scripts/migrations/v1.3.1.md`: MCP reload heads-up, optional allow rule, backlog triage and optional backfill — never blocking. (#145)
+
 ## [v1.3.0] — 2026-08-01
 
 ### Added
