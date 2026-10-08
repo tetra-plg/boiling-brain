@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 import unittest
 from unittest.mock import patch, MagicMock
 from pathlib import Path
@@ -804,6 +805,99 @@ class TestIngestTool(McpModuleTestBase):
         with patch.object(self.m.subprocess, "run", return_value=fake):
             result = self.m.ingest(path)
         self.assertNotIn("DEGRADED", result)
+
+
+_FAKE_CLAUDE = """#!/bin/sh
+# Fake headless /ingest: journals its source and lists one page.
+path=$(printf '%s' "$2" | cut -d' ' -f2)
+sleep 0.2
+printf '\\n## [2026-10-08] ingest | x (agent: x)\\n\\n- Source: `%s`\\n' "$path" >> wiki/log.md
+printf '1 new\\n\\n## Pages\\n- wiki/sources/x.md (source, new)\\n'
+"""
+
+
+@unittest.skipUnless(_HAS_FASTMCP, "fastmcp not installed")
+class TestIngestPendingTool(McpModuleTestBase):
+    """#154: ingest_pending() runs scripts/ops/ingest-pending.py as a batch
+    job of the ingest_jobs machinery. The claude CLI is a fake script."""
+
+    def setUp(self):
+        super().setUp()
+        self.jobs = self.m.ingest_jobs
+        self._saved_tick = self.jobs.TICK_S
+        self.jobs.TICK_S = 0.05
+        self.claude = self.vault / "fake-claude"
+        self.claude.write_text(_FAKE_CLAUDE, encoding="utf-8")
+        self.claude.chmod(0o755)
+        which_patch = patch("shutil.which", return_value=str(self.claude))
+        which_patch.start()
+        self.addCleanup(which_patch.stop)
+        (self.vault / "wiki" / "log.md").write_text("# Log\n", encoding="utf-8")
+
+    def tearDown(self):
+        self.jobs._stop_ticker()
+        for proc in self.jobs._PROCS.values():
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+        self.jobs._PROCS.clear()
+        self.jobs.TICK_S = self._saved_tick
+        super().tearDown()
+
+    def _drop(self, name, hint=""):
+        return self.m.drop_to_raw("notes", name, "body\n", domain_hint=hint)
+
+    def _poll(self, job_id, deadline_s=30):
+        end = time.monotonic() + deadline_s
+        while time.monotonic() < end:
+            out = self.m.ingest_status(job_id)
+            if "running" not in out and "queued" not in out:
+                return out
+            time.sleep(0.05)
+        self.fail(f"job {job_id} not final after {deadline_s}s")
+
+    def test_batch_report_and_outcome(self):
+        for name, hint in (("a.md", "demo"), ("b.md", ""), ("c.md", "")):
+            self._drop(name, hint)
+        started = self.m.ingest_pending(domain_hint="other")
+        self.assertIn("started", started)
+        self.assertIn("ops/ingest/last-batch.json", started)
+        final = self._poll(started.split()[1])
+        self.assertIn("Pending-queue batch ingest", final)
+        self.assertIn("## raw/notes/a.md — ok", final)
+        self.assertIn("ops/ingest/last-batch.json", final)
+        self.assertNotIn("DEGRADED", final)
+        doc = json.loads((self.vault / "ops" / "ingest" / "last-batch.json")
+                         .read_text(encoding="utf-8"))
+        self.assertEqual([f["hint"] for f in doc["files"]], ["demo", "other", "other"])
+        self.assertFalse((self.vault / "cache" / ".pending-ingest").exists())
+
+    def test_queued_behind_a_running_job(self):
+        # Acceptance 2: no error while another job runs; it completes after.
+        self._drop("a.md")
+        self.jobs.start(["sleep", "0.3"], "raw/notes/a.md")
+        queued = self.m.ingest_pending()
+        self.assertNotIn("Error", queued)
+        self.assertIn("queued", queued)
+        final = self._poll(queued.split()[1])
+        self.assertIn("## raw/notes/a.md — ok", final)
+
+    def test_argument_validation(self):
+        self.assertIn("invalid domain_hint", self.m.ingest_pending(domain_hint="Bad!"))
+        self.assertIn("max_files", self.m.ingest_pending(max_files=-1))
+        with patch("shutil.which", return_value=None):
+            self.assertIn("`claude` CLI not found", self.m.ingest_pending())
+        self.assertFalse((self.vault / "cache" / "ingest-jobs").exists())
+
+    def test_runner_command(self):
+        with patch.object(self.jobs, "start", return_value="Job x started") as start:
+            self.m.ingest_pending(domain_hint="demo", max_files=2)
+        cmd = start.call_args.args[0]
+        self.assertEqual(cmd[0], sys.executable)
+        self.assertTrue(cmd[1].endswith("scripts/ops/ingest-pending.py"))
+        self.assertEqual(cmd[2:], ["--root", str(self.vault), "--claude", str(self.claude),
+                                   "--domain-hint", "demo", "--max-files", "2"])
+        self.assertEqual(start.call_args.kwargs["kind"], "batch")
 
 
 class TestIngestHeadlessGuard(unittest.TestCase):

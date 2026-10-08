@@ -436,6 +436,50 @@ def ingest_start(path: str, domain_hint: str = "") -> str:
     return ingest_jobs.start(cmd, path)
 
 
+INGEST_PENDING_RUNNER = Path(__file__).resolve().parent.parent / "ops" / "ingest-pending.py"
+INGEST_PENDING_OUTCOME = "ops/ingest/last-batch.json"
+
+
+@mcp.tool(
+    description=(
+        "Ingest the whole pending queue (cache/.pending-ingest — every file "
+        "dropped with drop_to_raw / drop_file_to_raw and not ingested yet) as "
+        "ONE background job: the entries are ingested sequentially, each "
+        "through the same guarded headless run as ingest_start(); a failure "
+        "on one file does not stop the others. Returns a job id at once — "
+        "poll ingest_status(job_id) for the consolidated report (one block "
+        "per file: status ok / degraded / failed / skipped-no-hint, pages, "
+        "detail). If another ingestion is running, the batch is queued and "
+        "starts when it ends (no error). Processed entries leave the queue; "
+        "failed and needs-human-triage ones stay for the next run. "
+        "domain_hint: fallback slug (see list_domains()) for entries dropped "
+        "without their own domain_hint — without any hint an ambiguous file "
+        "is deferred to needs-human-triage. max_files: process at most N "
+        "entries (0 = the whole queue). Machine-readable outcome: "
+        f"{INGEST_PENDING_OUTCOME} (per-file status, pages, failure excerpt). "
+        "Same MCP_INGEST_PERMISSION_MODE opt-in as ingest()."
+    )
+)
+def ingest_pending(domain_hint: str = "", max_files: int = 0) -> str:
+    err = ingest_jobs.validate_hint(domain_hint)
+    if err:
+        return err
+    if max_files < 0:
+        return "Error: max_files must be >= 0 (0 = the whole queue)."
+    claude_exe = shutil.which("claude")
+    if claude_exe is None:
+        return "Error: `claude` CLI not found in the MCP server environment."
+    cmd = [sys.executable, str(INGEST_PENDING_RUNNER), "--root", str(wiki_core.WIKI_PATH),
+           "--claude", claude_exe]
+    if domain_hint:
+        cmd += ["--domain-hint", domain_hint]
+    if max_files:
+        cmd += ["--max-files", str(max_files)]
+    report = ingest_jobs.start(cmd, "cache/.pending-ingest", kind="batch")
+    return (f"{report}\nOutcome file, rewritten when the batch ends: "
+            f"{INGEST_PENDING_OUTCOME}.")
+
+
 @mcp.tool(
     description=(
         "Poll a background ingestion started with ingest_start() or "
