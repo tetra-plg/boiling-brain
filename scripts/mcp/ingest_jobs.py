@@ -24,6 +24,7 @@ ingest() unchanged. Design constraints:
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -81,6 +82,44 @@ def validate_request(path: str, domain_hint: str = ""):
     if domain_hint:
         prompt += f" --domain-hint={domain_hint}"
     return prompt, None
+
+
+def ingest_settings_json():
+    """Build a --settings JSON that scopes a PreToolUse allowlist hook to just
+    the claude -p session spawned for one headless ingest. Verified
+    empirically to merge with (not replace) the vault's own
+    .claude/settings.json, and to apply to subagent tool calls, not just the
+    main context. The matcher covers every tool (empty string, this codebase's
+    established "match all" convention — see setup-mcp.sh's Stop hook
+    registration) so the guard script's own per-tool dispatch — including its
+    default-deny for anything it doesn't explicitly recognize — actually runs
+    for every tool call, not just Write/Edit/Bash."""
+    guard = str(wiki_core.WIKI_PATH / "scripts" / "mcp" / "ingest-headless-guard.sh")
+    hook = {"type": "command", "command": guard, "timeout": 3000}
+    return json.dumps({"hooks": {"PreToolUse": [
+        {"matcher": "", "hooks": [hook]},
+    ]}})
+
+
+def build_ingest_cmd(prompt: str, permission_mode: str = "", claude_exe=None):
+    """The guarded headless command for one validated prompt, or None when the
+    `claude` CLI cannot be resolved. Single source for the ingest /
+    ingest_start tools and the batch runner (#154).
+
+    The CLI is resolved with shutil.which: on Windows it ships as a claude.CMD
+    shim and CreateProcess (shell=False) does NOT consult PATHEXT, so a bare
+    "claude" raises FileNotFoundError even when it is on PATH. shutil.which
+    honours PATHEXT and returns the full path (also correct on POSIX);
+    shell=False is preserved, so no command-injection surface is
+    reintroduced. (#84)"""
+    if claude_exe is None:
+        claude_exe = shutil.which("claude")
+    if claude_exe is None:
+        return None
+    cmd = [claude_exe, "-p", prompt, "--settings", ingest_settings_json()]
+    if permission_mode:
+        cmd += ["--permission-mode", permission_mode]
+    return cmd
 
 
 def journal_mentions(path: str) -> int:

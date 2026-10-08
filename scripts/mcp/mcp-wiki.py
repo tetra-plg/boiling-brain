@@ -107,23 +107,6 @@ def _signal_pending(dest_file: Path, domain_hint: str = "") -> str:
     return rel_path
 
 
-def _ingest_settings_json():
-    """Build a --settings JSON that scopes a PreToolUse allowlist hook to just
-    the claude -p session ingest() spawns below. Verified empirically to
-    merge with (not replace) the vault's own .claude/settings.json, and to
-    apply to subagent tool calls, not just the main context. The matcher
-    covers every tool (empty string, this codebase's established
-    "match all" convention — see setup-mcp.sh's Stop hook registration) so
-    the guard script's own per-tool dispatch — including its default-deny
-    for anything it doesn't explicitly recognize — actually runs for every
-    tool call, not just Write/Edit/Bash."""
-    guard = str(wiki_core.WIKI_PATH / "scripts" / "mcp" / "ingest-headless-guard.sh")
-    hook = {"type": "command", "command": guard, "timeout": 3000}
-    return json.dumps({"hooks": {"PreToolUse": [
-        {"matcher": "", "hooks": [hook]},
-    ]}})
-
-
 def _md(md_fn, data_fn, *args, **kwargs):
     """Delegate to wiki_core: render data via md_fn, mapping WikiLookupError back
     to the legacy plain-string return so the MCP output is unchanged."""
@@ -401,19 +384,10 @@ def ingest(path: str, domain_hint: str = "") -> str:
     if err:
         return err
 
-    # Resolve the CLI with shutil.which before building the command. On Windows
-    # the CLI ships as a claude.CMD shim; subprocess.run(shell=False) uses
-    # CreateProcess, which does NOT consult PATHEXT, so a bare "claude" raises
-    # FileNotFoundError even when it is on PATH. shutil.which honours PATHEXT and
-    # returns the full path (also correct on POSIX); shell=False is preserved, so
-    # no command-injection surface is reintroduced. (#84)
-    claude_exe = shutil.which("claude")
-    if claude_exe is None:
+    # The CLI is resolved with shutil.which inside build_ingest_cmd (#84).
+    cmd = ingest_jobs.build_ingest_cmd(prompt, INGEST_PERMISSION_MODE)
+    if cmd is None:
         return "Error: `claude` CLI not found in the MCP server environment."
-
-    cmd = [claude_exe, "-p", prompt, "--settings", _ingest_settings_json()]
-    if INGEST_PERMISSION_MODE:
-        cmd += ["--permission-mode", INGEST_PERMISSION_MODE]
 
     log_mentions = ingest_jobs.journal_mentions(path)
     try:
@@ -455,12 +429,9 @@ def ingest_start(path: str, domain_hint: str = "") -> str:
     prompt, err = ingest_jobs.validate_request(path, domain_hint)
     if err:
         return err
-    claude_exe = shutil.which("claude")
-    if claude_exe is None:
+    cmd = ingest_jobs.build_ingest_cmd(prompt, INGEST_PERMISSION_MODE)
+    if cmd is None:
         return "Error: `claude` CLI not found in the MCP server environment."
-    cmd = [claude_exe, "-p", prompt, "--settings", _ingest_settings_json()]
-    if INGEST_PERMISSION_MODE:
-        cmd += ["--permission-mode", INGEST_PERMISSION_MODE]
     return ingest_jobs.start(cmd, path)
 
 

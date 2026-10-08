@@ -5,11 +5,13 @@
 Run: cd scripts/mcp && python3 -m unittest test_ingest_jobs
 Requires NO fastmcp.
 """
+import json
 import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ingest_jobs
@@ -81,6 +83,35 @@ class TestValidate(IngestJobsBase):
         prompt, err = ingest_jobs.validate_request("raw/notes/absent.md")
         self.assertIsNone(prompt)
         self.assertIn("not found", err)
+
+
+class TestBuildCmd(IngestJobsBase):
+    """#154: the guarded headless command is built in one place, shared by the
+    MCP tools and the batch runner (scripts/ops/ingest-pending.py)."""
+
+    def test_command_shape(self):
+        cmd = ingest_jobs.build_ingest_cmd("/ingest raw/notes/a.md --headless",
+                                           claude_exe="/opt/bin/claude")
+        self.assertEqual(cmd[:4], ["/opt/bin/claude", "-p",
+                                   "/ingest raw/notes/a.md --headless", "--settings"])
+        self.assertEqual(len(cmd), 5)
+        settings = json.loads(cmd[4])
+        pretool = settings["hooks"]["PreToolUse"]
+        self.assertEqual(pretool[0]["matcher"], "")
+        self.assertEqual(pretool[0]["hooks"][0]["command"],
+                         str(wiki_core.WIKI_PATH / "scripts" / "mcp" / "ingest-headless-guard.sh"))
+
+    def test_permission_mode_appended(self):
+        cmd = ingest_jobs.build_ingest_cmd("/ingest x --headless", "auto",
+                                           claude_exe="claude")
+        self.assertEqual(cmd[-2:], ["--permission-mode", "auto"])
+
+    def test_resolves_claude_with_shutil_which(self):
+        with patch("shutil.which", return_value="/opt/npm/claude.CMD"):
+            cmd = ingest_jobs.build_ingest_cmd("/ingest x --headless")
+        self.assertEqual(cmd[0], "/opt/npm/claude.CMD")
+        with patch("shutil.which", return_value=None):
+            self.assertIsNone(ingest_jobs.build_ingest_cmd("/ingest x --headless"))
 
 
 class TestStart(IngestJobsBase):
