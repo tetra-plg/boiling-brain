@@ -8,6 +8,10 @@
 # into its own script so it can be allowlisted by a single fixed command
 # prefix in scripts/mcp/ingest-headless-guard.sh, instead of an
 # unsafe-to-match inline heredoc-style command.
+#
+# Manifest format: one entry per line, `<path>` or `<path><TAB><domain-hint>`
+# (the hint is optional, written by drop_to_raw / drop_file_to_raw — #154).
+# An entry is removed when its path field equals one of the arguments.
 set -euo pipefail
 
 PENDING="cache/.pending-ingest"
@@ -15,7 +19,7 @@ PENDING="cache/.pending-ingest"
 [ "$#" -eq 0 ] && exit 0
 
 printf '%s\n' "$@" \
-  | sort -u \
-  | grep -vFxf - "$PENDING" > "$PENDING.tmp" || true
+  | awk -F '\t' 'NR == FNR { drop[$0] = 1; next } !($1 in drop)' - "$PENDING" \
+  > "$PENDING.tmp"
 mv "$PENDING.tmp" "$PENDING"
 [ -s "$PENDING" ] || rm -f "$PENDING"

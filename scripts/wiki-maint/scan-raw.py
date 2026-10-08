@@ -597,7 +597,8 @@ def read_pending(vault_root: str):
     if not os.path.isfile(pending):
         return []
     with open(pending, encoding="utf-8", errors="replace") as f:
-        return [ln.strip() for ln in f if ln.strip()]
+        # `<path>` or `<path>\t<domain-hint>` (#154): only the path is scanned.
+        return [ln.split("\t", 1)[0].strip() for ln in f if ln.strip()]
 
 
 def run_pending(vault_root: str, idx: Index, force: bool, cache):

@@ -46,13 +46,22 @@ def jobs_dir() -> Path:
     return wiki_core.CACHE_DIR / "ingest-jobs"
 
 
+def validate_hint(domain_hint: str = ""):
+    """Error message for a malformed domain_hint, None when empty or valid.
+    Shared by the ingest tools and the deposit tools (#154)."""
+    if domain_hint and not _SLUG_RE.match(domain_hint):
+        return (f"Error: invalid domain_hint: \"{domain_hint}\" — expected a slug "
+                f"(lowercase, digits, hyphens). See list_domains() for valid values.")
+    return None
+
+
 def validate_request(path: str, domain_hint: str = ""):
     """Shared input validation for ingest() and ingest_start().
     Returns (prompt, None) on success, (None, error_message) on failure.
     Error strings are byte-identical to the historical sync ingest() ones."""
-    if domain_hint and not _SLUG_RE.match(domain_hint):
-        return None, (f"Error: invalid domain_hint: \"{domain_hint}\" — expected a slug "
-                      f"(lowercase, digits, hyphens). See list_domains() for valid values.")
+    err = validate_hint(domain_hint)
+    if err:
+        return None, err
 
     if any(c.isspace() for c in path) or any(part.startswith("-") for part in path.split("/")):
         return None, (f"Error: invalid path: \"{path}\" — must not contain a space or a "

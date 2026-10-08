@@ -94,14 +94,16 @@ def _resolve_raw_dest(subfolder: str, filename: str):
     return (dest_dir, dest_file), None
 
 
-def _signal_pending(dest_file: Path) -> str:
+def _signal_pending(dest_file: Path, domain_hint: str = "") -> str:
     """Append the deposited path to cache/.pending-ingest (SessionStart signal)
-    and return its vault-relative form."""
+    and return its vault-relative form. A domain_hint is stored on the same
+    line after a TAB (`<path>\t<hint>`), read back by ingest_pending (#154);
+    a line without TAB carries no hint."""
     wiki_core.CACHE_DIR.mkdir(parents=True, exist_ok=True)
     pending = wiki_core.CACHE_DIR / ".pending-ingest"
     rel_path = _vault_rel(dest_file)
     with open(pending, "a", encoding="utf-8") as f:
-        f.write(rel_path + "\n")
+        f.write(rel_path + (f"\t{domain_hint}" if domain_hint else "") + "\n")
     return rel_path
 
 
@@ -261,10 +263,15 @@ def list_domains() -> str:
         "subfolder: subpath under raw/ (e.g. 'notes', 'articles', 'clippings'). "
         "filename: target filename (e.g. '2026-04-30-my-note.md'). "
         "content: full text content to write. "
+        "domain_hint (optional): domain slug (see list_domains()) stored with "
+        "the pending entry and used by ingest_pending() for this file. "
         "Creates cache/.pending-ingest with the new file path."
     )
 )
-def drop_to_raw(subfolder: str, filename: str, content: str) -> str:
+def drop_to_raw(subfolder: str, filename: str, content: str, domain_hint: str = "") -> str:
+    err = ingest_jobs.validate_hint(domain_hint)
+    if err:
+        return err
     resolved, err = _resolve_raw_dest(subfolder, filename)
     if err:
         return err
@@ -276,7 +283,7 @@ def drop_to_raw(subfolder: str, filename: str, content: str) -> str:
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_file.write_text(content, encoding="utf-8")
 
-    rel_path = _signal_pending(dest_file)
+    rel_path = _signal_pending(dest_file, domain_hint)
     return f"File created: {rel_path}\n.pending-ingest signal updated."
 
 
@@ -301,10 +308,15 @@ def drop_to_raw(subfolder: str, filename: str, content: str) -> str:
         "filename is taken from the source — an existing file is never "
         "overwritten, raw/ being immutable. Creates cache/.pending-ingest with "
         "the new file path; run /ingest (or the ingest() tool) to actually "
-        "ingest it. See tetra-plg/boiling-brain#112."
+        "ingest it. See tetra-plg/boiling-brain#112. "
+        "domain_hint (optional): domain slug (see list_domains()) stored with "
+        "the pending entry and used by ingest_pending() for this file."
     )
 )
-def drop_file_to_raw(source_path: str, subfolder: str) -> str:
+def drop_file_to_raw(source_path: str, subfolder: str, domain_hint: str = "") -> str:
+    err = ingest_jobs.validate_hint(domain_hint)
+    if err:
+        return err
     try:
         src = Path(source_path).expanduser().resolve()
     except Exception as e:
@@ -353,7 +365,7 @@ def drop_file_to_raw(source_path: str, subfolder: str) -> str:
     except OSError as e:
         return f"Error: could not copy {source_path} ({e})."
 
-    rel_path = _signal_pending(dest_file)
+    rel_path = _signal_pending(dest_file, domain_hint)
     return f"File copied: {rel_path}\n.pending-ingest signal updated."
 
 

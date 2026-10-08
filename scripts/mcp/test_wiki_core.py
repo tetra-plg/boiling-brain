@@ -403,6 +403,24 @@ class TestMcpParity(McpModuleTestBase):
         pending = (self.vault / "cache" / ".pending-ingest").read_text(encoding="utf-8")
         self.assertIn("raw/notes/task7-check.md", pending)
 
+    def test_drop_to_raw_without_hint_writes_plain_entry(self):
+        self.m.drop_to_raw("notes", "plain.md", "x")
+        pending = (self.vault / "cache" / ".pending-ingest").read_text(encoding="utf-8")
+        self.assertEqual(pending, "raw/notes/plain.md\n")
+
+    def test_drop_to_raw_stores_domain_hint_with_entry(self):
+        # #154: the hint travels with the pending entry for ingest_pending.
+        result = self.m.drop_to_raw("notes", "hinted.md", "x", domain_hint="demo")
+        self.assertIn("File created", result)
+        pending = (self.vault / "cache" / ".pending-ingest").read_text(encoding="utf-8")
+        self.assertEqual(pending, "raw/notes/hinted.md\tdemo\n")
+
+    def test_drop_to_raw_rejects_invalid_domain_hint(self):
+        result = self.m.drop_to_raw("notes", "bad.md", "x", domain_hint="Bad Slug!")
+        self.assertIn("invalid domain_hint", result)
+        self.assertFalse((self.vault / "raw" / "notes" / "bad.md").exists())
+        self.assertFalse((self.vault / "cache" / ".pending-ingest").exists())
+
     def test_drop_to_raw_rejects_path_traversal(self):
         result = self.m.drop_to_raw("../evil", "x.md", "nope")
         self.assertIn("path traversal detected", result)
@@ -457,6 +475,18 @@ class TestDropFileToRaw(McpModuleTestBase):
         self.assertIn("raw/pdfs/report.pdf", result)
         pending = (self.vault / "cache" / ".pending-ingest").read_text(encoding="utf-8")
         self.assertIn("raw/pdfs/report.pdf", pending)
+
+    def test_stores_domain_hint_with_entry(self):
+        src = self._source()
+        self.m.drop_file_to_raw(src, "pdfs", domain_hint="demo")
+        pending = (self.vault / "cache" / ".pending-ingest").read_text(encoding="utf-8")
+        self.assertEqual(pending, "raw/pdfs/report.pdf\tdemo\n")
+
+    def test_rejects_invalid_domain_hint_before_copying(self):
+        src = self._source()
+        result = self.m.drop_file_to_raw(src, "pdfs", domain_hint="../x")
+        self.assertIn("invalid domain_hint", result)
+        self.assertFalse((self.vault / "raw" / "pdfs" / "report.pdf").exists())
 
     def test_original_is_left_in_place(self):
         src = self._source()
