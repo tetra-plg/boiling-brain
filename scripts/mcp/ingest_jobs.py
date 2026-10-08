@@ -15,6 +15,11 @@ ingest() unchanged. Design constraints:
   is finalized as an error with an explicit "check wiki/log.md" note instead.
 - Child stdout/stderr go to <job_id>.out / <job_id>.err files (no PIPE: nobody
   drains it, a chatty child would deadlock on a full pipe buffer).
+- Exit code 0 is not the whole success contract (#145): a run whose `## Pages`
+  block lists pages must also have journaled its source in wiki/log.md. The
+  count of mentions of the raw path is taken at start and re-checked at the
+  end; no new mention stamps the report `DEGRADED — journal entry missing`
+  (journal_gap, shared with the sync ingest() in mcp-wiki.py).
 """
 import json
 import os
@@ -67,6 +72,41 @@ def validate_request(path: str, domain_hint: str = ""):
     if domain_hint:
         prompt += f" --domain-hint={domain_hint}"
     return prompt, None
+
+
+def journal_mentions(path: str) -> int:
+    """Occurrences of the raw path in wiki/log.md (0 if the log is absent)."""
+    log = wiki_core.WIKI_PATH / "wiki" / "log.md"
+    try:
+        return log.read_text(encoding="utf-8", errors="replace").count(path)
+    except OSError:
+        return 0
+
+
+def _pages_listed(report: str) -> int:
+    """Number of `- ` lines in the report's last `## Pages` block."""
+    lines = report.splitlines()
+    starts = [i for i, line in enumerate(lines) if line.strip() == "## Pages"]
+    if not starts:
+        return 0
+    count = 0
+    for line in lines[starts[-1] + 1:]:
+        if line.startswith("#"):
+            break
+        if line.lstrip().startswith("- "):
+            count += 1
+    return count
+
+
+def journal_gap(path: str, mentions_before: int, report: str):
+    """Degradation reason when the run reported pages but wiki/log.md gained no
+    mention of its source; None otherwise. An empty `## Pages` block is a
+    deferral to needs-human-triage: no journal entry is expected."""
+    if _pages_listed(report) == 0 or journal_mentions(path) > mentions_before:
+        return None
+    return (f"DEGRADED — journal entry missing: wiki/log.md gained no entry for "
+            f"{path} during this run. Run the journaling step "
+            f"(scripts/wiki-maint/journal-ingest.py) or check the run.")
 
 
 def _job_file(job_id: str) -> Path:
@@ -132,6 +172,11 @@ def _finalize(job: dict, proc):
     rc = proc.poll() if proc is not None else None
     if proc is not None and rc == 0:
         job["state"] = "done"
+        out = jobs_dir() / f"{job['job_id']}.out"
+        report = out.read_text(encoding="utf-8", errors="replace") if out.exists() else ""
+        gap = journal_gap(job["path"], job.get("log_mentions", 0), report)
+        if gap:
+            job["degraded"] = gap
     elif proc is not None:
         job["state"] = "error"
         job["detail"] = f"exit code {rc}: {_stderr_excerpt(job['job_id'])}"
@@ -163,7 +208,10 @@ def _final_report(job: dict) -> str:
     state = job["state"]
     if state == "done":
         out = jobs_dir() / f"{job['job_id']}.out"
-        return out.read_text(encoding="utf-8", errors="replace")
+        report = out.read_text(encoding="utf-8", errors="replace")
+        if job.get("degraded"):
+            return f"{job['degraded']}\n\n{report}"
+        return report
     if state == "error":
         return f"Error: ingestion of {job['path']} failed ({job.get('detail', 'no detail')})"
     if state == "timeout":
@@ -181,6 +229,7 @@ def start(cmd, path: str) -> str:
         return (f"Error: an ingest job is already running ({current['job_id']}, "
                 f"{current['path']}). Poll or cancel it first.")
     job_id = uuid.uuid4().hex[:12]
+    log_mentions = journal_mentions(path)
     out = open(jobs_dir() / f"{job_id}.out", "wb")
     err = open(jobs_dir() / f"{job_id}.err", "wb")
     try:
@@ -193,7 +242,8 @@ def start(cmd, path: str) -> str:
         err.close()
     _PROCS[job_id] = proc
     _write_job({"job_id": job_id, "path": path, "pid": proc.pid,
-                "started_at": time.time(), "state": "running"})
+                "started_at": time.time(), "state": "running",
+                "log_mentions": log_mentions})
     return f"Job {job_id} started for {path}. Poll ingest_status(\"{job_id}\")."
 
 
