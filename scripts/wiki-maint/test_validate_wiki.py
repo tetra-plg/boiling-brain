@@ -515,5 +515,68 @@ class ValidateWikiTest(unittest.TestCase):
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
 
+def run_coverage(tmp: Path):
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), "--root", str(tmp), "--journal-coverage"],
+        capture_output=True, text=True,
+    )
+
+
+LOG_HEAD = "---\ntype: log\n---\n\n# Log\n"
+
+
+class JournalCoverageTest(unittest.TestCase):
+    """#145: --journal-coverage flags source pages with no matching ingest entry."""
+
+    def vault(self, d, log):
+        tmp = Path(d)
+        make_vault(tmp, {"sources/src.md": SOURCE_FM, "log.md": LOG_HEAD + log})
+        return tmp
+
+    def test_source_without_log_entry_reported(self):
+        with tempfile.TemporaryDirectory() as d:
+            r = run_coverage(self.vault(d, ""))
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("JOURNAL-MISSING wiki/sources/src.md (ingested: 2026-05-01)", r.stdout)
+
+    def test_entry_mentioning_source_path_is_silent(self):
+        with tempfile.TemporaryDirectory() as d:
+            r = run_coverage(self.vault(d, (
+                "\n## [2026-05-01] ingest | Something (agent: poker-expert)\n\n"
+                "- Source: `raw/notes/a.md`\n")))
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertNotIn("JOURNAL-MISSING", r.stdout)
+
+    def test_entry_header_with_title_is_silent(self):
+        with tempfile.TemporaryDirectory() as d:
+            r = run_coverage(self.vault(d, (
+                "\n## [2026-05-01] ingest | Source (agent: poker-expert)\n\n"
+                "- Pages created: [[sources/src]]\n")))
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_entry_linking_the_page_is_silent(self):
+        with tempfile.TemporaryDirectory() as d:
+            r = run_coverage(self.vault(d, (
+                "\n## [2026-05-01] ingest-video | Talk (agent: poker-expert)\n\n"
+                "Source [[sources/src]] created.\n")))
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_entry_on_another_date_does_not_count(self):
+        with tempfile.TemporaryDirectory() as d:
+            r = run_coverage(self.vault(d, (
+                "\n## [2026-05-02] ingest | Source (agent: poker-expert)\n\n"
+                "- Source: `raw/notes/a.md`\n")))
+            self.assertEqual(r.returncode, 1)
+            self.assertIn("JOURNAL-MISSING", r.stdout)
+
+    def test_default_mode_ignores_journal_coverage(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            make_vault(tmp, {"sources/src.md": SOURCE_FM})
+            r = run(tmp)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertNotIn("JOURNAL-MISSING", r.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
