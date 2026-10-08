@@ -90,14 +90,46 @@ Cross-domain → multiple agents in parallel (same multi-tool call).
 
 ### 4. Collection and journaling
 
-When the agent(s) have returned their report, the **main context** writes (never the agent):
+When the agent(s) have returned their report, the **main context** writes (never the agent). The journal (`wiki/log.md` + `wiki/radar.md`) is written by a script, not by hand — one call per ingested source, in both interactive and `--headless` modes:
 
-1. **`wiki/log.md`** ← append summary line from `## Ingest summary` (`## [YYYY-MM-DD] ingest | <source title> (agent: <name>)` + 2-3 lines on pages created/updated/deliverables). **`--headless`** → append `, mode: headless, hint: <domain_hint|none>` inside the same parenthetical, e.g. `## [2026-07-02] ingest | My Source (agent: tech-expert, mode: headless, hint: tech)`. Files deferred to `needs-human-triage` (step 2, branch 4c) get **no** `wiki/log.md` entry — nothing was written for them.
-2. **`wiki/radar.md`** ← append entries from `## Radar items` under the relevant thematic section. If no section matches, append to a `## Triage` block at the top of the file and flag this in the final report.
+1. **Write the ingest report** `cache/ingest-reports/<YYYY-MM-DD>-<slug>.md` (`<slug>` = the source file's stem, lowercased, with every character outside `[a-z0-9._-]` replaced by `-`; `cache/` is gitignored). Frontmatter first, then the agent's blocks **verbatim** (`## Ingest summary`, `## Radar items`, and any other block it returned):
+
+   ```markdown
+   ---
+   source: raw/notes/2026-07-02-my-note.md
+   title: My Source
+   agent: tech-expert
+   mode: headless
+   hint: tech
+   date: 2026-07-02
+   ---
+
+   ## Ingest summary
+
+   - Pages created: [[wiki/sources/my-note]], [[wiki/concepts/foo]]
+
+   ## Radar items
+
+   - [verify] Exact value of X in the vendor doc.
+   - Something with no obvious section.
+   ```
+
+   `source`, `title` and `agent` are required (`title` may contain colons). `mode` is `headless` or `interactive` (default `interactive`); `hint` is the `--domain-hint` value (omit it when none — the entry then says `hint: none`); `date` defaults to today. Cross-domain run: one report per source, `agent` = the lead agent, with the other agents' radar items appended to its `## Radar items`.
+
+2. **Run the journaling script** on it:
+
+   ```bash
+   python3 scripts/wiki-maint/journal-ingest.py cache/ingest-reports/<YYYY-MM-DD>-<slug>.md
+   ```
+
+   It appends to **`wiki/log.md`** the entry `## [YYYY-MM-DD] ingest | <title> (agent: <name>)` — **`--headless`**: `(agent: <name>, mode: headless, hint: <domain_hint|none>)` — followed by a `- Source:` line and the `## Ingest summary` bullets, and routes the **`## Radar items`** into **`wiki/radar.md`**: an item may start with an optional tag — `[verify]`, `[research]`, `[decide]`, `[improve]` or `[watch]` — that sends it to the matching `## To …` section; untagged items (or a tag with no matching section) go to a `## Triage` section at the top of the radar. "N/A" items are skipped. The script is idempotent (a second call for the same source and date writes nothing: `log=skipped`). Parse its stdout: `log=appended|skipped`, `radar=<N>`, `triage=<M>` — if `M > 0`, flag the triaged items in the final report. A non-zero exit (missing key, unreadable report) wrote nothing: fix the report and re-run it.
+
+   Files deferred to `needs-human-triage` (step 2, branch 4c) get **no** report and **no** `wiki/log.md` entry — nothing was written for them.
+
 3. **`.claude/agents/<domain>-expert.suggestions.md`** ← append the `## Evolution suggestions` block (timestamped `### [YYYY-MM-DD HH:MM] source: <path>`). Skip if the block is "N/A".
 4. **`wiki/index.md`** ← update if the agent's pages aren't already linked.
 
-Centralizing writes in the main context prevents drift and inconsistent formatting across agents.
+Centralizing writes in the main context prevents drift and inconsistent formatting across agents; scripting the journal makes it a deterministic step rather than a prose instruction a run may skip (#145).
 
 ### 4b. Frame extraction (if present)
 
@@ -151,6 +183,7 @@ Followed by:
 **`--headless` mode additions** (cf. `docs/superpowers/specs/2026-07-02-mcp-headless-ingest-design.md` §4.2, §5.1):
 
 - If the file was deferred (step 2, branch 4c): add a `needs-human-triage` section listing the file's path, the candidate expert agents considered, and why none was auto-selected — then end the section with an explicit fix line: `Fix: retry with ingest_start(path, domain_hint=<slug>) — valid slugs via list_domains().` No pages were written for this file; without the fix line, the deferral reads as a silent no-op to a headless caller (#135).
+- The journaling step (step 4, items 1-2) is **mandatory**: a `## Pages` block alone is not a complete run. If `journal-ingest.py` fails or is denied, say so explicitly in the report (`Journal: FAILED — <reason>`) instead of omitting it; the MCP caller also stamps a run `DEGRADED — journal entry missing` when the report lists pages but `wiki/log.md` gained no entry for the source.
 - Always end the report with a `## Pages` heading — **exactly two `#` characters, a level-2 heading, never `###` or any other level** — followed by one line per page created or updated by this run, in the form `- <path> (<type>, new|updated)`. Empty (just the `## Pages` heading, no lines) if the file was deferred to `needs-human-triage`. This block is specific to `--headless` — the interactive report format above is unchanged.
 
 ## Notes

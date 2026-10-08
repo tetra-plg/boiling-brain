@@ -45,6 +45,11 @@ try:
 except Exception:
     print(path)
 " "$VAULT_PATH" "$file_path")
+    # Ingest report consumed by journal-ingest.py (#145): flat files only,
+    # charset-anchored like the Bash allowlist below.
+    if [[ "$rel" =~ ^cache/ingest-reports/[A-Za-z0-9_.-]+\.md$ ]]; then
+      exit 0
+    fi
     case "$rel" in
       wiki/*.md)
         exit 0 ;;
@@ -95,6 +100,13 @@ except Exception:
     # script writes exactly one file (<original>.md, never overwritten) and the
     # "$command == *..*" check above already blocks traversal in the argument.
     if [[ "$command" =~ ^bash\ scripts/convert-doc\.sh\ raw/$SAFE_ARG$ ]]; then
+      exit 0
+    fi
+    # journal-ingest.py — deterministic log/radar journaling of /ingest step 4
+    # (#145). Exactly one argument: a report file under cache/ingest-reports/
+    # (no --root, no extra args), so the script can only write wiki/log.md
+    # and wiki/radar.md of this vault.
+    if [[ "$command" =~ ^python3\ scripts/wiki-maint/journal-ingest\.py\ cache/ingest-reports/$SAFE_ARG\.md$ ]]; then
       exit 0
     fi
     if [ "$command" = 'python3 scripts/wiki-maint/format-md.py --write "wiki/**/*.md"' ]; then

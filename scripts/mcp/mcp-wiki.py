@@ -378,7 +378,10 @@ def drop_file_to_raw(source_path: str, subfolder: str) -> str:
         "durable choice, not a silent default. A PreToolUse allowlist hook "
         "(scripts/mcp/ingest-headless-guard.sh) is always active for this "
         "session regardless, bounding Write/Bash to the ingest workflow's "
-        "known operations. See tetra-plg/boiling-brain#62."
+        "known operations. See tetra-plg/boiling-brain#62. "
+        "A run that lists pages under '## Pages' but left no wiki/log.md "
+        "entry for its source is returned prefixed with a 'DEGRADED — "
+        "journal entry missing' line (the report itself follows unchanged)."
     )
 )
 def ingest(path: str, domain_hint: str = "") -> str:
@@ -400,6 +403,7 @@ def ingest(path: str, domain_hint: str = "") -> str:
     if INGEST_PERMISSION_MODE:
         cmd += ["--permission-mode", INGEST_PERMISSION_MODE]
 
+    log_mentions = ingest_jobs.journal_mentions(path)
     try:
         result = subprocess.run(
             cmd, capture_output=True, text=True, timeout=INGEST_TIMEOUT_S,
@@ -415,6 +419,9 @@ def ingest(path: str, domain_hint: str = "") -> str:
         detail = result.stderr.strip() or "non-zero exit code, no detail on stderr."
         return f"Error: ingestion of {path} failed ({detail})"
 
+    gap = ingest_jobs.journal_gap(path, log_mentions, result.stdout)
+    if gap:
+        return f"{gap}\n\n{result.stdout}"
     return result.stdout
 
 
@@ -452,7 +459,9 @@ def ingest_start(path: str, domain_hint: str = "") -> str:
         "produces (with its machine-parseable '## Pages' block) once done, an "
         "error with a stderr excerpt on failure, or a timeout notice (the job "
         "is bounded by the same 600s watchdog as sync ingest(), enforced "
-        "when polled)."
+        "when polled). Like ingest(), a done report is prefixed with a "
+        "'DEGRADED — journal entry missing' line when the run listed pages "
+        "but wrote no wiki/log.md entry for its source."
     )
 )
 def ingest_status(job_id: str) -> str:

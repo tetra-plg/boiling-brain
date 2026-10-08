@@ -742,6 +742,39 @@ class TestIngestTool(McpModuleTestBase):
             result = self.m.ingest(path)
         self.assertIn("aborted unexpectedly", result)
 
+    # --- Journal check (#145) ---
+
+    _PAGES = "1 new\n\n## Pages\n- wiki/sources/note.md (source, new)\n"
+
+    def test_ingest_without_journal_entry_is_degraded(self):
+        path = self._write_raw_note()
+        fake = MagicMock(returncode=0, stdout=self._PAGES, stderr="")
+        with patch.object(self.m.subprocess, "run", return_value=fake):
+            result = self.m.ingest(path)
+        self.assertTrue(result.startswith("DEGRADED — journal entry missing"), result)
+        self.assertIn(path, result.splitlines()[0])
+        self.assertTrue(result.endswith(self._PAGES))
+
+    def test_ingest_with_journal_entry_is_clean(self):
+        path = self._write_raw_note()
+        log = self.vault / "wiki" / "log.md"
+
+        def journaling_run(*args, **kwargs):
+            with log.open("a", encoding="utf-8") as f:
+                f.write(f"\n## [2026-10-08] ingest | Note (agent: x)\n\n- Source: `{path}`\n")
+            return MagicMock(returncode=0, stdout=self._PAGES, stderr="")
+
+        with patch.object(self.m.subprocess, "run", side_effect=journaling_run):
+            result = self.m.ingest(path)
+        self.assertEqual(result, self._PAGES)
+
+    def test_ingest_empty_pages_is_not_degraded(self):
+        path = self._write_raw_note()
+        fake = MagicMock(returncode=0, stdout="needs-human-triage\n\n## Pages\n", stderr="")
+        with patch.object(self.m.subprocess, "run", return_value=fake):
+            result = self.m.ingest(path)
+        self.assertNotIn("DEGRADED", result)
+
 
 class TestIngestHeadlessGuard(unittest.TestCase):
     """Tests for scripts/mcp/ingest-headless-guard.sh — a PreToolUse hook script,
