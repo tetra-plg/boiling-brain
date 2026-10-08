@@ -150,7 +150,7 @@ This lets agents (and you, via `/query`) navigate the wiki without paying the fu
 The `scripts/` directory is organised by feature, not by verb. The convention is:
 
 - `scripts/video/` — video and frame extraction pipeline (`extract-frames.sh`, `sample-frames.sh`, `diff-frames.py`, `transcribe.sh`).
-- `scripts/wiki-maint/` — wiki maintenance utilities (`scan-raw.py` and its portable `scan-raw.sh` wrapper, `validate-wiki.py`, `format-md.py`, `archive-radar.py`, `backfill-summaries.py`, `enrich-hub.py`, `scan-domain-refs.sh`, `detect-vault-version.sh`, `propagate-templates.sh`).
+- `scripts/wiki-maint/` — wiki maintenance utilities (`scan-raw.py` and its portable `scan-raw.sh` wrapper, `validate-wiki.py`, `format-md.py`, `archive-radar.py`, `journal-ingest.py`, `backfill-summaries.py`, `enrich-hub.py`, `scan-domain-refs.sh`, `detect-vault-version.sh`, `propagate-templates.sh`).
 - `scripts/mcp/` — MCP server, its read-side CLI and its installer (`mcp-wiki.py`, `wiki_core.py`, `wiki-cli.py` + `wiki-cli.sh`, `ingest_jobs.py`, `ingest-headless-guard.sh`, `setup-mcp.sh`, `register-desktop-config.py`).
 - `scripts/hooks/` — Claude Code hooks (e.g. `check-session-activity.sh`).
 - `scripts/migrations/` — versioned migration slash-commands invoked by `/update-vault`.
