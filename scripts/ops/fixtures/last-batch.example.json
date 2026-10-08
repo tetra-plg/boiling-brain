@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "started_at": "2026-10-08T02:00:00+02:00",
+  "ended_at": "2026-10-08T02:14:37+02:00",
+  "trigger": "scheduled",
+  "domain_hint": null,
+  "interrupted": false,
+  "files": [
+    {
+      "path": "raw/notes/2026-10-07-standup.md",
+      "status": "ok",
+      "hint": "work",
+      "pages": [
+        { "path": "wiki/sources/2026-10-07-standup.md", "type": "source", "change": "new" },
+        { "path": "wiki/concepts/release-train.md", "type": "concept", "change": "updated" }
+      ],
+      "detail": null
+    },
+    {
+      "path": "raw/notes/2026-10-07-reading.md",
+      "status": "degraded",
+      "hint": "reading",
+      "pages": [{ "path": "wiki/sources/2026-10-07-reading.md", "type": "source", "change": "new" }],
+      "detail": "DEGRADED — journal entry missing: wiki/log.md gained no entry for raw/notes/2026-10-07-reading.md during this run. Run the journaling step (scripts/wiki-maint/journal-ingest.py) or check the run."
+    },
+    {
+      "path": "raw/pdfs/scan.pdf",
+      "status": "failed",
+      "hint": null,
+      "pages": [],
+      "detail": "exit code 1: could not read the PDF"
+    },
+    {
+      "path": "raw/notes/2026-10-07-misc.md",
+      "status": "skipped-no-hint",
+      "hint": null,
+      "pages": [],
+      "detail": "deferred to needs-human-triage: no domain hint and no single high-confidence expert"
+    }
+  ],
+  "counts": { "total": 4, "ok": 1, "degraded": 1, "failed": 1, "skipped-no-hint": 1 },
+  "remaining": 2
+}

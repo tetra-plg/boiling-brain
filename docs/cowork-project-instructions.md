@@ -113,9 +113,14 @@ subfolder=…)`; (3) ingest — next bullet. From a **desktop** client whose fil
   live on the vault machine, none of this applies: a direct `drop_file_to_raw` on the
   local path remains the nominal path.
 - **Ingest right away, async**: after the drop, run `ingest_start(path, domain_hint=…)`
-  and poll `ingest_status(job_id)` for the report (one job at a time). The `domain_hint`
-  is effectively mandatory — without it an ambiguous or cross-domain source is deferred
-  to `needs-human-triage` and produces **no pages**; pick the slug via `list_domains()`.
+  and poll `ingest_status(job_id)` for the report (one run at a time: a second one is
+  queued behind it, not refused). The `domain_hint` is effectively mandatory — without it
+  an ambiguous or cross-domain source is deferred to `needs-human-triage` and produces
+  **no pages**; pick the slug via `list_domains()`.
+- **Vault ingested on a schedule?** Pass the same `domain_hint` to the drop tool instead
+  (`drop_to_raw(…, domain_hint=…)`, `drop_file_to_raw(…, domain_hint=…)`) and leave the
+  ingestion to the scheduled batch — or run `ingest_pending()` to ingest the whole queue in
+  one job now.
 - Deposited files may keep a copy under `<WORKING_FOLDER>/deposited/`. For a document
   produced locally that copy is a convenience, purgeable at any time; for a cloud
   attachment it is the **bridge** that made the deposit possible. Either way, `raw/` is

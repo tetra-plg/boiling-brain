@@ -1,6 +1,6 @@
 ---
 description: Ingest sources from raw/ into the wiki via a domain-expert agent (batch, idempotent, hash-based)
-argument-hint: [--force] [--frames] [--headless] [--domain-hint=<slug>] [path-or-folder — empty = all of raw/]
+argument-hint: [--force] [--frames] [--headless] [--pending] [--domain-hint=<slug>] [path-or-folder — empty = all of raw/]
 ---
 
 Run the INGEST workflow from CLAUDE.md on: $ARGUMENTS
@@ -14,6 +14,16 @@ Run the INGEST workflow from CLAUDE.md on: $ARGUMENTS
 - `--frames` flag (combinable with `--force` and a file/folder) → tells the agent the goal is to **extract missing visual frames**. The agent must re-read the transcript, produce a `## Frame requests` block per the convention, and not modify anything else in existing pages. Usable alone (`--frames`) or combined (`--force --frames`) on an already-ingested transcript.
 - `--headless` flag → **non-interactive mode**, intended for a single file argument (not a folder or full sweep — batch triage of ambiguous cases still needs a human). Replaces every point that would otherwise call `AskUserQuestion` with a deterministic rule (see step 2 and step 4b). Set automatically by the `ingest(path, domain_hint)` MCP tool in `scripts/mcp/mcp-wiki.py` — not intended for manual interactive use.
 - `--domain-hint=<slug>` flag (combinable with `--headless` only) → skips expert-agent disambiguation in step 2 if `.claude/agents/<slug>-expert.md` exists. Ignored (falls back to normal step-2 resolution) if `<slug>` has no matching expert agent.
+- `--pending` flag → scope = the entries of `cache/.pending-ingest` instead of a path. Each entry is `<path>` or `<path><TAB><domain-hint>` (the hint given to `drop_to_raw` / `drop_file_to_raw`).
+  - **`--pending --headless [--domain-hint=<slug>]`** → **do not loop over the entries in this context**. Run the batch runner and relay its report verbatim:
+
+    ```bash
+    python3 scripts/ops/ingest-pending.py [--domain-hint <slug>]
+    ```
+
+    It ingests the entries sequentially, each through the same guarded headless run as the `ingest_start` MCP tool (the entry's own hint first, `--domain-hint` as the fallback), removes each processed entry from the queue, keeps failed and `needs-human-triage` ones for the next run, and writes the machine-readable outcome to `ops/ingest/last-batch.json` (per-file `status`: `ok`, `degraded`, `failed`, `skipped-no-hint`). It is also what the `ingest_pending` MCP tool and the schedule installed by `scripts/ops/schedule-ingest.sh` run. The runner spawns `claude` itself, so it is deliberately **not** allowlisted in `scripts/mcp/ingest-headless-guard.sh`: this form is for a terminal, a scheduler or an MCP client — never from inside a guarded headless run.
+
+  - **`--pending` without `--headless`** → the normal interactive workflow below, scoped to the manifest's entries (step 1 runs `bash scripts/wiki-maint/scan-raw.sh --pending --format=json`); an entry's hint is the recommended expert in step 2.
 
 For each in-scope file, from the **main context**:
 

@@ -108,7 +108,7 @@ Structural choices about the vault (workflows, conventions, tooling — not know
 
 At the start of each session, check the signals left in `cache/`:
 
-- **`cache/.pending-ingest`**: paths awaiting ingestion. Run `bash scripts/scan-raw.sh` first — purge silently the `SKIP` (stale, already ingested), suggest `/ingest <path>` for `NEW` / `MODIFIED` entries. Remove the file if empty.
+- **`cache/.pending-ingest`**: paths awaiting ingestion, one per line, optionally followed by a TAB and a domain hint. Run `bash scripts/scan-raw.sh` first — purge silently the `SKIP` (stale, already ingested), suggest `/ingest <path>` for `NEW` / `MODIFIED` entries (or `/ingest --pending --headless` for the whole queue). Remove the file if empty.
 - **`cache/.session-pending`**: the previous session had unjournaled changes (commits + modified files detected by the `Stop` hook). Suggest `/compress-bb <slug>` to archive the journal into `raw/notes/sessions/`. Delete the file after the proposal.
 
 These checks are silent if the files are absent.
