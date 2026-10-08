@@ -11,3 +11,4 @@ debug-*.png
 debug_*.png
 .claude/settings.json
 .DS_Store
+ops/ingest/
