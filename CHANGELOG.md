@@ -6,7 +6,7 @@ Versions are milestones, not strict semver. Breaking changes to `BOOTSTRAP.md` o
 
 ---
 
-## [Unreleased]
+## [v1.3.2] — 2026-10-08
 
 ### Added
 
