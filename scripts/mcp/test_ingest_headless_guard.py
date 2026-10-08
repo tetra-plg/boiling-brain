@@ -92,6 +92,40 @@ class TestIngestHeadlessGuard(unittest.TestCase):
         self.assert_denied({"tool_name": "Bash", "tool_input": {
             "command": "rm -rf wiki"}}, "not in allowlist")
 
+    # --- Journaling step (#145) ---
+
+    def test_write_ingest_report_allowed(self):
+        for tool in ("Write", "Edit"):
+            with self.subTest(tool=tool):
+                self.assert_allowed({"tool_name": tool, "tool_input": {
+                    "file_path": str(self.vault / "cache" / "ingest-reports" / "2026-10-08-x.md")}})
+
+    def test_write_other_cache_files_denied(self):
+        for rel in ("cache/.pending-ingest", "cache/ingest-reports/x.txt",
+                    "cache/other/x.md"):
+            with self.subTest(path=rel):
+                self.assert_denied({"tool_name": "Write", "tool_input": {
+                    "file_path": str(self.vault / rel)}}, "write outside the allowed scope")
+
+    def test_bash_journal_script_allowed(self):
+        self.assert_allowed({"tool_name": "Bash", "tool_input": {
+            "command": "python3 scripts/wiki-maint/journal-ingest.py "
+                       "cache/ingest-reports/2026-10-08-my_note.v2.md"}})
+
+    def test_bash_journal_script_bad_args_denied(self):
+        for command in (
+            "python3 scripts/wiki-maint/journal-ingest.py cache/ingest-reports/x.md; rm -rf wiki",
+            "python3 scripts/wiki-maint/journal-ingest.py cache/ingest-reports/$(id).md",
+            "python3 scripts/wiki-maint/journal-ingest.py cache/ingest-reports/a b.md",
+            "python3 scripts/wiki-maint/journal-ingest.py raw/notes/x.md",
+            "python3 scripts/wiki-maint/journal-ingest.py cache/ingest-reports/x.txt",
+            "python3 scripts/wiki-maint/journal-ingest.py --root / cache/ingest-reports/x.md",
+            "python3 scripts/wiki-maint/journal-ingest.py cache/ingest-reports/x.md extra",
+            "python3 scripts/wiki-maint/journal-ingest.py",
+        ):
+            with self.subTest(command=command):
+                self.assert_denied({"tool_name": "Bash", "tool_input": {"command": command}})
+
     # --- Robustness ---
 
     def test_invalid_json_denied(self):
