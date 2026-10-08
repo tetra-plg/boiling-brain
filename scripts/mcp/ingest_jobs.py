@@ -512,7 +512,8 @@ def _ticker_loop():
             running = _running_job()
             proc = _PROCS.get(running["job_id"]) if running else None
             if running is None and not _queued_jobs():
-                _TICKER = None
+                if _TICKER is threading.current_thread():
+                    _TICKER = None
                 return
         if proc is not None:
             try:
@@ -522,7 +523,8 @@ def _ticker_loop():
         else:
             _TICKER_STOP.wait(TICK_S)
     with _MUTEX:
-        _TICKER = None
+        if _TICKER is threading.current_thread():
+            _TICKER = None
 
 
 def _ensure_ticker():

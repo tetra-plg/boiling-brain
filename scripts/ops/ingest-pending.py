@@ -60,7 +60,7 @@ PURGE = HERE.parent / "wiki-maint" / "purge-pending-ingest.sh"
 OUTCOME_REL = "ops/ingest/last-batch.json"
 STATUSES = ("ok", "degraded", "failed", "skipped-no-hint")
 _DETAIL_CHARS = 2000
-_LOCK_POLL_S = 5
+_LOCK_POLL_S = 1
 _PAGE_RE = re.compile(r"^- (\S+)(?: \(([^,()]+), (new|updated)\))?")
 
 
