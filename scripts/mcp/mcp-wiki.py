@@ -421,8 +421,9 @@ def ingest(path: str, domain_hint: str = "") -> str:
         "opt-in). Pass a domain_hint from list_domains() — without it an "
         "ambiguous source is deferred to needs-human-triage and the run "
         "produces no pages. One job at a time: starting while a job is running "
-        "returns an error naming the running job. Poll ingest_status(job_id) "
-        "for the report."
+        "(or while the scheduled batch runner holds cache/ingest.lock) queues "
+        "the new job — no error; it starts automatically when the slot frees "
+        "(FIFO). Poll ingest_status(job_id) for the report."
     )
 )
 def ingest_start(path: str, domain_hint: str = "") -> str:
@@ -437,8 +438,9 @@ def ingest_start(path: str, domain_hint: str = "") -> str:
 
 @mcp.tool(
     description=(
-        "Poll a background ingestion started with ingest_start(). Returns "
-        "'running' with elapsed seconds, the same final report sync ingest() "
+        "Poll a background ingestion started with ingest_start() or "
+        "ingest_pending(). Returns 'queued (position N)' while it waits for "
+        "the slot, 'running' with elapsed seconds, the same final report sync ingest() "
         "produces (with its machine-parseable '## Pages' block) once done, an "
         "error with a stderr excerpt on failure, or a timeout notice (the job "
         "is bounded by the same 600s watchdog as sync ingest(), enforced "
@@ -453,10 +455,11 @@ def ingest_status(job_id: str) -> str:
 
 @mcp.tool(
     description=(
-        "Cancel a background ingestion started with ingest_start(): terminates "
-        "the child run (SIGTERM, then SIGKILL after 5s) and frees the "
-        "single-job slot. Idempotent on an already-finished job (returns its "
-        "final state instead of failing)."
+        "Cancel a background ingestion started with ingest_start() or "
+        "ingest_pending(): terminates the child run (SIGTERM, then SIGKILL "
+        "after 5s) and frees the single-job slot; a queued job is simply "
+        "removed from the queue. Idempotent on an already-finished job "
+        "(returns its final state instead of failing)."
     )
 )
 def ingest_cancel(job_id: str) -> str:

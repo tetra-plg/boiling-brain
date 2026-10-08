@@ -6,6 +6,8 @@ Run: cd scripts/mcp && python3 -m unittest test_ingest_jobs
 Requires NO fastmcp.
 """
 import json
+import os
+import subprocess
 import sys
 import tempfile
 import time
@@ -29,15 +31,21 @@ class IngestJobsBase(unittest.TestCase):
         wiki_core.RAW_DIR = vault / "raw"
         wiki_core.CACHE_DIR = vault / "cache"
         self._saved_timeout = ingest_jobs.TIMEOUT_S
+        self._saved_tick = ingest_jobs.TICK_S
+        ingest_jobs.TICK_S = 0.05
         ingest_jobs._PROCS.clear()
 
     def tearDown(self):
+        # Stop the promotion thread first: it must never act on the real
+        # vault once the paths below are restored.
+        ingest_jobs._stop_ticker()
         for proc in ingest_jobs._PROCS.values():
             if proc.poll() is None:
                 proc.kill()
                 proc.wait()
         ingest_jobs._PROCS.clear()
         ingest_jobs.TIMEOUT_S = self._saved_timeout
+        ingest_jobs.TICK_S = self._saved_tick
         wiki_core.WIKI_PATH, wiki_core.RAW_DIR, wiki_core.CACHE_DIR = self._saved
         self._tmp.cleanup()
 
@@ -45,7 +53,7 @@ class IngestJobsBase(unittest.TestCase):
         end = time.monotonic() + deadline_s
         while time.monotonic() < end:
             out = ingest_jobs.status(job_id)
-            if "running" not in out:
+            if "running" not in out and "queued" not in out:
                 return out
             time.sleep(0.05)
         self.fail(f"job {job_id} still running after {deadline_s}s")
@@ -123,11 +131,172 @@ class TestStart(IngestJobsBase):
         self.assertTrue(state_file.exists())
         self.assertIn('"state": "running"', state_file.read_text(encoding="utf-8"))
 
-    def test_second_start_refused_while_running(self):
-        first = ingest_jobs.start(["sleep", "30"], "raw/notes/a.md")
+    def test_second_start_is_queued_while_running(self):
+        # #154: no error any more — the job waits for the slot.
+        ingest_jobs.start(["sleep", "30"], "raw/notes/a.md")
         second = ingest_jobs.start(["sleep", "30"], "raw/notes/a.md")
-        self.assertIn("already running", second)
-        self.assertIn(self.job_id_of(first), second)
+        self.assertNotIn("Error", second)
+        self.assertIn("queued", second)
+        self.assertIn("position 1", second)
+        job_id = self.job_id_of(second)
+        self.assertIn("queued (position 1", ingest_jobs.status(job_id))
+
+
+class TestLock(IngestJobsBase):
+    """#154: cache/ingest.lock keeps the MCP jobs and the scheduled batch
+    runner (another process) from running two headless ingests at once."""
+
+    def setUp(self):
+        super().setUp()
+        wiki_core.CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        self.holder = subprocess.Popen(["sleep", "30"])
+        self.addCleanup(self._kill_holder)
+
+    def _kill_holder(self):
+        if self.holder.poll() is None:
+            self.holder.kill()
+        self.holder.wait()
+
+    def test_acquire_release(self):
+        self.assertTrue(ingest_jobs.acquire_lock(owner="test"))
+        holder = ingest_jobs.lock_holder()
+        self.assertEqual(holder["pid"], os.getpid())
+        self.assertEqual(holder["owner"], "test")
+        self.assertIn("started_at", holder)
+        # Re-entrant for the same pid.
+        self.assertTrue(ingest_jobs.acquire_lock())
+        ingest_jobs.release_lock()
+        self.assertIsNone(ingest_jobs.lock_holder())
+        self.assertFalse(ingest_jobs.lock_path().exists())
+
+    def test_live_foreign_holder_blocks(self):
+        self.assertTrue(ingest_jobs.acquire_lock(pid=self.holder.pid))
+        self.assertFalse(ingest_jobs.acquire_lock())
+        self.assertEqual(ingest_jobs.lock_holder()["pid"], self.holder.pid)
+        # Only the holder's pid releases it.
+        ingest_jobs.release_lock()
+        self.assertTrue(ingest_jobs.lock_path().exists())
+        ingest_jobs.release_lock(pid=self.holder.pid)
+        self.assertFalse(ingest_jobs.lock_path().exists())
+
+    def test_stale_lock_is_taken_over(self):
+        self.assertTrue(ingest_jobs.acquire_lock(pid=self.holder.pid))
+        self._kill_holder()
+        self.assertIsNone(ingest_jobs.lock_holder())
+        self.assertTrue(ingest_jobs.acquire_lock())
+        self.assertEqual(ingest_jobs.lock_holder()["pid"], os.getpid())
+
+    def test_unreadable_lock_is_stale_once_old(self):
+        ingest_jobs.lock_path().write_text("garbage", encoding="utf-8")
+        self.assertIsNotNone(ingest_jobs.lock_holder())  # maybe mid-write
+        old = time.time() - 3600
+        os.utime(ingest_jobs.lock_path(), (old, old))
+        self.assertIsNone(ingest_jobs.lock_holder())
+
+    def test_running_job_holds_the_lock_until_it_ends(self):
+        report = ingest_jobs.start(["/bin/sh", "-c", "sleep 0.3"], "raw/notes/a.md")
+        job_id = self.job_id_of(report)
+        self.assertEqual(ingest_jobs.lock_holder()["pid"], ingest_jobs._PROCS[job_id].pid)
+        self.poll_until_final(job_id)
+        self.assertIsNone(ingest_jobs.lock_holder())
+
+    def test_job_stays_queued_while_another_process_holds_the_lock(self):
+        self.assertTrue(ingest_jobs.acquire_lock(pid=self.holder.pid, owner="batch"))
+        marker = wiki_core.WIKI_PATH / "ran"
+        report = ingest_jobs.start(["/bin/sh", "-c", f"touch {marker}"], "raw/notes/a.md")
+        self.assertIn("queued", report)
+        job_id = self.job_id_of(report)
+        time.sleep(0.3)
+        self.assertIn("queued (position 1", ingest_jobs.status(job_id))
+        self.assertFalse(marker.exists())
+        self._kill_holder()  # the foreign batch ends: its lock goes stale
+        self.poll_until_final(job_id)
+        self.assertTrue(marker.exists())
+
+
+class TestQueue(IngestJobsBase):
+    """#154: a job started while another runs is queued (FIFO) and promoted
+    automatically when the slot frees — by a tool call or by the background
+    thread, whichever comes first."""
+
+    def _order_job(self, name, delay=0.0):
+        order = wiki_core.WIKI_PATH / "order"
+        script = f"sleep {delay}; echo {name} >> {order}"
+        return self.job_id_of(ingest_jobs.start(["/bin/sh", "-c", script], "raw/notes/a.md"))
+
+    def _wait_for(self, predicate, deadline_s=10):
+        end = time.monotonic() + deadline_s
+        while time.monotonic() < end:
+            if predicate():
+                return
+            time.sleep(0.05)
+        self.fail("condition not reached")
+
+    def test_fifo_order_and_positions(self):
+        self._order_job("first", 0.3)
+        second = self._order_job("second")
+        third = self._order_job("third")
+        self.assertIn("queued (position 1", ingest_jobs.status(second))
+        self.assertIn("queued (position 2", ingest_jobs.status(third))
+        self.poll_until_final(third)
+        order = (wiki_core.WIKI_PATH / "order").read_text(encoding="utf-8").split()
+        self.assertEqual(order, ["first", "second", "third"])
+
+    def test_promoted_without_any_tool_call(self):
+        self._order_job("first", 0.2)
+        self._order_job("second")
+        order = wiki_core.WIKI_PATH / "order"
+        self._wait_for(lambda: order.exists() and "second" in order.read_text(encoding="utf-8"))
+
+    def test_queued_job_report_is_the_normal_report(self):
+        ingest_jobs.start(["sleep", "0.2"], "raw/notes/a.md")
+        report = ingest_jobs.start(
+            ["/bin/sh", "-c", "printf 'needs-human-triage\\n\\n## Pages\\n'"], "raw/notes/a.md")
+        final = self.poll_until_final(self.job_id_of(report))
+        self.assertIn("## Pages", final)
+
+    def test_cancel_queued_job_removes_it(self):
+        ingest_jobs.start(["sleep", "0.3"], "raw/notes/a.md")
+        second = self._order_job("second")
+        out = ingest_jobs.cancel(second)
+        self.assertIn("cancelled", out)
+        self.assertIn("cancelled", ingest_jobs.status(second))
+        time.sleep(0.6)
+        self.assertFalse((wiki_core.WIKI_PATH / "order").exists())
+
+    def test_journal_mentions_taken_when_the_job_starts(self):
+        # A queued job's baseline is read at spawn time, after the previous
+        # job journaled: an earlier run mentioning the same path must not
+        # count as this run's entry.
+        (wiki_core.WIKI_PATH / "wiki").mkdir()
+        log = wiki_core.WIKI_PATH / "wiki" / "log.md"
+        log.write_text("# Log\n", encoding="utf-8")
+        journal = f"printf -- '- Source: raw/notes/a.md\\n' >> {log}; "
+        pages = "printf '## Pages\\n- wiki/sources/a.md (source, new)\\n'"
+        ingest_jobs.start(["/bin/sh", "-c", "sleep 0.2; " + journal + pages], "raw/notes/a.md")
+        second = ingest_jobs.start(["/bin/sh", "-c", pages], "raw/notes/a.md")
+        final = self.poll_until_final(self.job_id_of(second))
+        self.assertTrue(final.startswith("DEGRADED"), final)
+
+
+class TestBatchKind(IngestJobsBase):
+    """#154: a batch job (the ingest_pending runner) journals per file itself:
+    no journal check on its consolidated report, no single-run watchdog."""
+
+    def test_no_journal_check_on_batch_report(self):
+        report = ingest_jobs.start(
+            ["/bin/sh", "-c", "printf '## Pages\\n- wiki/x.md (concept, new)\\n'"],
+            "cache/.pending-ingest", kind="batch")
+        final = self.poll_until_final(self.job_id_of(report))
+        self.assertNotIn("DEGRADED", final)
+
+    def test_no_single_run_watchdog(self):
+        ingest_jobs.TIMEOUT_S = 0.1
+        report = ingest_jobs.start(["/bin/sh", "-c", "sleep 0.4; echo done"],
+                                   "cache/.pending-ingest", kind="batch")
+        final = self.poll_until_final(self.job_id_of(report))
+        self.assertNotIn("timeout", final)
+        self.assertIn("done", final)
 
 
 class TestStatus(IngestJobsBase):
