@@ -625,6 +625,20 @@ class PendingTest(unittest.TestCase):
             self.assertEqual(doc["pending"]["purgeable"], ["raw/skip.md"])
             self.assertEqual(doc["pending"]["stale"], ["raw/gone.md"])
 
+    def test_pending_entry_with_domain_hint(self):
+        """#154: a manifest line may carry `<path>\t<domain-hint>`; the hint
+        is metadata, the path alone is classified and reported."""
+        with tempfile.TemporaryDirectory() as dd:
+            tmp = self._vault(Path(dd))
+            (tmp / "cache" / ".pending-ingest").write_text(
+                "raw/skip.md\tdemo\nraw/gone.md\n", encoding="utf-8")
+            r = subprocess.run(["python3", str(HERE / "scan-raw.py"), "--pending", "--format=json"],
+                               capture_output=True, text=True,
+                               env=dict(os.environ, VAULT_ROOT=str(tmp)))
+            doc = json.loads(r.stdout)
+            self.assertEqual(doc["pending"]["purgeable"], ["raw/skip.md"])
+            self.assertEqual(doc["pending"]["stale"], ["raw/gone.md"])
+
     def test_pending_readonly_manifest_untouched(self):
         with tempfile.TemporaryDirectory() as dd:
             tmp = self._vault(Path(dd))

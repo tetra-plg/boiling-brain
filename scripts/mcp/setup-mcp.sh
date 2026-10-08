@@ -196,24 +196,25 @@ The \`boiling-brain-wiki\` MCP exposes the user's personal knowledge wiki (conce
 
 **Cross-domain**: \`search_wiki(query, limit=10)\` — full-text cross-type/cross-domain, when you don't know which domain to look in.
 
-**Writing**: \`drop_to_raw(subfolder, filename, content)\` — drops a text file into raw/ for ingest (clean bypass of the protect-raw.sh hook). \`drop_file_to_raw(source_path, subfolder)\` — same, for a binary already on disk (PDF, image, docx/pptx, audio/video): the server copies it server-side. Source must sit under an allowed root (\$HOME by default, LLMWIKI_DROP_SOURCE_ROOTS to override).
+**Writing**: \`drop_to_raw(subfolder, filename, content)\` — drops a text file into raw/ for ingest (clean bypass of the protect-raw.sh hook). \`drop_file_to_raw(source_path, subfolder)\` — same, for a binary already on disk (PDF, image, docx/pptx, audio/video): the server copies it server-side. Source must sit under an allowed root (\$HOME by default, LLMWIKI_DROP_SOURCE_ROOTS to override). Both take an optional \`domain_hint\` stored with the pending entry.
 
-**Async ingestion**: \`ingest_start(path, domain_hint=\"\")\` → job id (non-blocking — survives MCP client tool-call timeouts), then \`ingest_status(job_id)\` to poll (returns the final ingest report), \`ingest_cancel(job_id)\` to abort. One job at a time; the sync \`ingest(path)\` remains for short runs.
+**Async ingestion**: \`ingest_start(path, domain_hint=\"\")\` → job id (non-blocking — survives MCP client tool-call timeouts), then \`ingest_status(job_id)\` to poll (returns the final ingest report), \`ingest_cancel(job_id)\` to abort. One run at a time: a job started meanwhile is queued, not refused. \`ingest_pending(domain_hint=\"\", max_files=0)\` ingests the whole pending queue as one job (per-file report; outcome in ops/ingest/last-batch.json). The sync \`ingest(path)\` remains for short runs.
 $MARKER"
 
 if [[ -f "$CLAUDE_MD" ]] && grep -qF "$MARKER" "$CLAUDE_MD"; then
   # Marker present — check if the existing block is the current version by
   # looking for a distinctive string of the *newest* content. The probe must
   # move with every content revision: probing for an older marker string
-  # (e.g. "list_domains" since v1.2.1, "drop_file_to_raw" since v1.3.0)
-  # makes every already-updated vault look current and silently freezes the
-  # block. (#112)
-  if grep -qF "ingest_start" "$CLAUDE_MD"; then
+  # (e.g. "list_domains" since v1.2.1, "drop_file_to_raw" since v1.3.0,
+  # "ingest_start" since #124) makes every already-updated vault look current
+  # and silently freezes the block. (#112)
+  if grep -qF "ingest_pending" "$CLAUDE_MD"; then
     echo "✅ $CLAUDE_MD already configured (marker present, content up to date)."
   else
     # Outdated block (pre-#47 5-tool version, 12-tool version without
-    # list_domains-first, 14-tool version without drop_file_to_raw, or
-    # 15-tool version without the async ingestion tools).
+    # list_domains-first, 14-tool version without drop_file_to_raw,
+    # 15-tool version without the async ingestion tools, or 18-tool version
+    # without ingest_pending).
     # Replace in place.
     CLAUDE_MD="$CLAUDE_MD" python3 - <<PYEOF
 import os, re, pathlib

@@ -151,7 +151,7 @@ Record which MCP-stack files were **actually staged** (propagated minus `UNSTAGE
 ```bash
 # STAGED = the exact list passed to `git add` above
 MCP_SERVER_CHANGED=$(printf '%s\n' "${STAGED[@]}" \
-  | grep -cE '^scripts/mcp/(mcp-wiki\.py|wiki_core\.py)$' || true)
+  | grep -cE '^scripts/mcp/(mcp-wiki\.py|wiki_core\.py|ingest_jobs\.py)$' || true)
 MCP_SETUP_CHANGED=$(printf '%s\n' "${STAGED[@]}" \
   | grep -cE '^scripts/mcp/setup-mcp\.sh$' || true)
 ```

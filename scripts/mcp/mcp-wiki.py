@@ -94,32 +94,17 @@ def _resolve_raw_dest(subfolder: str, filename: str):
     return (dest_dir, dest_file), None
 
 
-def _signal_pending(dest_file: Path) -> str:
+def _signal_pending(dest_file: Path, domain_hint: str = "") -> str:
     """Append the deposited path to cache/.pending-ingest (SessionStart signal)
-    and return its vault-relative form."""
+    and return its vault-relative form. A domain_hint is stored on the same
+    line after a TAB (`<path>\t<hint>`), read back by ingest_pending (#154);
+    a line without TAB carries no hint."""
     wiki_core.CACHE_DIR.mkdir(parents=True, exist_ok=True)
     pending = wiki_core.CACHE_DIR / ".pending-ingest"
     rel_path = _vault_rel(dest_file)
     with open(pending, "a", encoding="utf-8") as f:
-        f.write(rel_path + "\n")
+        f.write(rel_path + (f"\t{domain_hint}" if domain_hint else "") + "\n")
     return rel_path
-
-
-def _ingest_settings_json():
-    """Build a --settings JSON that scopes a PreToolUse allowlist hook to just
-    the claude -p session ingest() spawns below. Verified empirically to
-    merge with (not replace) the vault's own .claude/settings.json, and to
-    apply to subagent tool calls, not just the main context. The matcher
-    covers every tool (empty string, this codebase's established
-    "match all" convention — see setup-mcp.sh's Stop hook registration) so
-    the guard script's own per-tool dispatch — including its default-deny
-    for anything it doesn't explicitly recognize — actually runs for every
-    tool call, not just Write/Edit/Bash."""
-    guard = str(wiki_core.WIKI_PATH / "scripts" / "mcp" / "ingest-headless-guard.sh")
-    hook = {"type": "command", "command": guard, "timeout": 3000}
-    return json.dumps({"hooks": {"PreToolUse": [
-        {"matcher": "", "hooks": [hook]},
-    ]}})
 
 
 def _md(md_fn, data_fn, *args, **kwargs):
@@ -261,10 +246,15 @@ def list_domains() -> str:
         "subfolder: subpath under raw/ (e.g. 'notes', 'articles', 'clippings'). "
         "filename: target filename (e.g. '2026-04-30-my-note.md'). "
         "content: full text content to write. "
+        "domain_hint (optional): domain slug (see list_domains()) stored with "
+        "the pending entry and used by ingest_pending() for this file. "
         "Creates cache/.pending-ingest with the new file path."
     )
 )
-def drop_to_raw(subfolder: str, filename: str, content: str) -> str:
+def drop_to_raw(subfolder: str, filename: str, content: str, domain_hint: str = "") -> str:
+    err = ingest_jobs.validate_hint(domain_hint)
+    if err:
+        return err
     resolved, err = _resolve_raw_dest(subfolder, filename)
     if err:
         return err
@@ -276,7 +266,7 @@ def drop_to_raw(subfolder: str, filename: str, content: str) -> str:
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_file.write_text(content, encoding="utf-8")
 
-    rel_path = _signal_pending(dest_file)
+    rel_path = _signal_pending(dest_file, domain_hint)
     return f"File created: {rel_path}\n.pending-ingest signal updated."
 
 
@@ -301,10 +291,15 @@ def drop_to_raw(subfolder: str, filename: str, content: str) -> str:
         "filename is taken from the source — an existing file is never "
         "overwritten, raw/ being immutable. Creates cache/.pending-ingest with "
         "the new file path; run /ingest (or the ingest() tool) to actually "
-        "ingest it. See tetra-plg/boiling-brain#112."
+        "ingest it. See tetra-plg/boiling-brain#112. "
+        "domain_hint (optional): domain slug (see list_domains()) stored with "
+        "the pending entry and used by ingest_pending() for this file."
     )
 )
-def drop_file_to_raw(source_path: str, subfolder: str) -> str:
+def drop_file_to_raw(source_path: str, subfolder: str, domain_hint: str = "") -> str:
+    err = ingest_jobs.validate_hint(domain_hint)
+    if err:
+        return err
     try:
         src = Path(source_path).expanduser().resolve()
     except Exception as e:
@@ -353,7 +348,7 @@ def drop_file_to_raw(source_path: str, subfolder: str) -> str:
     except OSError as e:
         return f"Error: could not copy {source_path} ({e})."
 
-    rel_path = _signal_pending(dest_file)
+    rel_path = _signal_pending(dest_file, domain_hint)
     return f"File copied: {rel_path}\n.pending-ingest signal updated."
 
 
@@ -389,19 +384,10 @@ def ingest(path: str, domain_hint: str = "") -> str:
     if err:
         return err
 
-    # Resolve the CLI with shutil.which before building the command. On Windows
-    # the CLI ships as a claude.CMD shim; subprocess.run(shell=False) uses
-    # CreateProcess, which does NOT consult PATHEXT, so a bare "claude" raises
-    # FileNotFoundError even when it is on PATH. shutil.which honours PATHEXT and
-    # returns the full path (also correct on POSIX); shell=False is preserved, so
-    # no command-injection surface is reintroduced. (#84)
-    claude_exe = shutil.which("claude")
-    if claude_exe is None:
+    # The CLI is resolved with shutil.which inside build_ingest_cmd (#84).
+    cmd = ingest_jobs.build_ingest_cmd(prompt, INGEST_PERMISSION_MODE)
+    if cmd is None:
         return "Error: `claude` CLI not found in the MCP server environment."
-
-    cmd = [claude_exe, "-p", prompt, "--settings", _ingest_settings_json()]
-    if INGEST_PERMISSION_MODE:
-        cmd += ["--permission-mode", INGEST_PERMISSION_MODE]
 
     log_mentions = ingest_jobs.journal_mentions(path)
     try:
@@ -435,27 +421,70 @@ def ingest(path: str, domain_hint: str = "") -> str:
         "opt-in). Pass a domain_hint from list_domains() — without it an "
         "ambiguous source is deferred to needs-human-triage and the run "
         "produces no pages. One job at a time: starting while a job is running "
-        "returns an error naming the running job. Poll ingest_status(job_id) "
-        "for the report."
+        "(or while the scheduled batch runner holds cache/ingest.lock) queues "
+        "the new job — no error; it starts automatically when the slot frees "
+        "(FIFO). Poll ingest_status(job_id) for the report."
     )
 )
 def ingest_start(path: str, domain_hint: str = "") -> str:
     prompt, err = ingest_jobs.validate_request(path, domain_hint)
     if err:
         return err
-    claude_exe = shutil.which("claude")
-    if claude_exe is None:
+    cmd = ingest_jobs.build_ingest_cmd(prompt, INGEST_PERMISSION_MODE)
+    if cmd is None:
         return "Error: `claude` CLI not found in the MCP server environment."
-    cmd = [claude_exe, "-p", prompt, "--settings", _ingest_settings_json()]
-    if INGEST_PERMISSION_MODE:
-        cmd += ["--permission-mode", INGEST_PERMISSION_MODE]
     return ingest_jobs.start(cmd, path)
+
+
+INGEST_PENDING_RUNNER = Path(__file__).resolve().parent.parent / "ops" / "ingest-pending.py"
+INGEST_PENDING_OUTCOME = "ops/ingest/last-batch.json"
 
 
 @mcp.tool(
     description=(
-        "Poll a background ingestion started with ingest_start(). Returns "
-        "'running' with elapsed seconds, the same final report sync ingest() "
+        "Ingest the whole pending queue (cache/.pending-ingest — every file "
+        "dropped with drop_to_raw / drop_file_to_raw and not ingested yet) as "
+        "ONE background job: the entries are ingested sequentially, each "
+        "through the same guarded headless run as ingest_start(); a failure "
+        "on one file does not stop the others. Returns a job id at once — "
+        "poll ingest_status(job_id) for the consolidated report (one block "
+        "per file: status ok / degraded / failed / skipped-no-hint, pages, "
+        "detail). If another ingestion is running, the batch is queued and "
+        "starts when it ends (no error). Processed entries leave the queue; "
+        "failed and needs-human-triage ones stay for the next run. "
+        "domain_hint: fallback slug (see list_domains()) for entries dropped "
+        "without their own domain_hint — without any hint an ambiguous file "
+        "is deferred to needs-human-triage. max_files: process at most N "
+        "entries (0 = the whole queue). Machine-readable outcome: "
+        f"{INGEST_PENDING_OUTCOME} (per-file status, pages, failure excerpt). "
+        "Same MCP_INGEST_PERMISSION_MODE opt-in as ingest()."
+    )
+)
+def ingest_pending(domain_hint: str = "", max_files: int = 0) -> str:
+    err = ingest_jobs.validate_hint(domain_hint)
+    if err:
+        return err
+    if max_files < 0:
+        return "Error: max_files must be >= 0 (0 = the whole queue)."
+    claude_exe = shutil.which("claude")
+    if claude_exe is None:
+        return "Error: `claude` CLI not found in the MCP server environment."
+    cmd = [sys.executable, str(INGEST_PENDING_RUNNER), "--root", str(wiki_core.WIKI_PATH),
+           "--claude", claude_exe]
+    if domain_hint:
+        cmd += ["--domain-hint", domain_hint]
+    if max_files:
+        cmd += ["--max-files", str(max_files)]
+    report = ingest_jobs.start(cmd, "cache/.pending-ingest", kind="batch")
+    return (f"{report}\nOutcome file, rewritten when the batch ends: "
+            f"{INGEST_PENDING_OUTCOME}.")
+
+
+@mcp.tool(
+    description=(
+        "Poll a background ingestion started with ingest_start() or "
+        "ingest_pending(). Returns 'queued (position N)' while it waits for "
+        "the slot, 'running' with elapsed seconds, the same final report sync ingest() "
         "produces (with its machine-parseable '## Pages' block) once done, an "
         "error with a stderr excerpt on failure, or a timeout notice (the job "
         "is bounded by the same 600s watchdog as sync ingest(), enforced "
@@ -470,10 +499,11 @@ def ingest_status(job_id: str) -> str:
 
 @mcp.tool(
     description=(
-        "Cancel a background ingestion started with ingest_start(): terminates "
-        "the child run (SIGTERM, then SIGKILL after 5s) and frees the "
-        "single-job slot. Idempotent on an already-finished job (returns its "
-        "final state instead of failing)."
+        "Cancel a background ingestion started with ingest_start() or "
+        "ingest_pending(): terminates the child run (SIGTERM, then SIGKILL "
+        "after 5s) and frees the single-job slot; a queued job is simply "
+        "removed from the queue. Idempotent on an already-finished job "
+        "(returns its final state instead of failing)."
     )
 )
 def ingest_cancel(job_id: str) -> str:
