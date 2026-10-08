@@ -73,6 +73,7 @@ jobs:
       - run: python3 -m pip install --quiet pyyaml fastmcp
       - run: python3 -m unittest discover -s scripts/wiki-maint -p "test_*.py"
       - run: python3 -m unittest discover -s scripts/mcp -p "test_*.py"
+      - run: python3 -m unittest discover -s scripts/ops -p "test_*.py"
 
   link-check-report:
     name: link-check-report

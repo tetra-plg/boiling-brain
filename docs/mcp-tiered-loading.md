@@ -1,12 +1,12 @@
 # MCP tiered-loading layer
 
-> **TL;DR:** reference for the `boiling-brain-wiki` MCP server's 18 tools and the tiered-loading pattern they implement (orient → drill → preview → read). Added in v1.1.0 (refactor #41). Measured ~96% token reduction vs the pre-v1.1.0 flat dump on a 388-page domain.
+> **TL;DR:** reference for the `boiling-brain-wiki` MCP server's 19 tools and the tiered-loading pattern they implement (orient → drill → preview → read). Added in v1.1.0 (refactor #41). Measured ~96% token reduction vs the pre-v1.1.0 flat dump on a 388-page domain.
 
 ## Why tiered loading
 
 A flat `scan_domain("ia")` on a 388-page domain returns ~23k tokens — too much for context-constrained backends (e.g. a Realtime voice agent against a 40k TPM org limit, or smaller models with tight context budgets). The MCP server now exposes a **hierarchical descent**: orient first, then drill into the right type, then read the matching pages. Measured reduction on the same query path: **~96%** (23k → ~900 tokens for the orientation step).
 
-## The 18 tools
+## The 19 tools
 
 ```
 ┌─ Orientation ──────────────────────────────────────────────────────┐
@@ -52,7 +52,8 @@ A flat `scan_domain("ia")` on a 388-page domain returns ~23k tokens — too much
 │  drop_to_raw(subfolder, filename, content)                         │
 │    Sanctioned TEXT write into raw/ (bypasses protect-raw.sh        │
 │    PreToolUse hook by writing server-side). Auto-updates           │
-│    cache/.pending-ingest                                           │
+│    cache/.pending-ingest (optional domain_hint stored with the     │
+│    entry: `<path>\t<hint>`)                                        │
 │  drop_file_to_raw(source_path, subfolder)                          │
 │    Sanctioned BINARY deposit: server-side copy of a local file     │
 │    into raw/. Source must sit under an allowed root ($HOME by      │
@@ -66,9 +67,16 @@ A flat `scan_domain("ia")` on a 388-page domain returns ~23k tokens — too much
 │  ingest_start(path, domain_hint="") → job_id                       │
 │  ingest_status(job_id) · ingest_cancel(job_id)                     │
 │    Async variant of ingest() for MCP clients whose tool-call       │
-│    timeout kills long sync runs (#124). One job at a time; same    │
-│    validation and guard; the 600s watchdog is enforced when polled;│
+│    timeout kills long sync runs (#124). One run at a time: a job   │
+│    started meanwhile is queued FIFO, not refused (#154); same      │
+│    validation and guard; the 600s watchdog runs even unpolled;     │
 │    status returns the same final report as ingest().               │
+│  ingest_pending(domain_hint="", max_files=0) → job_id              │
+│    The whole cache/.pending-ingest queue as ONE job: one guarded   │
+│    headless run per entry, sequential, entry hint first and        │
+│    domain_hint as fallback; per-file report and                    │
+│    ops/ingest/last-batch.json (#154). Also run by /ingest          │
+│    --pending --headless and by scripts/ops/schedule-ingest.sh.     │
 └────────────────────────────────────────────────────────────────────┘
 ```
 

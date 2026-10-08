@@ -45,6 +45,16 @@ class TestIngestHeadlessGuard(unittest.TestCase):
         if fragment:
             self.assertIn(fragment, r.stderr)
 
+    # --- Batch runner (#154): spawns claude itself, never allowed inside a run ---
+
+    def test_batch_runner_and_scheduler_denied(self):
+        for cmd in ("python3 scripts/ops/ingest-pending.py",
+                    "python3 scripts/ops/ingest-pending.py --domain-hint demo",
+                    "bash scripts/ops/schedule-ingest.sh install --at 02:00"):
+            with self.subTest(cmd=cmd):
+                self.assert_denied({"tool_name": "Bash", "tool_input": {"command": cmd}},
+                                   "not in allowlist")
+
     # --- Tool vocabulary (pinned): a rename upstream must turn this red ---
 
     def test_subagent_spawn_tools_allowed(self):
