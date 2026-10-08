@@ -220,8 +220,13 @@ class TestSystemdTimer(ScheduleBase):
         self.assertIn(f"Unit={service.name}", tim)
         self.assertIn(f"systemctl --user enable --now {timer.name}", self.calls())
         if shutil.which("systemd-analyze"):
+            # --user verify needs a runtime dir (absent in containers / CI).
+            runtime = Path(self._tmp.name) / "runtime"
+            runtime.mkdir(mode=0o700)
+            env = dict(os.environ)
+            env.setdefault("XDG_RUNTIME_DIR", str(runtime))
             verify = subprocess.run(["systemd-analyze", "--user", "verify", str(service),
-                                     str(timer)], capture_output=True, text=True)
+                                     str(timer)], capture_output=True, text=True, env=env)
             self.assertEqual(verify.returncode, 0, verify.stdout + verify.stderr)
 
     def test_uninstall_leaves_nothing(self):
