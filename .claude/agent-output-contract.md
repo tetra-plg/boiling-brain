@@ -19,6 +19,7 @@ Every expert agent invoked by `/ingest` returns **three parsable markdown blocks
 - Missing facts ("what is the exact value of X?").
 - "If 2nd occurrence of X, create concept Y" (threshold not met).
 - Content gaps to fill via a future ingest.
+- [verify] Optional leading tag routing the item to a radar section (see below).
 
 ## Evolution suggestions
 
@@ -27,6 +28,8 @@ Every expert agent invoked by `/ingest` returns **three parsable markdown blocks
 - Structural blind spot of the prompt.
 - "N/A" if nothing notable — default encouraged.
 ```
+
+**Radar item tags (optional).** A `## Radar items` bullet may start with one tag that routes it to the matching section of `wiki/radar.md`: `[verify]` (facts to confirm), `[research]` (gaps to fill), `[decide]` (structural trade-offs), `[improve]` (wiki debt), `[watch]` (weak signals). An untagged item lands in the radar's `## Triage` section for a human to sort. The main context journals the block through `scripts/wiki-maint/journal-ingest.py`, so keep one item per top-level bullet and write "N/A" when there is nothing.
 
 ## Conceptual derivation rule (core)
 

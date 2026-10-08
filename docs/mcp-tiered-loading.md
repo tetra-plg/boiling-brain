@@ -60,6 +60,9 @@ A flat `scan_domain("ia")` on a 388-page domain returns ~23k tokens — too much
 │  ingest(path, domain_hint="")                                      │
 │    Headless ingestion of a file already in raw/ via a domain-expert│
 │    agent run. See the tool description for the permission opt-in.  │
+│    A run listing pages under ## Pages without a wiki/log.md entry  │
+│    for its source comes back prefixed "DEGRADED — journal entry    │
+│    missing" (#145).                                                │
 │  ingest_start(path, domain_hint="") → job_id                       │
 │  ingest_status(job_id) · ingest_cancel(job_id)                     │
 │    Async variant of ingest() for MCP clients whose tool-call       │

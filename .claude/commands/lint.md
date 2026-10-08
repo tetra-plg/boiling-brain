@@ -20,7 +20,11 @@ Mechanical, decidable without domain knowledge:
   - ADRs (`wiki/decisions/*.md`) older than 90 days without `verdict` (status confirmation overdue).
   - Pages whose `revisit_after` date has passed (decisions and concepts).
 
+- **Journal coverage** — every `type: source` page must have an `ingest` entry in `wiki/log.md` on its `ingested:` date (a run that skipped the journaling step leaves a silent gap, #145).
+
 Run `python3 scripts/wiki-maint/validate-wiki.py` for the checks it covers; complete with the orphan heuristic below.
+
+Then run `python3 scripts/wiki-maint/validate-wiki.py --journal-coverage` (opt-in mode, outside CI): one `JOURNAL-MISSING wiki/sources/<x>.md (ingested: <date>)` line per source page whose ingestion left no matching log entry (exit 1 if any). Report the gaps grouped by date; do not invent the missing entries — offer to backfill them from each page's frontmatter and body (one `## [<ingested>] ingest | <title> (agent: <agent>, backfill)` entry each) after user validation. With a domain argument, keep only the lines whose page is in scope.
 
 ## Pass 2 — Semantic (domain judgment — delegable to the domain expert)
 
